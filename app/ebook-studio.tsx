@@ -1,0 +1,925 @@
+"use client";
+
+import {
+  BookMarked,
+  BookOpen,
+  Check,
+  CircleStop,
+  Download,
+  FileText,
+  LibraryBig,
+  LoaderCircle,
+  PenLine,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import type {
+  ActiveAIProvider,
+  AIProvider,
+  BookBrief,
+  Manuscript,
+  Mode,
+  SectionContent,
+  SectionPlan,
+} from "./book-types";
+import { exportDocx, exportEpub, exportPdf } from "./exporters";
+
+type View = "create" | "library";
+type GenerationStatus =
+  | "idle"
+  | "outlining"
+  | "writing"
+  | "complete"
+  | "cancelled"
+  | "error";
+
+const chapterPresets = [3, 5, 8, 10, 12, 15, 20];
+const LIBRARY_KEY = "eb-studio-pro-library-v1";
+const LEGACY_LIBRARY_KEY = "inkwell-library-v1";
+const blankBrief: BookBrief = {
+  title: "",
+  author: "Sulong",
+  genre: "",
+  characters: "",
+  premise: "",
+  topic: "",
+  audience: "",
+  keyPoints: "",
+  chapterCount: 8,
+};
+
+export default function EbookStudio() {
+  const [view, setView] = useState<View>("create");
+  const [mode, setMode] = useState<Mode>("fiction");
+  const [provider, setProvider] = useState<AIProvider>("auto");
+  const [activeProvider, setActiveProvider] = useState<ActiveAIProvider | null>(null);
+  const [brief, setBrief] = useState<BookBrief>(blankBrief);
+  const [customChapters, setCustomChapters] = useState("");
+  const [status, setStatus] = useState<GenerationStatus>("idle");
+  const [manuscript, setManuscript] = useState<Manuscript | null>(null);
+  const [activeSection, setActiveSection] = useState(0);
+  const [library, setLibrary] = useState<Manuscript[]>([]);
+  const [error, setError] = useState("");
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
+  const [autoFillMessage, setAutoFillMessage] = useState("");
+  const [exporting, setExporting] = useState("");
+  const cancelRef = useRef(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const saved =
+          localStorage.getItem(LIBRARY_KEY) ??
+          localStorage.getItem(LEGACY_LIBRARY_KEY);
+        if (saved) {
+          setLibrary(JSON.parse(saved));
+          localStorage.setItem(LIBRARY_KEY, saved);
+          localStorage.removeItem(LEGACY_LIBRARY_KEY);
+        }
+      } catch {
+        localStorage.removeItem(LIBRARY_KEY);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const isGenerating = status === "outlining" || status === "writing";
+  const fieldsLocked = isGenerating || isAutoFilling;
+  const progress =
+    manuscript?.plan.length && status !== "outlining"
+      ? Math.round((manuscript.sections.length / manuscript.plan.length) * 100)
+      : status === "outlining"
+        ? 4
+        : 0;
+
+  function updateBrief(field: keyof BookBrief, value: string | number) {
+    setBrief((current) => ({ ...current, [field]: value }));
+  }
+
+  function chooseMode(nextMode: Mode) {
+    if (fieldsLocked) return;
+    setMode(nextMode);
+    setStatus("idle");
+    setManuscript(null);
+    setError("");
+    setAutoFillMessage("");
+    setActiveProvider(null);
+  }
+
+  function chooseChapterCount(value: number) {
+    updateBrief("chapterCount", value);
+    setCustomChapters("");
+  }
+
+  function validateBrief() {
+    const commonMissing = !brief.title.trim() || !brief.author.trim();
+    const modeMissing =
+      mode === "fiction"
+        ? !brief.genre.trim() || !brief.characters.trim() || !brief.premise.trim()
+        : !brief.topic.trim() || !brief.audience.trim() || !brief.keyPoints.trim();
+    return commonMissing || modeMissing;
+  }
+
+  async function autoFillBrief() {
+    if (!brief.title.trim()) {
+      setError("Enter a book title first, then let AI fill the details.");
+      return;
+    }
+
+    setIsAutoFilling(true);
+    setError("");
+    setAutoFillMessage("");
+    setActiveProvider(null);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "brief", mode, brief, provider }),
+      });
+      const data = await readResponse(response);
+      const chapterCount = Math.min(
+        20,
+        Math.max(3, Number(data.chapter_count) || brief.chapterCount),
+      );
+
+      setBrief((current) =>
+        mode === "fiction"
+          ? {
+              ...current,
+              genre: String(data.genre ?? ""),
+              characters: String(data.characters ?? ""),
+              premise: String(data.premise ?? ""),
+              chapterCount,
+            }
+          : {
+              ...current,
+              topic: String(data.topic ?? ""),
+              audience: String(data.audience ?? ""),
+              keyPoints: String(data.key_points ?? ""),
+              chapterCount,
+            },
+      );
+      setCustomChapters("");
+      setActiveProvider(data.provider as ActiveAIProvider);
+      setAutoFillMessage(
+        "AI suggestions added. Review and edit any field before generating your book.",
+      );
+    } catch (autoFillError) {
+      setError(
+        autoFillError instanceof Error
+          ? autoFillError.message
+          : "EB Studio Pro could not create suggestions for this title.",
+      );
+    } finally {
+      setIsAutoFilling(false);
+    }
+  }
+
+  async function generateBook(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isAutoFilling) return;
+    if (validateBrief()) {
+      setError("Complete every book detail before generating.");
+      return;
+    }
+
+    cancelRef.current = false;
+    setError("");
+    setStatus("outlining");
+    setManuscript(null);
+    setActiveSection(0);
+    setActiveProvider(null);
+
+    try {
+      const outlineResponse = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "outline", mode, brief, provider }),
+      });
+      const outlineData = await readResponse(outlineResponse);
+      const plan = outlineData.plan as SectionPlan[];
+      let workingProvider = outlineData.provider as ActiveAIProvider;
+      setActiveProvider(workingProvider);
+
+      let working: Manuscript = {
+        id: crypto.randomUUID(),
+        mode,
+        title: brief.title.trim(),
+        subtitle: String(outlineData.subtitle ?? ""),
+        author: brief.author.trim(),
+        createdAt: new Date().toISOString(),
+        brief,
+        plan,
+        sections: [],
+        providersUsed: [workingProvider],
+      };
+      setManuscript(working);
+      setStatus("writing");
+
+      const summaries: string[] = [];
+      for (let index = 0; index < plan.length; index += 1) {
+        if (cancelRef.current) {
+          setStatus("cancelled");
+          return;
+        }
+
+        setActiveSection(index);
+        const sectionResponse = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "section",
+            mode,
+            brief,
+            plan,
+            section: plan[index],
+            sectionIndex: index,
+            previousSummaries: summaries.slice(-10),
+            provider,
+            preferredProvider: provider === "auto" ? workingProvider : undefined,
+          }),
+        });
+        const sectionData = await readResponse(sectionResponse);
+        workingProvider = sectionData.provider as ActiveAIProvider;
+        setActiveProvider(workingProvider);
+        const completeSection: SectionContent = {
+          ...plan[index],
+          content: String(sectionData.content),
+          summary: String(sectionData.summary),
+        };
+
+        summaries.push(completeSection.summary);
+        working = {
+          ...working,
+          sections: [...working.sections, completeSection],
+          providersUsed: Array.from(
+            new Set([...(working.providersUsed ?? []), workingProvider]),
+          ),
+        };
+        setManuscript(working);
+      }
+
+      setStatus("complete");
+      setActiveSection(0);
+      saveBook(working);
+    } catch (generationError) {
+      setStatus("error");
+      setError(
+        generationError instanceof Error
+          ? generationError.message
+          : "EB Studio Pro could not finish this manuscript.",
+      );
+    }
+  }
+
+  function cancelGeneration() {
+    cancelRef.current = true;
+  }
+
+  function saveBook(book: Manuscript) {
+    setLibrary((current) => {
+      const next = [book, ...current.filter((item) => item.id !== book.id)].slice(0, 8);
+      try {
+        localStorage.setItem(LIBRARY_KEY, JSON.stringify(next));
+      } catch {
+        setError("The book is complete, but this browser could not save another local copy.");
+      }
+      return next;
+    });
+  }
+
+  function openBook(book: Manuscript) {
+    setManuscript(book);
+    setBrief(book.brief);
+    setMode(book.mode);
+    setActiveProvider(book.providersUsed?.at(-1) ?? null);
+    setStatus("complete");
+    setActiveSection(0);
+    setView("create");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function removeBook(id: string) {
+    const next = library.filter((book) => book.id !== id);
+    setLibrary(next);
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(next));
+  }
+
+  function startFresh() {
+    cancelRef.current = true;
+    setBrief(blankBrief);
+    setCustomChapters("");
+    setManuscript(null);
+    setStatus("idle");
+    setError("");
+    setAutoFillMessage("");
+    setIsAutoFilling(false);
+    setActiveSection(0);
+    setActiveProvider(null);
+  }
+
+  async function runExport(format: "docx" | "pdf" | "epub") {
+    if (!manuscript || manuscript.sections.length === 0) return;
+    setExporting(format);
+    setError("");
+    try {
+      if (format === "docx") await exportDocx(manuscript);
+      if (format === "pdf") await exportPdf(manuscript);
+      if (format === "epub") await exportEpub(manuscript);
+    } catch (exportError) {
+      const detail =
+        exportError instanceof Error && exportError.message
+          ? ` ${exportError.message.slice(0, 180)}`
+          : "";
+      console.error(`EB Studio Pro ${format.toUpperCase()} export failed`, exportError);
+      setError(
+        `The ${format.toUpperCase()} export could not be created.${detail} Your book is still safe.`,
+      );
+    } finally {
+      setExporting("");
+    }
+  }
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <button className="brand" onClick={() => setView("create")} aria-label="Go to creator">
+          <span className="brand-mark">
+            <BookOpen size={25} strokeWidth={1.8} />
+          </span>
+          <span className="brand-copy">
+            <strong>EB Studio Pro</strong>
+            <small>AI Ebook Creation Suite</small>
+          </span>
+        </button>
+
+        <nav className="topnav" aria-label="Primary navigation">
+          <button
+            className={view === "create" ? "nav-button active" : "nav-button"}
+            onClick={() => setView("create")}
+          >
+            <PenLine size={18} />
+            Create
+          </button>
+          <button
+            className={view === "library" ? "nav-button active" : "nav-button"}
+            onClick={() => setView("library")}
+          >
+            <LibraryBig size={18} />
+            Library
+            {library.length ? <span className="library-count">{library.length}</span> : null}
+          </button>
+        </nav>
+      </header>
+
+      {view === "create" ? (
+        <section className="studio-grid">
+          <div className="form-column">
+            <div className="form-heading-row">
+              <div>
+                <div className="eyebrow">
+                  <PenLine size={18} />
+                  New book
+                </div>
+                <h1>Describe your book</h1>
+              </div>
+              {manuscript ? (
+                <button className="fresh-button" onClick={startFresh}>
+                  <RotateCcw size={15} />
+                  New
+                </button>
+              ) : null}
+            </div>
+            <p className="intro-copy">
+              Set the direction. EB Studio Pro will shape the structure and write every
+              chapter.
+            </p>
+
+            <div className="mode-switch" role="tablist" aria-label="Book type">
+              <button
+                role="tab"
+                aria-selected={mode === "fiction"}
+                className={mode === "fiction" ? "selected" : ""}
+                onClick={() => chooseMode("fiction")}
+                disabled={fieldsLocked}
+              >
+                Fiction
+              </button>
+              <button
+                role="tab"
+                aria-selected={mode === "nonfiction"}
+                className={mode === "nonfiction" ? "selected" : ""}
+                onClick={() => chooseMode("nonfiction")}
+                disabled={fieldsLocked}
+              >
+                Non-Fiction
+              </button>
+            </div>
+
+            <div className="provider-setting">
+              <div className="provider-setting-heading">
+                <span>AI writer</span>
+                <small>
+                  {provider === "auto"
+                    ? "Automatic backup enabled"
+                    : provider === "openai"
+                      ? "OpenAI only"
+                      : "Anthropic Claude only"}
+                </small>
+              </div>
+              <div className="provider-switch" role="radiogroup" aria-label="AI writer">
+                {(["auto", "openai", "anthropic"] as AIProvider[]).map((option) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={provider === option}
+                    className={provider === option ? "selected" : ""}
+                    key={option}
+                    disabled={fieldsLocked}
+                    onClick={() => {
+                      setProvider(option);
+                      setActiveProvider(null);
+                      setError("");
+                      setAutoFillMessage("");
+                    }}
+                  >
+                    {option === "auto"
+                      ? "Auto"
+                      : option === "openai"
+                        ? "OpenAI"
+                        : "Claude"}
+                  </button>
+                ))}
+              </div>
+              <p>
+                Auto starts with OpenAI, switches to Claude when needed, and continues
+                from the current section.
+              </p>
+            </div>
+
+            <form onSubmit={generateBook}>
+              <Field
+                label="Book title"
+                value={brief.title}
+                onChange={(value) => updateBrief("title", value)}
+                placeholder="e.g. The Lanternkeeper’s Daughter"
+                disabled={fieldsLocked}
+              />
+              <div className="ai-brief-helper">
+                <div className="ai-brief-helper-copy">
+                  <span>Only have a title?</span>
+                  <p>
+                    Let AI draft the rest of your {mode === "fiction" ? "Fiction" : "Non-Fiction"} brief.
+                    Every suggestion stays editable.
+                  </p>
+                </div>
+                <button
+                  className="ai-brief-button"
+                  type="button"
+                  onClick={autoFillBrief}
+                  disabled={!brief.title.trim() || fieldsLocked}
+                >
+                  {isAutoFilling ? (
+                    <LoaderCircle className="spin" size={17} />
+                  ) : (
+                    <Sparkles size={17} />
+                  )}
+                  {isAutoFilling
+                    ? "Creating suggestions"
+                    : `Fill ${mode === "fiction" ? "Fiction" : "Non-Fiction"} details`}
+                </button>
+              </div>
+              {autoFillMessage ? (
+                <p className="ai-brief-note" role="status">
+                  <Check size={15} />
+                  {autoFillMessage}
+                </p>
+              ) : null}
+              <Field
+                label="Author name"
+                value={brief.author}
+                onChange={(value) => updateBrief("author", value)}
+                placeholder="Your name"
+                disabled={fieldsLocked}
+              />
+
+              {mode === "fiction" ? (
+                <>
+                  <Field
+                    label="Genre"
+                    value={brief.genre}
+                    onChange={(value) => updateBrief("genre", value)}
+                    placeholder="e.g. Literary fantasy, mystery, romance"
+                    disabled={fieldsLocked}
+                  />
+                  <Field
+                    textarea
+                    label="Main characters"
+                    value={brief.characters}
+                    onChange={(value) => updateBrief("characters", value)}
+                    placeholder="Name and describe your key characters"
+                    disabled={fieldsLocked}
+                  />
+                  <Field
+                    textarea
+                    label="Plot premise"
+                    value={brief.premise}
+                    onChange={(value) => updateBrief("premise", value)}
+                    placeholder="What is the story about? What is the central conflict?"
+                    disabled={fieldsLocked}
+                  />
+                </>
+              ) : (
+                <>
+                  <Field
+                    label="Topic"
+                    value={brief.topic}
+                    onChange={(value) => updateBrief("topic", value)}
+                    placeholder="e.g. Productivity for creatives"
+                    disabled={fieldsLocked}
+                  />
+                  <Field
+                    label="Target audience"
+                    value={brief.audience}
+                    onChange={(value) => updateBrief("audience", value)}
+                    placeholder="Who is this book for?"
+                    disabled={fieldsLocked}
+                  />
+                  <Field
+                    textarea
+                    label="Key points to cover"
+                    value={brief.keyPoints}
+                    onChange={(value) => updateBrief("keyPoints", value)}
+                    placeholder="List the main ideas, arguments, or lessons to include"
+                    disabled={fieldsLocked}
+                  />
+                </>
+              )}
+
+              <fieldset className="chapter-fieldset" disabled={fieldsLocked}>
+                <legend>Number of chapters</legend>
+                <div className="chapter-options">
+                  {chapterPresets.map((value) => (
+                    <button
+                      type="button"
+                      key={value}
+                      className={brief.chapterCount === value && !customChapters ? "selected" : ""}
+                      onClick={() => chooseChapterCount(value)}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                  <label className={customChapters ? "custom-count selected" : "custom-count"}>
+                    <Plus size={16} />
+                    <input
+                      aria-label="Custom chapter count"
+                      type="number"
+                      min={1}
+                      max={40}
+                      value={customChapters}
+                      placeholder="Custom"
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        setCustomChapters(raw);
+                        updateBrief(
+                          "chapterCount",
+                          Math.min(40, Math.max(1, Number(raw) || 1)),
+                        );
+                      }}
+                    />
+                  </label>
+                </div>
+                <p>Choose up to 40 chapters for longer projects.</p>
+              </fieldset>
+
+              {error ? <p className="form-error">{error}</p> : null}
+
+              {isGenerating ? (
+                <button className="cancel-button" type="button" onClick={cancelGeneration}>
+                  <CircleStop size={19} />
+                  Stop generation
+                </button>
+              ) : (
+                <button className="generate-button" type="submit" disabled={isAutoFilling}>
+                  <Sparkles size={20} />
+                  {status === "complete" ? "Generate another version" : "Generate book"}
+                </button>
+              )}
+            </form>
+          </div>
+
+          <BookPreview
+            manuscript={manuscript}
+            status={status}
+            progress={progress}
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
+            exporting={exporting}
+            onExport={runExport}
+            activeProvider={activeProvider}
+          />
+        </section>
+      ) : (
+        <LibraryView
+          books={library}
+          onOpen={openBook}
+          onRemove={removeBook}
+          onCreate={() => setView("create")}
+        />
+      )}
+    </main>
+  );
+}
+
+function BookPreview({
+  manuscript,
+  status,
+  progress,
+  activeSection,
+  setActiveSection,
+  exporting,
+  onExport,
+  activeProvider,
+}: {
+  manuscript: Manuscript | null;
+  status: GenerationStatus;
+  progress: number;
+  activeSection: number;
+  setActiveSection: (index: number) => void;
+  exporting: string;
+  onExport: (format: "docx" | "pdf" | "epub") => void;
+  activeProvider: ActiveAIProvider | null;
+}) {
+  if (!manuscript && status !== "outlining") {
+    return (
+      <aside className="preview-panel" aria-live="polite">
+        <div className="empty-state">
+          <div className="book-illustration" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <h2>Your book will appear here</h2>
+          <p>
+            Fill in the details on the left and select Generate. You’ll watch each chapter
+            come to life in real time.
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
+  if (status === "outlining" || !manuscript) {
+    return (
+      <aside className="preview-panel" aria-live="polite">
+        <div className="generation-empty">
+          <LoaderCircle className="spin" size={34} />
+          <p className="preview-kicker">Designing the structure</p>
+          <h2>Building your book’s spine</h2>
+          <p>
+            EB Studio Pro is mapping the opening, chapter arc, and final conclusion.
+            {activeProvider ? ` ${providerLabel(activeProvider)} is active.` : ""}
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
+  const selected =
+    manuscript.sections[activeSection] ??
+    manuscript.sections[manuscript.sections.length - 1] ??
+    null;
+  const isComplete = status === "complete";
+
+  return (
+    <aside className="preview-panel manuscript-panel" aria-live="polite">
+      <div className="manuscript-toolbar">
+        <div>
+          <span className="preview-kicker">
+            {isComplete ? "Manuscript complete" : "Writing in progress"}
+          </span>
+          <strong>{manuscript.sections.length} of {manuscript.plan.length} sections</strong>
+          <div className="provider-badges" aria-label="AI writers used">
+            {(manuscript.providersUsed ?? (activeProvider ? [activeProvider] : [])).map(
+              (usedProvider) => (
+                <span key={usedProvider}>{providerLabel(usedProvider)}</span>
+              ),
+            )}
+          </div>
+        </div>
+        {isComplete ? (
+          <div className="export-actions" aria-label="Export formats">
+            <button onClick={() => onExport("docx")} disabled={Boolean(exporting)}>
+              <FileText size={16} />
+              {exporting === "docx" ? "Preparing" : "DOCX"}
+            </button>
+            <button onClick={() => onExport("pdf")} disabled={Boolean(exporting)}>
+              <FileText size={16} />
+              {exporting === "pdf" ? "Preparing" : "PDF"}
+            </button>
+            <button onClick={() => onExport("epub")} disabled={Boolean(exporting)}>
+              <Download size={16} />
+              {exporting === "epub" ? "Preparing" : "EPUB"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="progress-track" aria-label={`${progress}% complete`}>
+        <span style={{ width: `${progress}%` }} />
+      </div>
+
+      <div className="manuscript-workspace">
+        <nav className="contents-rail" aria-label="Book contents">
+          <div className="mini-cover">
+            <BookMarked size={22} />
+            <span>{manuscript.title}</span>
+            <small>{manuscript.author}</small>
+          </div>
+          <p>Contents</p>
+          {manuscript.plan.map((section, index) => {
+            const finished = index < manuscript.sections.length;
+            const current = !isComplete && index === manuscript.sections.length;
+            return (
+              <button
+                key={`${section.kind}-${index}`}
+                disabled={!finished}
+                className={activeSection === index && finished ? "active" : ""}
+                onClick={() => setActiveSection(index)}
+              >
+                <span>
+                  {finished ? <Check size={13} /> : current ? <LoaderCircle className="spin" size={13} /> : index + 1}
+                </span>
+                <em>{section.title}</em>
+              </button>
+            );
+          })}
+        </nav>
+
+        <article className="book-page">
+          {selected ? (
+            <>
+              <div className="section-meta">
+                {selected.kind === "chapter"
+                  ? `Chapter ${selected.number}`
+                  : selected.kind === "introduction"
+                    ? "Opening"
+                    : "Closing"}
+              </div>
+              <h2>{selected.title}</h2>
+              <MarkdownContent content={selected.content} />
+            </>
+          ) : (
+            <div className="section-loading">
+              <LoaderCircle className="spin" size={28} />
+              <h2>Writing {manuscript.plan[0]?.title}</h2>
+              <p>The first section will appear here as soon as it is ready.</p>
+            </div>
+          )}
+        </article>
+      </div>
+    </aside>
+  );
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  const blocks = content.split(/\n{2,}/).filter(Boolean);
+  return (
+    <div className="manuscript-copy">
+      {blocks.map((block, index) => {
+        const cleaned = block.trim();
+        if (cleaned.startsWith("### ")) return <h4 key={index}>{cleaned.slice(4)}</h4>;
+        if (cleaned.startsWith("## ")) return <h3 key={index}>{cleaned.slice(3)}</h3>;
+        if (cleaned.split("\n").every((line) => /^[-*]\s/.test(line))) {
+          return (
+            <ul key={index}>
+              {cleaned.split("\n").map((line, itemIndex) => (
+                <li key={itemIndex}>{stripInlineMarkdown(line.replace(/^[-*]\s/, ""))}</li>
+              ))}
+            </ul>
+          );
+        }
+        return <p key={index}>{stripInlineMarkdown(cleaned)}</p>;
+      })}
+    </div>
+  );
+}
+
+function LibraryView({
+  books,
+  onOpen,
+  onRemove,
+  onCreate,
+}: {
+  books: Manuscript[];
+  onOpen: (book: Manuscript) => void;
+  onRemove: (id: string) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <section className="library-view">
+      <div>
+        <span className="eyebrow"><LibraryBig size={18} /> Your library</span>
+        <h1>Every manuscript, in one place.</h1>
+        <p>Completed books are saved privately on this device for quick preview and export.</p>
+      </div>
+
+      {books.length ? (
+        <div className="book-grid">
+          {books.map((book) => (
+            <article className="book-card" key={book.id}>
+              <button className="book-card-cover" onClick={() => onOpen(book)}>
+                <span>{book.mode === "fiction" ? "Fiction" : "Non-Fiction"}</span>
+                <h2>{book.title}</h2>
+                {book.subtitle ? <p>{book.subtitle}</p> : null}
+                <small>{book.author}</small>
+              </button>
+              <div className="book-card-footer">
+                <span>{book.brief.chapterCount} chapters</span>
+                <button
+                  aria-label={`Delete ${book.title}`}
+                  onClick={() => onRemove(book.id)}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="library-empty">
+          <BookOpen size={36} />
+          <h2>Your shelf is waiting</h2>
+          <p>Generate your first book to start your private library.</p>
+          <button onClick={onCreate}>Create a book</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  textarea = false,
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  textarea?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      {textarea ? (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          rows={4}
+          disabled={disabled}
+        />
+      ) : (
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+        />
+      )}
+    </label>
+  );
+}
+
+async function readResponse(response: Response) {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      String(
+        data.error ??
+          "The writing service could not be reached. Your book details are safe, so please try again.",
+      ),
+    );
+  }
+  return data;
+}
+
+function stripInlineMarkdown(text: string): ReactNode {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/`(.*?)`/g, "$1");
+}
+
+function providerLabel(provider: ActiveAIProvider) {
+  return provider === "openai" ? "OpenAI" : "Claude";
+}
