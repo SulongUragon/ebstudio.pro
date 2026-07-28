@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   title: "EB Studio Pro | AI Ebook Generator",
   description:
     "AI Ebook Creation Suite for complete fiction and non-fiction books with EPUB, PDF, and DOCX export.",
+  manifest: "/manifest.webmanifest",
   other: {
     "codex-preview": "development",
   },
