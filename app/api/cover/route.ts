@@ -57,7 +57,7 @@ Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image w
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2",
+        model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1",
         prompt,
         n: 1,
         size: "1024x1536",
@@ -77,11 +77,13 @@ Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image w
       return NextResponse.json(
         {
           error:
-            response.status === 403
-              ? "OpenAI image generation access is not enabled for this project."
-              : response.status === 429
-                ? "The cover generator is busy or has reached its usage limit. Please try again shortly."
-                : "The AI cover could not be generated. Your manuscript is safe.",
+            data.error?.message?.toLowerCase().includes("verif")
+              ? "OpenAI requires organization verification before image generation can be used."
+              : response.status === 403
+                ? "OpenAI image generation access is not enabled for this project."
+                : response.status === 429
+                  ? "The cover generator is busy or has reached its usage limit. Please try again shortly."
+                  : "The AI cover could not be generated. Your manuscript is safe.",
         },
         { status: response.status >= 400 ? response.status : 502 },
       );
