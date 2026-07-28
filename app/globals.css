@@ -410,7 +410,7 @@ p {
   z-index: 90;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(430px, calc(100vw - 32px));
+  width: min(520px, calc(100vw - 32px));
   height: min(690px, calc(100vh - 120px));
   overflow: hidden;
   border: 1px solid rgba(49, 74, 64, 0.32);
@@ -452,6 +452,7 @@ p {
 
 .assistant-header > div:last-child {
   display: flex;
+  flex: 0 0 auto;
   gap: 5px;
 }
 
@@ -639,7 +640,7 @@ p {
 
 .assistant-composer {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 9px;
   padding: 13px;
   border-top: 1px solid var(--line);
@@ -647,6 +648,8 @@ p {
 }
 
 .assistant-composer textarea {
+  width: 100%;
+  min-width: 0;
   min-height: 48px;
   max-height: 110px;
   resize: vertical;
@@ -1647,14 +1650,29 @@ p {
   }
 
   .assistant-panel {
-    right: 0;
-    bottom: 0;
-    width: 100vw;
-    height: min(82vh, 720px);
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 18px 18px 0 0;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
+    height: min(86dvh, 720px);
+    border-radius: 18px;
+  }
+
+  .assistant-header {
+    gap: 10px;
+    padding: 16px 14px 14px;
+  }
+
+  .assistant-header > div:first-child > span {
+    font-size: 0.94rem;
+  }
+
+  .assistant-body {
+    padding: 14px;
+  }
+
+  .assistant-composer {
+    padding: 10px;
   }
 
   .assistant-quick-actions {
