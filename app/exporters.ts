@@ -348,8 +348,8 @@ function removeLeadingDuplicateHeading(content: string, title: string, label: st
     const heading = first.replace(/^#{1,6}\s*/, "").replace(/^[*_]+|[*_]+$/g, "").trim();
     const normalized = normalizeHeading(heading);
     if (
-      /^#{1,6}\s+/.test(first) &&
-      (normalized === normalizeHeading(title) || normalized === normalizeHeading(label))
+      normalized === normalizeHeading(title) ||
+      normalized === normalizeHeading(label)
     ) {
       lines.shift();
       while (lines.length && !lines[0].trim()) lines.shift();
