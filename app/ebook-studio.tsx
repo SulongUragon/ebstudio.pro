@@ -941,15 +941,13 @@ function BookPreview({
         <article className="book-page">
           {selected ? (
             <>
-              <div className="section-meta">
-                {selected.kind === "chapter"
-                  ? `Chapter ${selected.number}`
-                  : selected.kind === "introduction"
-                    ? "Opening"
-                    : "Closing"}
-              </div>
-              <h2>{selected.title}</h2>
-              <MarkdownContent content={selected.content} />
+              <div className="section-meta">{sectionLabel(selected)}</div>
+              {shouldShowSectionTitle(selected) ? <h2>{selected.title}</h2> : null}
+              <MarkdownContent
+                content={selected.content}
+                sectionTitle={selected.title}
+                sectionLabel={sectionLabel(selected)}
+              />
             </>
           ) : (
             <div className="section-loading">
@@ -964,8 +962,18 @@ function BookPreview({
   );
 }
 
-function MarkdownContent({ content }: { content: string }) {
-  const blocks = content.split(/\n{2,}/).filter(Boolean);
+function MarkdownContent({
+  content,
+  sectionTitle,
+  sectionLabel: label,
+}: {
+  content: string;
+  sectionTitle: string;
+  sectionLabel: string;
+}) {
+  const blocks = removeLeadingDuplicateHeading(content, sectionTitle, label)
+    .split(/\n{2,}/)
+    .filter(Boolean);
   return (
     <div className="manuscript-copy">
       {blocks.map((block, index) => {
@@ -985,6 +993,42 @@ function MarkdownContent({ content }: { content: string }) {
       })}
     </div>
   );
+}
+
+function sectionLabel(section: SectionContent) {
+  return section.kind === "chapter"
+    ? `Chapter ${section.number}`
+    : section.kind === "introduction"
+      ? "Introduction"
+      : "Conclusion";
+}
+
+function shouldShowSectionTitle(section: SectionContent) {
+  return normalizeHeading(section.title) !== normalizeHeading(sectionLabel(section));
+}
+
+function removeLeadingDuplicateHeading(content: string, title: string, label: string) {
+  const lines = content.replace(/\r\n?/g, "\n").split("\n");
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length) {
+    const first = lines[0].trim();
+    const heading = first.replace(/^#{1,6}\s*/, "").replace(/^[*_]+|[*_]+$/g, "").trim();
+    const normalized = normalizeHeading(heading);
+    if (
+      /^#{1,6}\s+/.test(first) &&
+      (normalized === normalizeHeading(title) || normalized === normalizeHeading(label))
+    ) {
+      lines.shift();
+      while (lines.length && !lines[0].trim()) lines.shift();
+      continue;
+    }
+    break;
+  }
+  return lines.join("\n");
+}
+
+function normalizeHeading(value: string) {
+  return value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function LibraryView({
