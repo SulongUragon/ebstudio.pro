@@ -66,6 +66,7 @@ export default function EbookStudio() {
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [autoFillMessage, setAutoFillMessage] = useState("");
   const [isImprovingTitle, setIsImprovingTitle] = useState(false);
+  const [titleImproveError, setTitleImproveError] = useState("");
   const [titlePromptDismissed, setTitlePromptDismissed] = useState(false);
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
   const [exporting, setExporting] = useState("");
@@ -106,6 +107,7 @@ export default function EbookStudio() {
     updateBrief("title", value);
     setTitlePromptDismissed(false);
     setTitleSuggestions([]);
+    setTitleImproveError("");
     setAutoFillMessage("");
   }
 
@@ -118,6 +120,7 @@ export default function EbookStudio() {
     setAutoFillMessage("");
     setTitlePromptDismissed(false);
     setTitleSuggestions([]);
+    setTitleImproveError("");
     setActiveProvider(null);
   }
 
@@ -196,6 +199,7 @@ export default function EbookStudio() {
 
     setIsImprovingTitle(true);
     setError("");
+    setTitleImproveError("");
     setTitleSuggestions([]);
     setActiveProvider(null);
 
@@ -210,14 +214,14 @@ export default function EbookStudio() {
         ? data.suggestions.map((item: unknown) => String(item)).slice(0, 3)
         : [];
 
-      if (suggestions.length !== 3) {
-        throw new Error("AI could not create three title options. Please try again.");
+      if (!suggestions.length) {
+        throw new Error("AI could not create title options. Please try again.");
       }
 
       setTitleSuggestions(suggestions);
       setActiveProvider(data.provider as ActiveAIProvider);
     } catch (titleError) {
-      setError(
+      setTitleImproveError(
         titleError instanceof Error
           ? titleError.message
           : "EB Studio Pro could not improve this title.",
@@ -230,6 +234,7 @@ export default function EbookStudio() {
   function selectTitle(title: string) {
     setBrief((current) => ({ ...current, title }));
     setTitleSuggestions([]);
+    setTitleImproveError("");
     setTitlePromptDismissed(true);
     setAutoFillMessage("New title selected. You can still edit it before generating.");
   }
@@ -553,7 +558,7 @@ export default function EbookStudio() {
                       ) : (
                         <Sparkles size={16} />
                       )}
-                      {isImprovingTitle ? "Creating options" : "Improve title"}
+                      {isImprovingTitle ? "Creating options…" : "Get 3 title options"}
                     </button>
                     <button
                       type="button"
@@ -568,8 +573,12 @@ export default function EbookStudio() {
                     </button>
                   </div>
                   {titleSuggestions.length ? (
-                    <div className="title-suggestions" aria-label="AI title suggestions">
-                      <span>Choose a title</span>
+                    <div
+                      className="title-suggestions"
+                      aria-label="AI title suggestions"
+                      aria-live="polite"
+                    >
+                      <span>Choose one to replace your current title</span>
                       {titleSuggestions.map((title) => (
                         <button
                           type="button"
@@ -580,6 +589,11 @@ export default function EbookStudio() {
                         </button>
                       ))}
                     </div>
+                  ) : null}
+                  {titleImproveError ? (
+                    <p className="title-improve-error" role="alert">
+                      {titleImproveError}
+                    </p>
                   ) : null}
                 </div>
               ) : null}
