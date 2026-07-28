@@ -8,7 +8,7 @@ import type {
 } from "../../book-types";
 
 type RequestBody = {
-  action: "title" | "brief" | "outline" | "section";
+  action: "title" | "brief" | "outline" | "section" | "assistant";
   mode: Mode;
   brief: BookBrief;
   provider?: AIProvider;
@@ -17,6 +17,14 @@ type RequestBody = {
   section?: SectionPlan;
   sectionIndex?: number;
   previousSummaries?: string[];
+  assistantPrompt?: string;
+  assistantHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+  manuscript?: {
+    title?: string;
+    subtitle?: string;
+    sections?: Array<{ title?: string; content?: string; summary?: string }>;
+  } | null;
+  activeSection?: number;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -84,6 +92,10 @@ export async function POST(request: Request) {
       );
       return NextResponse.json(result);
     }
+    if (body.action === "assistant" && body.assistantPrompt?.trim()) {
+      const result = await createAssistantResponse(body);
+      return NextResponse.json(result);
+    }
     if (!body.brief.author) {
       return NextResponse.json({ error: "The book brief is incomplete." }, { status: 400 });
     }
@@ -134,6 +146,88 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+async function createAssistantResponse(body: RequestBody) {
+  const {
+    brief,
+    mode,
+    assistantPrompt = "",
+    assistantHistory = [],
+    manuscript,
+    activeSection = 0,
+  } = body;
+  const selected = manuscript?.sections?.[activeSection];
+  const modeContext =
+    mode === "fiction"
+      ? `Genre: ${brief.genre || "Not set"}
+Characters: ${brief.characters || "Not set"}
+Premise: ${brief.premise || "Not set"}`
+      : `Topic: ${brief.topic || "Not set"}
+Audience: ${brief.audience || "Not set"}
+Key points: ${brief.keyPoints || "Not set"}`;
+  const history = assistantHistory
+    .slice(-6)
+    .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
+    .join("\n");
+  const sectionContext = selected
+    ? `Selected section: ${selected.title ?? "Untitled"}
+Selected section content:
+${String(selected.content ?? "").slice(0, 14000)}`
+    : "No manuscript section is currently selected.";
+  const bookSections = manuscript?.sections
+    ?.slice(0, 40)
+    .map((section, index) => `${index + 1}. ${section.title}: ${section.summary ?? ""}`)
+    .join("\n");
+
+  const generated = await generateJson(
+    {
+      name: "eb_creative_assistant",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          answer: { type: "string" },
+          draft: { type: "string" },
+          target: {
+            type: "string",
+            enum: ["none", "title", "section", "article"],
+          },
+        },
+        required: ["answer", "draft", "target"],
+      },
+      instructions:
+        "You are EB Creative Assistant, a senior ebook editor, fiction and non-fiction book developer, article strategist, and repurposing specialist. Give decisive, useful guidance grounded in the supplied book. When the user asks for a deliverable, provide publication-ready copy in draft. Never claim guaranteed virality, invent research, imitate a living author, or use the em dash character. Keep answer concise. Use target title only when draft is a replacement title, section only when draft is a full replacement for the selected manuscript section, article for a standalone article, and none otherwise. If target is none, draft may contain other ready-to-use copy or be empty.",
+      input: `Current book context:
+Mode: ${mode}
+Title: ${brief.title || "Not set"}
+Author: ${brief.author || "Not set"}
+${modeContext}
+Subtitle: ${manuscript?.subtitle ?? "Not generated"}
+
+Book section map:
+${bookSections || "No generated sections yet."}
+
+${sectionContext}
+
+Recent conversation:
+${history || "No earlier messages."}
+
+User request:
+${assistantPrompt.trim()}
+
+Respond with a clear recommendation in answer. Put any ready-to-use rewritten title, full replacement section, or standalone article in draft. Do not put explanations inside draft.`,
+      maxOutputTokens: selected ? 5000 : 3000,
+    },
+    body.provider ?? "auto",
+  );
+
+  return {
+    answer: String(generated.output.answer ?? ""),
+    draft: String(generated.output.draft ?? ""),
+    target: String(generated.output.target ?? "none"),
+    provider: generated.provider,
+  };
 }
 
 async function createTitleSuggestions(
