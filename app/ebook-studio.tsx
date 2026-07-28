@@ -26,6 +26,7 @@ import type {
   SectionPlan,
 } from "./book-types";
 import { exportDocx, exportEpub, exportPdf } from "./exporters";
+import CreativeAssistant from "./creative-assistant";
 
 type View = "create" | "library";
 type GenerationStatus =
@@ -237,6 +238,33 @@ export default function EbookStudio() {
     setTitleImproveError("");
     setTitlePromptDismissed(true);
     setAutoFillMessage("New title selected. You can still edit it before generating.");
+  }
+
+  function applyAssistantTitle(title: string) {
+    const cleaned = title.trim().replace(/^["“]|["”]$/g, "");
+    if (!cleaned) return;
+    setBrief((current) => ({ ...current, title: cleaned }));
+    setManuscript((current) =>
+      current
+        ? {
+            ...current,
+            title: cleaned,
+            brief: { ...current.brief, title: cleaned },
+          }
+        : current,
+    );
+  }
+
+  function applyAssistantSection(content: string) {
+    if (!manuscript?.sections[activeSection] || !content.trim()) return;
+    const updated: Manuscript = {
+      ...manuscript,
+      sections: manuscript.sections.map((section, index) =>
+        index === activeSection ? { ...section, content: content.trim() } : section,
+      ),
+    };
+    setManuscript(updated);
+    saveBook(updated);
   }
 
   async function generateBook(event: FormEvent<HTMLFormElement>) {
@@ -759,6 +787,15 @@ export default function EbookStudio() {
           onCreate={() => setView("create")}
         />
       )}
+      <CreativeAssistant
+        mode={mode}
+        brief={brief}
+        manuscript={manuscript}
+        activeSection={activeSection}
+        provider={provider}
+        onApplyTitle={applyAssistantTitle}
+        onApplySection={applyAssistantSection}
+      />
     </main>
   );
 }
