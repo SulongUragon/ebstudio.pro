@@ -28,6 +28,12 @@ export type SectionContent = SectionPlan & {
   summary: string;
 };
 
+export type CoverDesign = {
+  imageData: string;
+  style: string;
+  createdAt: string;
+};
+
 export type Manuscript = {
   id: string;
   mode: Mode;
@@ -39,4 +45,5 @@ export type Manuscript = {
   plan: SectionPlan[];
   sections: SectionContent[];
   providersUsed?: ActiveAIProvider[];
+  cover?: CoverDesign;
 };
