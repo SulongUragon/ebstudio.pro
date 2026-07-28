@@ -8,7 +8,7 @@ import type {
 } from "../../book-types";
 
 type RequestBody = {
-  action: "brief" | "outline" | "section";
+  action: "title" | "brief" | "outline" | "section";
   mode: Mode;
   brief: BookBrief;
   provider?: AIProvider;
@@ -66,6 +66,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "The book brief is incomplete." }, { status: 400 });
     }
 
+    if (body.action === "title") {
+      const result = await createTitleSuggestions(
+        body.mode,
+        body.brief.title,
+        body.provider ?? "auto",
+      );
+      return NextResponse.json(result);
+    }
     if (body.action === "brief") {
       const result = await createBookBrief(
         body.mode,
@@ -124,6 +132,70 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+async function createTitleSuggestions(
+  mode: Mode,
+  title: string,
+  provider: AIProvider,
+) {
+  const generated = await generateJson(
+    {
+      name: "ebook_title_suggestions",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          suggestions: {
+            type: "array",
+            minItems: 3,
+            maxItems: 3,
+            items: { type: "string" },
+          },
+        },
+        required: ["suggestions"],
+      },
+      instructions:
+        "You are the senior book title strategist inside EB Studio Pro. Create commercially strong, original titles with clear reader appeal. Never promise virality, use misleading clickbait, copy a famous title, invent claims, or use the em dash character.",
+      input:
+        mode === "fiction"
+          ? `Improve this fiction book title:
+
+Original title: ${title.trim()}
+
+Return exactly three concise alternatives. Preserve the core story idea while making each option more memorable, emotionally intriguing, genre-aware, and easy to recognize on a book cover. Return title text only, without subtitles, quotation marks, numbering, or commentary.`
+          : `Improve this non-fiction book title:
+
+Original title: ${title.trim()}
+
+Return exactly three concise alternatives. Preserve the core topic while making each option more specific, benefit-led, searchable, credible, and easy to recognize on a book cover. Do not make unverifiable promises. Return title text only, without subtitles, quotation marks, numbering, or commentary.`,
+      maxOutputTokens: 500,
+    },
+    provider,
+  );
+
+  const suggestions = Array.isArray(generated.output.suggestions)
+    ? generated.output.suggestions
+        .map((item) => String(item).trim())
+        .filter(
+          (item, index, items) =>
+            item.length > 0 &&
+            item.toLocaleLowerCase() !== title.trim().toLocaleLowerCase() &&
+            items.indexOf(item) === index,
+        )
+        .slice(0, 3)
+    : [];
+
+  if (suggestions.length < 3) {
+    throw new ProviderRequestError(
+      generated.provider,
+      502,
+      "invalid_response",
+      "The title suggestions were incomplete.",
+    );
+  }
+
+  return { suggestions, provider: generated.provider };
 }
 
 async function createBookBrief(

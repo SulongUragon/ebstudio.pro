@@ -65,6 +65,9 @@ export default function EbookStudio() {
   const [error, setError] = useState("");
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [autoFillMessage, setAutoFillMessage] = useState("");
+  const [isImprovingTitle, setIsImprovingTitle] = useState(false);
+  const [titlePromptDismissed, setTitlePromptDismissed] = useState(false);
+  const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
   const [exporting, setExporting] = useState("");
   const cancelRef = useRef(false);
 
@@ -87,7 +90,7 @@ export default function EbookStudio() {
   }, []);
 
   const isGenerating = status === "outlining" || status === "writing";
-  const fieldsLocked = isGenerating || isAutoFilling;
+  const fieldsLocked = isGenerating || isAutoFilling || isImprovingTitle;
   const progress =
     manuscript?.plan.length && status !== "outlining"
       ? Math.round((manuscript.sections.length / manuscript.plan.length) * 100)
@@ -99,6 +102,13 @@ export default function EbookStudio() {
     setBrief((current) => ({ ...current, [field]: value }));
   }
 
+  function updateTitle(value: string) {
+    updateBrief("title", value);
+    setTitlePromptDismissed(false);
+    setTitleSuggestions([]);
+    setAutoFillMessage("");
+  }
+
   function chooseMode(nextMode: Mode) {
     if (fieldsLocked) return;
     setMode(nextMode);
@@ -106,6 +116,8 @@ export default function EbookStudio() {
     setManuscript(null);
     setError("");
     setAutoFillMessage("");
+    setTitlePromptDismissed(false);
+    setTitleSuggestions([]);
     setActiveProvider(null);
   }
 
@@ -177,6 +189,49 @@ export default function EbookStudio() {
     } finally {
       setIsAutoFilling(false);
     }
+  }
+
+  async function improveTitle() {
+    if (!brief.title.trim()) return;
+
+    setIsImprovingTitle(true);
+    setError("");
+    setTitleSuggestions([]);
+    setActiveProvider(null);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "title", mode, brief, provider }),
+      });
+      const data = await readResponse(response);
+      const suggestions = Array.isArray(data.suggestions)
+        ? data.suggestions.map((item: unknown) => String(item)).slice(0, 3)
+        : [];
+
+      if (suggestions.length !== 3) {
+        throw new Error("AI could not create three title options. Please try again.");
+      }
+
+      setTitleSuggestions(suggestions);
+      setActiveProvider(data.provider as ActiveAIProvider);
+    } catch (titleError) {
+      setError(
+        titleError instanceof Error
+          ? titleError.message
+          : "EB Studio Pro could not improve this title.",
+      );
+    } finally {
+      setIsImprovingTitle(false);
+    }
+  }
+
+  function selectTitle(title: string) {
+    setBrief((current) => ({ ...current, title }));
+    setTitleSuggestions([]);
+    setTitlePromptDismissed(true);
+    setAutoFillMessage("New title selected. You can still edit it before generating.");
   }
 
   async function generateBook(event: FormEvent<HTMLFormElement>) {
@@ -318,6 +373,9 @@ export default function EbookStudio() {
     setError("");
     setAutoFillMessage("");
     setIsAutoFilling(false);
+    setIsImprovingTitle(false);
+    setTitlePromptDismissed(false);
+    setTitleSuggestions([]);
     setActiveSection(0);
     setActiveProvider(null);
   }
@@ -470,10 +528,61 @@ export default function EbookStudio() {
               <Field
                 label="Book title"
                 value={brief.title}
-                onChange={(value) => updateBrief("title", value)}
+                onChange={updateTitle}
                 placeholder="e.g. The Lanternkeeper’s Daughter"
                 disabled={fieldsLocked}
               />
+              {brief.title.trim() && !titlePromptDismissed ? (
+                <div className="title-optimizer">
+                  <div className="title-optimizer-copy">
+                    <span>Want a stronger title?</span>
+                    <p>
+                      AI can sharpen it for stronger click and search appeal without
+                      changing your book’s core idea.
+                    </p>
+                  </div>
+                  <div className="title-optimizer-actions">
+                    <button
+                      type="button"
+                      className="title-improve-button"
+                      onClick={improveTitle}
+                      disabled={fieldsLocked}
+                    >
+                      {isImprovingTitle ? (
+                        <LoaderCircle className="spin" size={16} />
+                      ) : (
+                        <Sparkles size={16} />
+                      )}
+                      {isImprovingTitle ? "Creating options" : "Improve title"}
+                    </button>
+                    <button
+                      type="button"
+                      className="title-keep-button"
+                      onClick={() => {
+                        setTitlePromptDismissed(true);
+                        setTitleSuggestions([]);
+                      }}
+                      disabled={fieldsLocked}
+                    >
+                      Keep my title
+                    </button>
+                  </div>
+                  {titleSuggestions.length ? (
+                    <div className="title-suggestions" aria-label="AI title suggestions">
+                      <span>Choose a title</span>
+                      {titleSuggestions.map((title) => (
+                        <button
+                          type="button"
+                          key={title}
+                          onClick={() => selectTitle(title)}
+                        >
+                          {title}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="ai-brief-helper">
                 <div className="ai-brief-helper-copy">
                   <span>Only have a title?</span>

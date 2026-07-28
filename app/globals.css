@@ -284,6 +284,93 @@ p {
   background: rgba(64, 86, 74, 0.055);
 }
 
+.title-optimizer {
+  display: grid;
+  gap: 14px;
+  margin: -7px 0 24px;
+  padding: 16px;
+  border: 1px solid rgba(64, 86, 74, 0.25);
+  background: rgba(64, 86, 74, 0.07);
+}
+
+.title-optimizer-copy > span,
+.title-suggestions > span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--sage);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.title-optimizer-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.title-optimizer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.title-improve-button,
+.title-keep-button,
+.title-suggestions button {
+  min-height: 40px;
+  border-radius: 2px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.title-improve-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--sage);
+  background: var(--sage);
+  color: white;
+}
+
+.title-keep-button {
+  padding: 0 14px;
+  border: 1px solid rgba(64, 86, 74, 0.3);
+  background: transparent;
+  color: var(--sage);
+}
+
+.title-improve-button:disabled,
+.title-keep-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.title-suggestions {
+  display: grid;
+  gap: 7px;
+  padding-top: 2px;
+}
+
+.title-suggestions button {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  text-align: left;
+}
+
+.title-suggestions button:hover,
+.title-suggestions button:focus-visible {
+  border-color: var(--rust);
+  color: var(--rust-dark);
+}
+
 .ai-brief-helper-copy > span {
   display: block;
   margin-bottom: 4px;
