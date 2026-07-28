@@ -76,6 +76,8 @@ Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image w
       console.error("EB Studio Pro cover generation failed", response.status, data.error?.code);
       return NextResponse.json(
         {
+          code: data.error?.code ?? "image_request_failed",
+          providerDetail: String(data.error?.message ?? "").slice(0, 240),
           error:
             data.error?.message?.toLowerCase().includes("verif")
               ? "OpenAI requires organization verification before image generation can be used."
