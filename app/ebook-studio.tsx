@@ -348,12 +348,17 @@ export default function EbookStudio() {
     <main className="app-shell">
       <header className="topbar">
         <button className="brand" onClick={() => setView("create")} aria-label="Go to creator">
-          <span className="brand-mark">
-            <BookOpen size={25} strokeWidth={1.8} />
-          </span>
+          <img
+            className="brand-logo"
+            src="/brand/ebstudio-pro-mark.png"
+            alt=""
+            width="640"
+            height="400"
+            aria-hidden="true"
+          />
           <span className="brand-copy">
             <strong>EB Studio Pro</strong>
-            <small>AI Ebook Creation Suite</small>
+            <small>Create · Design · Publish</small>
           </span>
         </button>
 

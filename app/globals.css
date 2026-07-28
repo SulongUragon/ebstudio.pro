@@ -69,14 +69,13 @@ button {
   color: var(--ink);
 }
 
-.brand-mark {
-  display: grid;
-  width: 50px;
-  height: 50px;
-  place-items: center;
-  border-radius: 3px;
-  background: var(--rust);
-  color: white;
+.brand-logo {
+  width: 70px;
+  height: 48px;
+  border: 1px solid rgba(24, 24, 22, 0.2);
+  border-radius: 5px;
+  object-fit: cover;
+  box-shadow: 0 7px 18px rgba(17, 17, 16, 0.13);
 }
 
 .brand-copy {
@@ -1138,9 +1137,9 @@ p {
     padding: 0 16px;
   }
 
-  .brand-mark {
-    width: 42px;
-    height: 42px;
+  .brand-logo {
+    width: 55px;
+    height: 39px;
   }
 
   .brand {
