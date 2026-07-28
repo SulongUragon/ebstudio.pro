@@ -53,7 +53,7 @@ type AnthropicErrorPayload = {
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
-const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929";
+const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 
 export async function POST(request: Request) {
   try {
@@ -150,8 +150,6 @@ async function createTitleSuggestions(
         properties: {
           suggestions: {
             type: "array",
-            minItems: 3,
-            maxItems: 3,
             items: { type: "string" },
           },
         },
@@ -686,9 +684,7 @@ function resolveOpenAIModel() {
 
 function resolveAnthropicModel() {
   const configured = process.env.ANTHROPIC_MODEL?.trim();
-  return !configured || configured === "claude-sonnet-5"
-    ? DEFAULT_ANTHROPIC_MODEL
-    : configured;
+  return configured || DEFAULT_ANTHROPIC_MODEL;
 }
 
 function parseProviderJson(provider: ActiveAIProvider, outputText: string): JsonObject {
