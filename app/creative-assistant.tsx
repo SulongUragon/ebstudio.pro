@@ -83,7 +83,7 @@ export default function CreativeAssistant({
 
     const nextMessages: ChatMessage[] = [
       ...messages,
-      { role: "user", content: question },
+      { role: "user" as const, content: question },
     ].slice(-6);
     setMessages(nextMessages);
     setPrompt("");
