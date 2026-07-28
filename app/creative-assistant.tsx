@@ -116,7 +116,7 @@ export default function CreativeAssistant({
       };
       setResult(nextResult);
       setMessages((current) =>
-        [...current, { role: "assistant", content: nextResult.answer }].slice(-6),
+        [...current, { role: "assistant" as const, content: nextResult.answer }].slice(-6),
       );
     } catch (assistantError) {
       setError(
