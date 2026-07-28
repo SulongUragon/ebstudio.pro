@@ -27,6 +27,7 @@ import type {
 } from "./book-types";
 import { exportDocx, exportEpub, exportPdf } from "./exporters";
 import CreativeAssistant from "./creative-assistant";
+import CoverStudio from "./cover-studio";
 
 type View = "create" | "library";
 type GenerationStatus =
@@ -253,6 +254,13 @@ export default function EbookStudio() {
           }
         : current,
     );
+  }
+
+  function saveCover(cover: NonNullable<Manuscript["cover"]>) {
+    if (!manuscript) return;
+    const updated: Manuscript = { ...manuscript, cover };
+    setManuscript(updated);
+    saveBook(updated);
   }
 
   function applyAssistantSection(content: string) {
@@ -777,6 +785,7 @@ export default function EbookStudio() {
             exporting={exporting}
             onExport={runExport}
             activeProvider={activeProvider}
+            onSaveCover={saveCover}
           />
         </section>
       ) : (
@@ -809,6 +818,7 @@ function BookPreview({
   exporting,
   onExport,
   activeProvider,
+  onSaveCover,
 }: {
   manuscript: Manuscript | null;
   status: GenerationStatus;
@@ -818,6 +828,7 @@ function BookPreview({
   exporting: string;
   onExport: (format: "docx" | "pdf" | "epub") => void;
   activeProvider: ActiveAIProvider | null;
+  onSaveCover: (cover: NonNullable<Manuscript["cover"]>) => void;
 }) {
   if (!manuscript && status !== "outlining") {
     return (
@@ -897,6 +908,8 @@ function BookPreview({
       <div className="progress-track" aria-label={`${progress}% complete`}>
         <span style={{ width: `${progress}%` }} />
       </div>
+
+      {isComplete ? <CoverStudio manuscript={manuscript} onSave={onSaveCover} /> : null}
 
       <div className="manuscript-workspace">
         <nav className="contents-rail" aria-label="Book contents">
@@ -997,7 +1010,11 @@ function LibraryView({
         <div className="book-grid">
           {books.map((book) => (
             <article className="book-card" key={book.id}>
-              <button className="book-card-cover" onClick={() => onOpen(book)}>
+              <button
+                className={`book-card-cover${book.cover ? " has-generated-cover" : ""}`}
+                style={book.cover ? { backgroundImage: `linear-gradient(rgba(10,14,12,.24), rgba(10,14,12,.72)), url(${book.cover.imageData})` } : undefined}
+                onClick={() => onOpen(book)}
+              >
                 <span>{book.mode === "fiction" ? "Fiction" : "Non-Fiction"}</span>
                 <h2>{book.title}</h2>
                 {book.subtitle ? <p>{book.subtitle}</p> : null}
