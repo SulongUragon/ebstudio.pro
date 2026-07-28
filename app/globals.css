@@ -371,6 +371,13 @@ p {
   color: var(--rust-dark);
 }
 
+.title-improve-error {
+  margin: 12px 0 0;
+  color: #a2372c;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .ai-brief-helper-copy > span {
   display: block;
   margin-bottom: 4px;
