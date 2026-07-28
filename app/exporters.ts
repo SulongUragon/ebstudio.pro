@@ -6,49 +6,68 @@ export async function exportDocx(book: Manuscript) {
     AlignmentType,
     Document,
     HeadingLevel,
+    ImageRun,
     Packer,
     PageBreak,
     Paragraph,
     TextRun,
   } = await import("docx");
 
-  const children = [
-    new Paragraph({ spacing: { before: 2800 } }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({
-          text: exportBook.title,
-          bold: true,
-          size: 52,
-          font: "Georgia",
-          color: "8F442B",
+  const coverChildren = exportBook.coverImage
+    ? [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new ImageRun({
+              data: dataUriToBytes(exportBook.coverImage),
+              transformation: { width: 408, height: 612 },
+              type: "jpg",
+            }),
+          ],
         }),
-      ],
-    }),
-    ...(exportBook.subtitle
-      ? [
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 260 },
-            children: [
-              new TextRun({
-                text: exportBook.subtitle,
-                italics: true,
-                size: 25,
-                font: "Georgia",
-                color: "5F5A53",
+        new Paragraph({ children: [new PageBreak()] }),
+      ]
+    : [
+        new Paragraph({ spacing: { before: 2800 } }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({
+              text: exportBook.title,
+              bold: true,
+              size: 52,
+              font: "Georgia",
+              color: "8F442B",
+            }),
+          ],
+        }),
+        ...(exportBook.subtitle
+          ? [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 260 },
+                children: [
+                  new TextRun({
+                    text: exportBook.subtitle,
+                    italics: true,
+                    size: 25,
+                    font: "Georgia",
+                    color: "5F5A53",
+                  }),
+                ],
               }),
-            ],
-          }),
-        ]
-      : []),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 850 },
-      children: [new TextRun({ text: `by ${exportBook.author}`, size: 24, font: "Arial" })],
-    }),
-    new Paragraph({ children: [new PageBreak()] }),
+            ]
+          : []),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 850 },
+          children: [new TextRun({ text: `by ${exportBook.author}`, size: 24, font: "Arial" })],
+        }),
+        new Paragraph({ children: [new PageBreak()] }),
+      ];
+
+  const children = [
+    ...coverChildren,
     new Paragraph({ text: "Contents", heading: HeadingLevel.TITLE }),
     ...exportBook.sections.map(
       (section) =>
@@ -97,7 +116,10 @@ export async function exportPdf(book: Manuscript) {
   const margin = 64;
   const usableWidth = pageWidth - margin * 2;
 
-  pdf.setFillColor(244, 241, 233);
+  if (exportBook.coverImage) {
+    pdf.addImage(exportBook.coverImage, "JPEG", 0, 0, pageWidth, pageHeight);
+  } else {
+    pdf.setFillColor(244, 241, 233);
   pdf.rect(0, 0, pageWidth, pageHeight, "F");
   pdf.setTextColor(143, 68, 43);
   pdf.setFont("times", "bold");
@@ -115,6 +137,7 @@ export async function exportPdf(book: Manuscript) {
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(13);
   pdf.text(`by ${exportBook.author}`, pageWidth / 2, 470, { align: "center" });
+  }
 
   pdf.addPage();
   pdf.setFont("times", "bold");
@@ -201,13 +224,18 @@ export async function exportEpub(book: Manuscript) {
   );
   zip.file(
     "OEBPS/style.css",
-    `body{font-family:Georgia,serif;line-height:1.65;color:#191a18;margin:7% 9%}h1,h2{line-height:1.15}h1{color:#8f442b;font-size:2.4em}.cover{text-align:center;padding-top:28%}.cover p{font-style:italic;color:#5f5a53}.kicker{text-transform:uppercase;letter-spacing:.16em;color:#ab5738;font:700 .72em Arial,sans-serif}nav ol{padding-left:1.4em}li{margin:.65em 0}`,
+    `body{font-family:Georgia,serif;line-height:1.65;color:#191a18;margin:7% 9%}h1,h2{line-height:1.15}h1{color:#8f442b;font-size:2.4em}.cover{text-align:center;padding-top:28%}.cover.generated{padding:0;margin:0}.cover.generated img{display:block;width:100%;height:auto}.cover p{font-style:italic;color:#5f5a53}.kicker{text-transform:uppercase;letter-spacing:.16em;color:#ab5738;font:700 .72em Arial,sans-serif}nav ol{padding-left:1.4em}li{margin:.65em 0}`,
   );
+  if (exportBook.coverImage) {
+    zip.file("OEBPS/cover.jpg", dataUriToBase64(exportBook.coverImage), { base64: true });
+  }
   zip.file(
     "OEBPS/cover.xhtml",
     xhtmlPage(
       exportBook.title,
-      `<main class="cover"><h1>${escapeXml(exportBook.title)}</h1>${exportBook.subtitle ? `<p>${escapeXml(exportBook.subtitle)}</p>` : ""}<p>by ${escapeXml(exportBook.author)}</p></main>`,
+      exportBook.coverImage
+        ? `<main class="cover generated"><img src="cover.jpg" alt="${escapeXml(exportBook.title)} cover"/></main>`
+        : `<main class="cover"><h1>${escapeXml(exportBook.title)}</h1>${exportBook.subtitle ? `<p>${escapeXml(exportBook.subtitle)}</p>` : ""}<p>by ${escapeXml(exportBook.author)}</p></main>`,
     ),
   );
 
@@ -260,6 +288,7 @@ export async function exportEpub(book: Manuscript) {
   </metadata>
   <manifest>
     <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>
+    ${exportBook.coverImage ? '<item id="cover-image" href="cover.jpg" media-type="image/jpeg" properties="cover-image"/>' : ""}
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="style" href="style.css" media-type="text/css"/>
     ${manifestItems}
@@ -365,8 +394,22 @@ function normalizeExportBook(book: Manuscript) {
     title: cleanText(book?.title).trim() || "Untitled Book",
     subtitle: cleanText(book?.subtitle).trim(),
     author: cleanText(book?.author).trim() || "Unknown Author",
+    coverImage: typeof book?.cover?.imageData === "string" ? book.cover.imageData : "",
     sections,
   };
+}
+
+function dataUriToBase64(dataUri: string) {
+  return dataUri.includes(",") ? dataUri.split(",")[1] : dataUri;
+}
+
+function dataUriToBytes(dataUri: string) {
+  const binary = atob(dataUriToBase64(dataUri));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 function cleanText(value: unknown) {
