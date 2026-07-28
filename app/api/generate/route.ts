@@ -526,7 +526,7 @@ Purpose: ${section.purpose}
 
 ${continuity}
 
-Write ${lengthTarget}. Use clean Markdown with paragraphs and only useful subheadings.
+Write ${lengthTarget}. Start directly with the section prose. Do not repeat the section title, section type, chapter number, Introduction, or Conclusion as a heading inside content. Never use a top-level # heading. Use clean Markdown with paragraphs and only useful internal subheadings that add new information.
 ${
   mode === "fiction"
     ? "Write in immersive scenes with specific sensory detail, emotional consequence, natural dialogue when appropriate, and forward story movement. Preserve character consistency and do not summarize scenes that should be dramatized."
