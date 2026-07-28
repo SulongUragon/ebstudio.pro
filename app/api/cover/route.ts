@@ -79,9 +79,11 @@ Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image w
           code: data.error?.code ?? "image_request_failed",
           providerDetail: String(data.error?.message ?? "").slice(0, 240),
           error:
-            data.error?.message?.toLowerCase().includes("verif")
-              ? "OpenAI requires organization verification before image generation can be used."
-              : response.status === 403
+            data.error?.code === "billing_hard_limit_reached"
+              ? "OpenAI image credits are unavailable or the project spending limit has been reached."
+              : data.error?.message?.toLowerCase().includes("verif")
+                ? "OpenAI requires organization verification before image generation can be used."
+                : response.status === 403
                 ? "OpenAI image generation access is not enabled for this project."
                 : response.status === 429
                   ? "The cover generator is busy or has reached its usage limit. Please try again shortly."
