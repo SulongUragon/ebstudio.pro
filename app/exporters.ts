@@ -79,16 +79,20 @@ export async function exportDocx(book: Manuscript) {
     ...exportBook.sections.flatMap((section) => [
       new Paragraph({ children: [new PageBreak()] }),
       new Paragraph({
-        text: section.kind === "chapter" ? `Chapter ${section.number}` : section.kind === "introduction" ? "Introduction" : "Conclusion",
+        text: exportSectionLabel(section),
         heading: HeadingLevel.HEADING_2,
-        spacing: { after: 140 },
+        spacing: { after: shouldShowExportTitle(section) ? 140 : 320 },
       }),
-      new Paragraph({
-        text: section.title,
-        heading: HeadingLevel.TITLE,
-        spacing: { after: 320 },
-      }),
-      ...toPlainParagraphs(section.content).map(
+      ...(shouldShowExportTitle(section)
+        ? [
+            new Paragraph({
+              text: section.title,
+              heading: HeadingLevel.TITLE,
+              spacing: { after: 320 },
+            }),
+          ]
+        : []),
+      ...toPlainParagraphs(section.content, section.title, exportSectionLabel(section)).map(
         (paragraph) =>
           new Paragraph({
             text: paragraph,
@@ -171,16 +175,19 @@ export async function exportPdf(book: Manuscript) {
           : "CONCLUSION";
     pdf.text(sectionLabel, margin, y);
     y += 32;
+    if (shouldShowExportTitle(section)) {
+      pdf.setTextColor(25, 26, 24);
+      pdf.setFont("times", "bold");
+      pdf.setFontSize(24);
+      const headingLines = pdf.splitTextToSize(section.title, usableWidth);
+      pdf.text(headingLines, margin, y);
+      y += headingLines.length * 28 + 24;
+    }
     pdf.setTextColor(25, 26, 24);
-    pdf.setFont("times", "bold");
-    pdf.setFontSize(24);
-    const headingLines = pdf.splitTextToSize(section.title, usableWidth);
-    pdf.text(headingLines, margin, y);
-    y += headingLines.length * 28 + 24;
     pdf.setFont("times", "normal");
     pdf.setFontSize(11.5);
 
-    for (const paragraph of toPlainParagraphs(section.content)) {
+    for (const paragraph of toPlainParagraphs(section.content, section.title, sectionLabel)) {
       const lines = pdf.splitTextToSize(paragraph, usableWidth);
       for (const line of lines) {
         if (y + 17 > pageHeight - 62) {
@@ -246,14 +253,17 @@ export async function exportEpub(book: Manuscript) {
         : section.kind === "introduction"
           ? "Introduction"
           : "Conclusion";
-    const paragraphs = toPlainParagraphs(section.content)
+    const paragraphs = toPlainParagraphs(section.content, section.title, label)
       .map((paragraph) => `<p>${escapeXml(paragraph)}</p>`)
       .join("");
+    const visibleTitle = shouldShowExportTitle(section)
+      ? `<h1>${escapeXml(section.title)}</h1>`
+      : "";
     zip.file(
       `OEBPS/${sectionFiles[index]}`,
       xhtmlPage(
         section.title,
-        `<main><p class="kicker">${label}</p><h1>${escapeXml(section.title)}</h1>${paragraphs}</main>`,
+        `<main><p class="kicker">${label}</p>${visibleTitle}${paragraphs}</main>`,
       ),
     );
   });
@@ -315,8 +325,8 @@ function xhtmlPage(title: string, body: string, nav = false) {
 </html>`;
 }
 
-function toPlainParagraphs(content: unknown) {
-  return cleanText(content)
+function toPlainParagraphs(content: unknown, sectionTitle = "", sectionLabel = "") {
+  return removeLeadingDuplicateHeading(cleanText(content), sectionTitle, sectionLabel)
     .split(/\n{2,}/)
     .map((paragraph) =>
       paragraph
@@ -328,6 +338,42 @@ function toPlainParagraphs(content: unknown) {
         .trim(),
     )
     .filter(Boolean);
+}
+
+function removeLeadingDuplicateHeading(content: string, title: string, label: string) {
+  const lines = content.replace(/\r\n?/g, "\n").split("\n");
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length) {
+    const first = lines[0].trim();
+    const heading = first.replace(/^#{1,6}\s*/, "").replace(/^[*_]+|[*_]+$/g, "").trim();
+    const normalized = normalizeHeading(heading);
+    if (
+      /^#{1,6}\s+/.test(first) &&
+      (normalized === normalizeHeading(title) || normalized === normalizeHeading(label))
+    ) {
+      lines.shift();
+      while (lines.length && !lines[0].trim()) lines.shift();
+      continue;
+    }
+    break;
+  }
+  return lines.join("\n");
+}
+
+function exportSectionLabel(section: { kind: string; number: number }) {
+  return section.kind === "chapter"
+    ? `Chapter ${section.number}`
+    : section.kind === "introduction"
+      ? "Introduction"
+      : "Conclusion";
+}
+
+function shouldShowExportTitle(section: { kind: string; number: number; title: string }) {
+  return normalizeHeading(section.title) !== normalizeHeading(exportSectionLabel(section));
+}
+
+function normalizeHeading(value: string) {
+  return value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function escapeXml(value: unknown) {
