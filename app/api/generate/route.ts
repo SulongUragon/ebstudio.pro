@@ -52,6 +52,8 @@ type AnthropicErrorPayload = {
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
+const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
+const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929";
 
 export async function POST(request: Request) {
   try {
@@ -186,12 +188,12 @@ Return exactly three concise alternatives. Preserve the core topic while making 
         .slice(0, 3)
     : [];
 
-  if (suggestions.length < 3) {
+  if (suggestions.length === 0) {
     throw new ProviderRequestError(
       generated.provider,
       502,
       "invalid_response",
-      "The title suggestions were incomplete.",
+      "The AI provider did not return a usable title suggestion.",
     );
   }
 
@@ -518,7 +520,7 @@ async function openAIJson({
   maxOutputTokens,
 }: JsonRequest): Promise<JsonObject> {
   const requestBody = JSON.stringify({
-    model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+    model: resolveOpenAIModel(),
     reasoning: { effort: "low" },
     instructions,
     input,
@@ -602,7 +604,7 @@ async function anthropicJson({
   maxOutputTokens,
 }: JsonRequest): Promise<JsonObject> {
   const requestBody = JSON.stringify({
-    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5",
+    model: resolveAnthropicModel(),
     max_tokens: maxOutputTokens,
     system: instructions,
     messages: [{ role: "user", content: input }],
@@ -673,6 +675,20 @@ async function anthropicJson({
     );
   }
   return parseProviderJson("anthropic", outputText);
+}
+
+function resolveOpenAIModel() {
+  const configured = process.env.OPENAI_MODEL?.trim();
+  return !configured || configured === "gpt-5.6-terra"
+    ? DEFAULT_OPENAI_MODEL
+    : configured;
+}
+
+function resolveAnthropicModel() {
+  const configured = process.env.ANTHROPIC_MODEL?.trim();
+  return !configured || configured === "claude-sonnet-5"
+    ? DEFAULT_ANTHROPIC_MODEL
+    : configured;
 }
 
 function parseProviderJson(provider: ActiveAIProvider, outputText: string): JsonObject {
