@@ -44,6 +44,7 @@ export type CoverDesign = {
   subtitleAlignment?: "left" | "center" | "right";
   titleColor?: string;
   subtitleColor?: string;
+  authorColor?: string;
   createdAt: string;
 };
 
