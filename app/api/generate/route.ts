@@ -8,7 +8,7 @@ import type {
 } from "../../book-types";
 
 type RequestBody = {
-  action: "title" | "brief" | "outline" | "section" | "assistant";
+  action: "title" | "brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section";
   mode: Mode;
   brief: BookBrief;
   provider?: AIProvider;
@@ -25,6 +25,16 @@ type RequestBody = {
     sections?: Array<{ title?: string; content?: string; summary?: string }>;
   } | null;
   activeSection?: number;
+  existingBook?: {
+    optimizationMode?: "packaging" | "polish" | "viral" | "relaunch";
+    text?: string;
+    sectionMap?: string;
+    audit?: Record<string, unknown>;
+    sectionTitle?: string;
+    sectionText?: string;
+    sectionIndex?: number;
+    sectionCount?: number;
+  };
 };
 
 type JsonObject = Record<string, unknown>;
@@ -94,6 +104,14 @@ export async function POST(request: Request) {
     }
     if (body.action === "assistant" && body.assistantPrompt?.trim()) {
       const result = await createAssistantResponse(body);
+      return NextResponse.json(result);
+    }
+    if (body.action === "ebook_audit" && body.existingBook?.text?.trim()) {
+      const result = await createExistingEbookAudit(body);
+      return NextResponse.json(result);
+    }
+    if (body.action === "optimize_ebook_section" && body.existingBook?.sectionText?.trim()) {
+      const result = await optimizeExistingEbookSection(body);
       return NextResponse.json(result);
     }
     if (!body.brief.author) {
@@ -228,6 +246,109 @@ Respond with a clear recommendation in answer. Put any ready-to-use rewritten ti
     target: String(generated.output.target ?? "none"),
     provider: generated.provider,
   };
+}
+
+async function createExistingEbookAudit(body: RequestBody) {
+  const source = body.existingBook;
+  if (!source?.text) throw new Error("Missing ebook text.");
+  const generated = await generateJson(
+    {
+      name: "existing_ebook_audit",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          audit: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              score: { type: "integer" },
+              positioning: { type: "string" },
+              strengths: { type: "array", items: { type: "string" } },
+              weaknesses: { type: "array", items: { type: "string" } },
+              title: { type: "string" },
+              subtitle: { type: "string" },
+              audience: { type: "string" },
+              recommendations: { type: "array", items: { type: "string" } },
+            },
+            required: ["score", "positioning", "strengths", "weaknesses", "title", "subtitle", "audience", "recommendations"],
+          },
+        },
+        required: ["audit"],
+      },
+      instructions:
+        "You are the senior acquisition editor and commercial book strategist inside EB Studio Pro. Audit the uploaded manuscript honestly. Improve market positioning without misleading clickbait, invented claims, or guaranteed virality. Preserve the author's core intent and voice. Never use the em dash character.",
+      input: `Audit this existing ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook for a ${source.optimizationMode ?? "relaunch"} optimization.
+
+Current title: ${body.brief.title}
+Author: ${body.brief.author}
+Detected section map:
+${source.sectionMap ?? "Not available"}
+
+Manuscript:
+${source.text.slice(0, 90000)}
+
+Return:
+1. A market-readiness score from 0 to 100.
+2. Specific positioning.
+3. Exactly 3 strengths and 3 weaknesses.
+4. One commercially stronger but accurate title and subtitle.
+5. A precise target audience.
+6. Exactly 5 prioritized recommendations.
+Do not rewrite the manuscript yet.`,
+      maxOutputTokens: 3000,
+    },
+    body.provider ?? "auto",
+    body.preferredProvider,
+  );
+  return { audit: generated.output.audit, provider: generated.provider };
+}
+
+async function optimizeExistingEbookSection(body: RequestBody) {
+  const source = body.existingBook;
+  if (!source?.sectionText) throw new Error("Missing ebook section.");
+  const mode = source.optimizationMode ?? "polish";
+  const instruction =
+    mode === "viral"
+      ? "Strengthen the opening hook, emotional or practical payoff, memorable phrasing, and quotable ideas while preserving truth and substance."
+      : mode === "relaunch"
+        ? "Perform a premium developmental and line edit: strengthen structure, hook, clarity, pacing, payoff, and commercial reader appeal."
+        : "Polish clarity, pacing, repetition, transitions, and prose while preserving the author's voice and meaning.";
+
+  const generated = await generateJson(
+    {
+      name: "optimized_existing_ebook_section",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          content: { type: "string" },
+          summary: { type: "string" },
+        },
+        required: ["content", "summary"],
+      },
+      instructions:
+        "You are the senior developmental editor inside EB Studio Pro. Edit publication-ready long-form prose without changing facts, fabricating evidence, or erasing the author's voice. Preserve the original language unless clarity requires otherwise. Never use the em dash character. Return only the revised section and a compact continuity summary.",
+      input: `Optimize section ${(source.sectionIndex ?? 0) + 1} of ${source.sectionCount ?? 1} from an existing ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
+
+Book title: ${body.brief.title}
+Section title: ${source.sectionTitle ?? "Untitled"}
+Approved audit:
+${JSON.stringify(source.audit ?? {})}
+
+Editing direction:
+${instruction}
+
+Original section:
+${source.sectionText.slice(0, 45000)}
+
+Preserve all essential information, scenes, arguments, examples, and meaning. Remove accidental repetition. Do not repeat the section title inside content. Do not mention AI, prompts, editing, or the audit.`,
+      maxOutputTokens: 7500,
+    },
+    body.provider ?? "auto",
+    body.preferredProvider,
+  );
+  return { ...generated.output, provider: generated.provider };
 }
 
 async function createTitleSuggestions(
