@@ -8,6 +8,16 @@ type CoverRequest = {
   brief: BookBrief;
   subtitle?: string;
   style?: string;
+  finish?: string;
+};
+
+const FINISH_DIRECTIONS: Record<string, string> = {
+  matte:
+    "matte printed finish, soft controlled contrast, restrained highlights, tactile fine-art paper character",
+  satin:
+    "satin printed finish, balanced contrast, subtle dimensional sheen, polished but understated",
+  "glossy-premium":
+    "premium glossy cover finish, rich deep blacks, luminous color depth, controlled specular highlights, subtle metallic sheen on copper and gold accents, luxurious polished appearance without plastic glare",
 };
 
 const STYLE_DIRECTIONS: Record<string, string> = {
@@ -39,6 +49,10 @@ export async function POST(request: Request) {
       ? body.style ?? "cinematic"
       : "cinematic";
     const direction = STYLE_DIRECTIONS[style];
+    const finish = FINISH_DIRECTIONS[body.finish ?? "satin"]
+      ? body.finish ?? "satin"
+      : "satin";
+    const finishDirection = FINISH_DIRECTIONS[finish];
     const bookContext =
       body.mode === "fiction"
         ? `Genre: ${body.brief.genre || "fiction"}. Premise: ${body.brief.premise || body.brief.title}. Main characters: ${body.brief.characters || "not specified"}.`
@@ -54,9 +68,10 @@ export async function POST(request: Request) {
 Book title for creative context only: ${body.brief.title}
 ${bookContext}
 Visual direction: ${direction}.
+Cover finish: ${finishDirection}.
 ${paletteGuard}
 
-The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image with clear visual hierarchy and generous quiet space for typography in the upper and lower thirds. Edge-to-edge artwork, commercially polished, emotionally specific to the book, readable at thumbnail size. Do not render any words, letters, title, author name, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
+The cover finish should be expressed through lighting, tonal depth, surface character, and color treatment while keeping the artwork clean and the typography zones readable. The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image with clear visual hierarchy and generous quiet space for typography in the upper and lower thirds. Edge-to-edge artwork, commercially polished, emotionally specific to the book, readable at thumbnail size. Do not render any words, letters, title, author name, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
@@ -104,6 +119,7 @@ The central visual concept must be meaningfully derived from this specific book 
     return NextResponse.json({
       imageData: `data:image/jpeg;base64,${data.data[0].b64_json}`,
       style,
+      finish,
     });
   } catch (error) {
     console.error(
