@@ -488,6 +488,62 @@ p {
   text-transform: uppercase;
 }
 
+.cover-wording {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 13px;
+  border: 1px solid rgba(64, 86, 74, 0.2);
+  background: rgba(255, 254, 253, 0.72);
+}
+
+.cover-wording label > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: #555650;
+  font-size: 0.7rem;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cover-wording label small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.cover-wording textarea {
+  width: 100%;
+  min-height: 52px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  outline: 0;
+  background: white;
+  color: var(--ink);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.cover-wording textarea:focus {
+  border-color: var(--rust);
+  box-shadow: 0 0 0 3px rgba(171, 87, 56, 0.08);
+}
+
+.cover-wording > p {
+  margin: 0;
+  color: var(--sage);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
 .cover-controls > span {
   display: block;
   margin-bottom: 9px;
