@@ -37,6 +37,13 @@ export type CoverDesign = {
   autoFitText?: boolean;
   titleFontSize?: number;
   subtitleFontSize?: number;
+  sourceImageData?: string;
+  titlePosition?: number;
+  subtitlePosition?: number;
+  titleAlignment?: "left" | "center" | "right";
+  subtitleAlignment?: "left" | "center" | "right";
+  titleColor?: string;
+  subtitleColor?: string;
   createdAt: string;
 };
 
