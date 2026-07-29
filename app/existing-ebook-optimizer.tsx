@@ -53,6 +53,7 @@ export default function ExistingEbookOptimizer({ provider, onComplete }: Props) 
   const [originalText, setOriginalText] = useState("");
   const [sections, setSections] = useState<Array<{ title: string; content: string }>>([]);
   const [audit, setAudit] = useState<Audit | null>(null);
+  const [auditProvider, setAuditProvider] = useState<ActiveAIProvider>("openai");
   const [stage, setStage] = useState<"idle" | "reading" | "auditing" | "optimizing" | "complete">("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -108,6 +109,7 @@ export default function ExistingEbookOptimizer({ provider, onComplete }: Props) 
       });
       const data = await readResponse(response);
       setAudit(data.audit as Audit);
+      setAuditProvider(data.provider as ActiveAIProvider);
       setProgress(100);
       setStage("idle");
     } catch (cause) {
@@ -123,6 +125,7 @@ export default function ExistingEbookOptimizer({ provider, onComplete }: Props) 
     setProgress(0);
     try {
       const optimized: SectionContent[] = [];
+      let usedProvider = auditProvider;
       const plan: SectionPlan[] = sections.map((section, index) => ({
         kind: sectionKind(section.title, index, sections.length),
         number: sectionKind(section.title, index, sections.length) === "chapter" ? index + 1 : undefined,
@@ -154,6 +157,7 @@ export default function ExistingEbookOptimizer({ provider, onComplete }: Props) 
             }),
           });
           const data = await readResponse(response);
+          usedProvider = data.provider as ActiveAIProvider;
           content = String(data.content || source.content);
           summary = String(data.summary || content.slice(0, 280));
         }
@@ -161,7 +165,7 @@ export default function ExistingEbookOptimizer({ provider, onComplete }: Props) 
         setProgress(Math.round(((index + 1) / sections.length) * 100));
       }
 
-      const activeProvider = "openai" as ActiveAIProvider;
+      const activeProvider = usedProvider;
       const brief = makeBrief(audit.title || title, author, bookMode, sections.length);
       const book: Manuscript = {
         id: crypto.randomUUID(),
