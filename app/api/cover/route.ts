@@ -17,6 +17,8 @@ const STYLE_DIRECTIONS: Record<string, string> = {
     "minimalist conceptual editorial art, one powerful symbolic focal point, refined negative space, premium modern publishing aesthetic",
   illustrated:
     "detailed contemporary book illustration, expressive atmosphere, layered visual storytelling, polished commercial publishing aesthetic",
+  "eb-signature":
+    "concept-led editorial artwork derived directly from the book title and subject, emotionally specific and immediately relevant to the book, using the EB Studio Pro signature palette: dark forest green, deep navy blue, burnished copper and rust, warm parchment and muted gold, anchored by charcoal black; premium restrained color harmony, sophisticated depth, memorable focal symbolism, high-end publishing aesthetic",
 };
 
 export async function POST(request: Request) {
@@ -42,13 +44,19 @@ export async function POST(request: Request) {
         ? `Genre: ${body.brief.genre || "fiction"}. Premise: ${body.brief.premise || body.brief.title}. Main characters: ${body.brief.characters || "not specified"}.`
         : `Topic: ${body.brief.topic || body.brief.title}. Target audience: ${body.brief.audience || "general readers"}. Key ideas: ${body.brief.keyPoints || body.subtitle || "not specified"}.`;
 
+    const paletteGuard =
+      style === "eb-signature"
+        ? "Palette requirement: use dark forest green, deep navy, burnished copper or rust, warm parchment or muted gold, and charcoal as the dominant and nearly exclusive color system. Preserve natural tonal variation within those hues. Do not introduce neon colors, rainbow palettes, bright candy colors, or unrelated dominant hues."
+        : "";
+
     const prompt = `Create original front-cover artwork for a premium ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
 
 Book title for creative context only: ${body.brief.title}
 ${bookContext}
 Visual direction: ${direction}.
+${paletteGuard}
 
-Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image with clear visual hierarchy and generous quiet space for typography in the upper and lower thirds. Edge-to-edge artwork, commercially polished, emotionally specific to the book, readable at thumbnail size. Do not render any words, letters, title, author name, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
+The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image with clear visual hierarchy and generous quiet space for typography in the upper and lower thirds. Edge-to-edge artwork, commercially polished, emotionally specific to the book, readable at thumbnail size. Do not render any words, letters, title, author name, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
