@@ -17,7 +17,7 @@ export default function manifest(): MetadataRoute.Manifest {
         type: "image/png",
       },
       {
-        src: "/brand/ebstudio-pro-app-icon.png",
+        src: "/brand/ebstudio-pro-app-icon-512.png",
         sizes: "512x512",
         type: "image/png",
       },
