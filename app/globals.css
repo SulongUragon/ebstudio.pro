@@ -448,7 +448,9 @@ p {
 }
 
 .cover-preview {
+  position: relative;
   overflow: hidden;
+  container-type: inline-size;
   aspect-ratio: 2 / 3;
   border-radius: 4px;
   background: #23352e;
@@ -460,6 +462,61 @@ p {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.cover-live-type {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: white;
+  text-shadow: 0 0.35cqw 1.4cqw rgba(4, 14, 11, 0.78);
+}
+
+.cover-live-type strong,
+.cover-live-type em {
+  position: absolute;
+  width: 82%;
+  line-height: 1.04;
+  overflow-wrap: anywhere;
+}
+
+.cover-live-type strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.cover-live-type em {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  line-height: 1.28;
+}
+
+.cover-live-type .align-left {
+  left: 9%;
+  text-align: left;
+}
+
+.cover-live-type .align-center {
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.cover-live-type .align-right {
+  right: 9%;
+  text-align: right;
+}
+
+.cover-live-type small {
+  position: absolute;
+  right: 8%;
+  bottom: 6%;
+  left: 8%;
+  color: #e9dfcf;
+  font: 700 3.1cqw Arial, sans-serif;
+  letter-spacing: 0.22em;
+  text-align: center;
 }
 
 .cover-placeholder {
@@ -569,6 +626,80 @@ p {
 
 .cover-type-controls input[type="range"]:disabled {
   opacity: 0.35;
+}
+
+.cover-layout-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px 10px;
+  align-items: center;
+}
+
+.cover-layout-row > span {
+  grid-column: 1 / -1;
+  color: #555650;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.cover-align-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.cover-align-options button {
+  min-height: 32px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.cover-align-options button.selected {
+  border-color: var(--sage);
+  background: var(--sage);
+  color: white;
+}
+
+.cover-color-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cover-color-control > span {
+  font-size: 0.62rem !important;
+}
+
+.cover-color-control input[type="color"] {
+  width: 34px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.cover-apply-type {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--sage);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--sage);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.cover-apply-type:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .cover-auto-fit {
