@@ -1,6 +1,6 @@
 import type { Manuscript } from "./book-types";
 
-export async function exportDocx(book: Manuscript) {
+export async function exportDocx(book: Manuscript, shouldDownload = true) {
   const exportBook = normalizeExportBook(book);
   const {
     AlignmentType,
@@ -108,10 +108,14 @@ export async function exportDocx(book: Manuscript) {
     description: exportBook.subtitle,
     sections: [{ properties: {}, children }],
   });
-  downloadBlob(await Packer.toBlob(document), `${safeFilename(exportBook.title)}.docx`);
+  const blob = await Packer.toBlob(document);
+  if (shouldDownload) {
+    downloadBlob(blob, `${safeFilename(exportBook.title)}.docx`);
+  }
+  return blob;
 }
 
-export async function exportPdf(book: Manuscript) {
+export async function exportPdf(book: Manuscript, shouldDownload = true) {
   const exportBook = normalizeExportBook(book);
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ unit: "pt", format: "letter" });
@@ -211,10 +215,14 @@ export async function exportPdf(book: Manuscript) {
     pdf.setFontSize(9);
     pdf.text(String(page - 1), pageWidth / 2, pageHeight - 28, { align: "center" });
   }
-  downloadBlob(pdf.output("blob"), `${safeFilename(exportBook.title)}.pdf`);
+  const blob = pdf.output("blob");
+  if (shouldDownload) {
+    downloadBlob(blob, `${safeFilename(exportBook.title)}.pdf`);
+  }
+  return blob;
 }
 
-export async function exportEpub(book: Manuscript) {
+export async function exportEpub(book: Manuscript, shouldDownload = true) {
   const exportBook = normalizeExportBook(book);
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
@@ -313,7 +321,32 @@ export async function exportEpub(book: Manuscript) {
     compression: "DEFLATE",
     compressionOptions: { level: 9 },
   });
-  downloadBlob(blob, `${safeFilename(exportBook.title)}.epub`);
+  if (shouldDownload) {
+    downloadBlob(blob, `${safeFilename(exportBook.title)}.epub`);
+  }
+  return blob;
+}
+
+export async function exportBundle(book: Manuscript) {
+  const exportBook = normalizeExportBook(book);
+  const { default: JSZip } = await import("jszip");
+  const [docxBlob, pdfBlob, epubBlob] = await Promise.all([
+    exportDocx(book, false),
+    exportPdf(book, false),
+    exportEpub(book, false),
+  ]);
+  const filename = safeFilename(exportBook.title);
+  const bundle = new JSZip();
+  bundle.file(`${filename}.docx`, docxBlob);
+  bundle.file(`${filename}.pdf`, pdfBlob);
+  bundle.file(`${filename}.epub`, epubBlob);
+  const zipBlob = await bundle.generateAsync({
+    type: "blob",
+    mimeType: "application/zip",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  });
+  downloadBlob(zipBlob, `${filename}-Complete-Package.zip`);
 }
 
 function xhtmlPage(title: string, body: string, nav = false) {
