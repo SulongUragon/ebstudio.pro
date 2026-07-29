@@ -61,6 +61,9 @@ export default function CoverStudio({
     manuscript.cover?.subtitleColor ??
       (manuscript.cover?.style === "eb-signature" ? "#e8d5b8" : "#fffdf7"),
   );
+  const [authorColor, setAuthorColor] = useState(
+    manuscript.cover?.authorColor ?? "#e9dfcf",
+  );
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
@@ -105,6 +108,7 @@ export default function CoverStudio({
         subtitleAlignment,
         titleColor,
         subtitleColor,
+        authorColor,
       );
       onSave({
         imageData,
@@ -122,6 +126,7 @@ export default function CoverStudio({
         subtitleAlignment,
         titleColor,
         subtitleColor,
+        authorColor,
         createdAt: new Date().toISOString(),
       });
     } catch (coverError) {
@@ -160,6 +165,7 @@ export default function CoverStudio({
         subtitleAlignment,
         titleColor,
         subtitleColor,
+        authorColor,
       );
       onSave({
         ...manuscript.cover,
@@ -178,6 +184,7 @@ export default function CoverStudio({
         subtitleAlignment,
         titleColor,
         subtitleColor,
+        authorColor,
         createdAt: manuscript.cover?.createdAt ?? new Date().toISOString(),
       });
     } catch (applyError) {
@@ -234,7 +241,9 @@ export default function CoverStudio({
                       {coverSubtitle}
                     </em>
                   ) : null}
-                  <small>{manuscript.author.toUpperCase()}</small>
+                  <small style={{ color: authorColor }}>
+                    {manuscript.author.toUpperCase()}
+                  </small>
                 </div>
               ) : null}
             </>
@@ -375,6 +384,16 @@ export default function CoverStudio({
                   />
                 </label>
               </div>
+              <label className="cover-author-color">
+                <span>Author color</span>
+                <input
+                  type="color"
+                  value={authorColor}
+                  onChange={(event) => setAuthorColor(event.target.value)}
+                  disabled={loading}
+                />
+                <strong>{authorColor.toUpperCase()}</strong>
+              </label>
               <button
                 className="cover-apply-type"
                 type="button"
@@ -472,6 +491,7 @@ async function composeCover(
   subtitleAlignment: "left" | "center" | "right",
   titleColor: string,
   subtitleColor: string,
+  authorColor: string,
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
@@ -518,7 +538,6 @@ async function composeCover(
   }
 
   const isEbSignature = style === "eb-signature";
-  const authorColor = isEbSignature ? "#e9dfcf" : "#fffdf7";
 
   context.textAlign = titleAlignment;
   context.textBaseline = "top";
