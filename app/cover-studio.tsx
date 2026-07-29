@@ -224,7 +224,7 @@ export default function CoverStudio({
                   </strong>
                   {coverSubtitle ? (
                     <em
-                      className={`align-${subtitleAlignment}`}
+                      className={`align-${subtitleAlignment} ${subtitlePosition >= 70 ? "anchor-bottom" : ""}`}
                       style={{
                         top: `${subtitlePosition}%`,
                         color: subtitleColor,
@@ -343,7 +343,7 @@ export default function CoverStudio({
                 <input
                   type="range"
                   min="10"
-                  max="55"
+                  max="95"
                   step="1"
                   value={subtitlePosition}
                   onChange={(event) => setSubtitlePosition(Number(event.target.value))}
@@ -561,7 +561,11 @@ async function composeCover(
     );
     context.font = `italic ${fittedSubtitle.size}px Georgia, serif`;
     const subtitleX = alignmentX(subtitleAlignment, canvas.width);
+    const subtitleLineHeight = fittedSubtitle.size * 1.3;
     y = (canvas.height * subtitlePosition) / 100;
+    if (subtitlePosition >= 70) {
+      y -= fittedSubtitle.lines.length * subtitleLineHeight;
+    }
     for (const line of fittedSubtitle.lines) {
       context.fillText(line, subtitleX, y);
       y += fittedSubtitle.size * 1.3;
