@@ -8,6 +8,7 @@ const styles = [
   { id: "cinematic", label: "Cinematic" },
   { id: "minimalist", label: "Minimalist" },
   { id: "illustrated", label: "Illustrated" },
+  { id: "eb-signature", label: "EB Signature" },
 ];
 
 export default function CoverStudio({
@@ -96,7 +97,11 @@ export default function CoverStudio({
               </button>
             ))}
           </div>
-          <p>The title, subtitle, and author are placed separately for sharper export quality.</p>
+          <p>
+            {style === "eb-signature"
+              ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
+              : "The title, subtitle, and author are placed separately for sharper export quality."}
+          </p>
           <button
             className="cover-generate-button"
             type="button"
