@@ -389,7 +389,7 @@ p {
 }
 
 .cover-studio {
-  margin: 18px;
+  margin: 18px 18px 92px;
   padding: 20px;
   border: 1px solid rgba(64, 86, 74, 0.24);
   background: linear-gradient(145deg, rgba(64, 86, 74, 0.08), rgba(255, 254, 253, 0.92));
@@ -611,8 +611,12 @@ p {
 }
 
 .cover-generate-button {
+  position: sticky;
+  bottom: 88px;
+  z-index: 8;
   display: inline-flex;
-  min-height: 46px;
+  width: 100%;
+  min-height: 50px;
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -624,6 +628,9 @@ p {
   color: white;
   font-size: 0.8rem;
   font-weight: 750;
+  box-shadow:
+    0 14px 30px rgba(142, 68, 43, 0.22),
+    0 0 0 6px rgba(244, 241, 233, 0.92);
 }
 
 .cover-generate-button:disabled {
@@ -1625,7 +1632,8 @@ p {
 
 .book-page {
   overflow-y: auto;
-  padding: clamp(40px, 5vw, 78px) clamp(36px, 6vw, 88px) 80px;
+  padding: clamp(40px, 5vw, 78px) clamp(36px, 6vw, 88px) 160px;
+  scroll-padding-bottom: 160px;
   background:
     repeating-linear-gradient(0deg, transparent 0 31px, rgba(135, 121, 105, 0.02) 32px),
     var(--white);
@@ -1947,8 +1955,12 @@ p {
   }
 
   .cover-studio {
-    margin: 12px;
+    margin: 12px 12px 88px;
     padding: 16px;
+  }
+
+  .cover-generate-button {
+    bottom: 76px;
   }
 
   .cover-studio-heading {
