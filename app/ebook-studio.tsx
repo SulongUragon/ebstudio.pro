@@ -25,7 +25,7 @@ import type {
   SectionContent,
   SectionPlan,
 } from "./book-types";
-import { exportDocx, exportEpub, exportPdf } from "./exporters";
+import { exportBundle, exportDocx, exportEpub, exportPdf } from "./exporters";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
 
@@ -421,11 +421,12 @@ export default function EbookStudio() {
     setActiveProvider(null);
   }
 
-  async function runExport(format: "docx" | "pdf" | "epub") {
+  async function runExport(format: "bundle" | "docx" | "pdf" | "epub") {
     if (!manuscript || manuscript.sections.length === 0) return;
     setExporting(format);
     setError("");
     try {
+      if (format === "bundle") await exportBundle(manuscript);
       if (format === "docx") await exportDocx(manuscript);
       if (format === "pdf") await exportPdf(manuscript);
       if (format === "epub") await exportEpub(manuscript);
@@ -828,7 +829,7 @@ function BookPreview({
   activeSection: number;
   setActiveSection: (index: number) => void;
   exporting: string;
-  onExport: (format: "docx" | "pdf" | "epub") => void;
+  onExport: (format: "bundle" | "docx" | "pdf" | "epub") => void;
   activeProvider: ActiveAIProvider | null;
   onSaveCover: (cover: NonNullable<Manuscript["cover"]>) => void;
 }) {
@@ -891,6 +892,14 @@ function BookPreview({
         </div>
         {isComplete ? (
           <div className="export-actions" aria-label="Export formats">
+            <button
+              className="bundle-export"
+              onClick={() => onExport("bundle")}
+              disabled={Boolean(exporting)}
+            >
+              <Download size={16} />
+              {exporting === "bundle" ? "Packaging all formats" : "Complete ZIP"}
+            </button>
             <button onClick={() => onExport("docx")} disabled={Boolean(exporting)}>
               <FileText size={16} />
               {exporting === "docx" ? "Preparing" : "DOCX"}
