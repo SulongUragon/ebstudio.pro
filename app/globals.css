@@ -537,6 +537,58 @@ p {
   box-shadow: 0 0 0 3px rgba(171, 87, 56, 0.08);
 }
 
+.cover-type-controls {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.cover-type-controls > label:not(.cover-auto-fit) {
+  display: grid;
+  gap: 5px;
+}
+
+.cover-type-controls > label > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #555650;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.cover-type-controls strong {
+  color: var(--rust-dark);
+  font-size: 0.66rem;
+}
+
+.cover-type-controls input[type="range"] {
+  width: 100%;
+  accent-color: var(--rust);
+}
+
+.cover-type-controls input[type="range"]:disabled {
+  opacity: 0.35;
+}
+
+.cover-auto-fit {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(64, 86, 74, 0.2);
+  background: rgba(64, 86, 74, 0.06);
+}
+
+.cover-auto-fit input {
+  accent-color: var(--sage);
+}
+
+.cover-auto-fit span {
+  justify-content: flex-start !important;
+}
+
 .cover-wording > p {
   margin: 0;
   color: var(--sage);
