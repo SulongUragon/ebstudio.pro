@@ -56,8 +56,8 @@ button {
   padding: 0 3.4vw;
   border-top: 4px solid var(--ink);
   border-bottom: 1px solid rgba(91, 83, 73, 0.13);
-  background: rgba(247, 245, 238, 0.92);
-  backdrop-filter: blur(18px);
+  background: #eee2d5;
+  backdrop-filter: none;
 }
 
 .brand {
@@ -77,7 +77,7 @@ button {
 .brand-logo-desktop {
   width: clamp(220px, 20vw, 285px);
   height: auto;
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
 }
 
 .brand-logo-mobile {
