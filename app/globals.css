@@ -508,6 +508,15 @@ p {
   text-align: right;
 }
 
+.cover-live-type .align-left.anchor-bottom,
+.cover-live-type .align-right.anchor-bottom {
+  transform: translateY(-100%);
+}
+
+.cover-live-type .align-center.anchor-bottom {
+  transform: translate(-50%, -100%);
+}
+
 .cover-live-type small {
   position: absolute;
   right: 8%;
