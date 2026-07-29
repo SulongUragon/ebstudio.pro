@@ -28,6 +28,7 @@ import type {
 import { exportBundle, exportDocx, exportEpub, exportPdf } from "./exporters";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
+import ExistingEbookOptimizer from "./existing-ebook-optimizer";
 
 type View = "create" | "library";
 type GenerationStatus =
@@ -55,6 +56,7 @@ const blankBrief: BookBrief = {
 
 export default function EbookStudio() {
   const [view, setView] = useState<View>("create");
+  const [creatorMode, setCreatorMode] = useState<"new" | "optimize">("new");
   const [mode, setMode] = useState<Mode>("fiction");
   const [provider, setProvider] = useState<AIProvider>("auto");
   const [activeProvider, setActiveProvider] = useState<ActiveAIProvider | null>(null);
@@ -254,6 +256,16 @@ export default function EbookStudio() {
           }
         : current,
     );
+  }
+
+  function completeOptimization(book: Manuscript, usedProvider: ActiveAIProvider) {
+    setManuscript(book);
+    setBrief(book.brief);
+    setMode(book.mode);
+    setActiveProvider(usedProvider);
+    setStatus("complete");
+    setActiveSection(0);
+    saveBook(book);
   }
 
   function saveCover(cover: NonNullable<Manuscript["cover"]>) {
@@ -486,6 +498,18 @@ export default function EbookStudio() {
       {view === "create" ? (
         <section className="studio-grid">
           <div className="form-column">
+            <div className="creator-workspace-tabs" role="tablist" aria-label="Creator workspace">
+              <button role="tab" aria-selected={creatorMode === "new"} className={creatorMode === "new" ? "selected" : ""} onClick={() => setCreatorMode("new")}>
+                <Plus size={17} /> Create New Book
+              </button>
+              <button role="tab" aria-selected={creatorMode === "optimize"} className={creatorMode === "optimize" ? "selected" : ""} onClick={() => setCreatorMode("optimize")}>
+                <Sparkles size={17} /> Optimize Existing Ebook
+              </button>
+            </div>
+            {creatorMode === "optimize" ? (
+              <ExistingEbookOptimizer provider={provider} onComplete={completeOptimization} />
+            ) : (
+              <>
             <div className="form-heading-row">
               <div>
                 <div className="eyebrow">
@@ -777,6 +801,8 @@ export default function EbookStudio() {
                 </button>
               )}
             </form>
+              </>
+            )}
           </div>
 
           <BookPreview
