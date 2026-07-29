@@ -41,7 +41,28 @@ export default function CoverStudio({
   const [subtitleFontSize, setSubtitleFontSize] = useState(
     manuscript.cover?.subtitleFontSize ?? 40,
   );
+  const [titlePosition, setTitlePosition] = useState(
+    manuscript.cover?.titlePosition ?? 7,
+  );
+  const [subtitlePosition, setSubtitlePosition] = useState(
+    manuscript.cover?.subtitlePosition ?? 25,
+  );
+  const [titleAlignment, setTitleAlignment] = useState<"left" | "center" | "right">(
+    manuscript.cover?.titleAlignment ?? "center",
+  );
+  const [subtitleAlignment, setSubtitleAlignment] = useState<"left" | "center" | "right">(
+    manuscript.cover?.subtitleAlignment ?? "center",
+  );
+  const [titleColor, setTitleColor] = useState(
+    manuscript.cover?.titleColor ??
+      (manuscript.cover?.style === "eb-signature" ? "#f1e3cf" : "#fffdf7"),
+  );
+  const [subtitleColor, setSubtitleColor] = useState(
+    manuscript.cover?.subtitleColor ??
+      (manuscript.cover?.style === "eb-signature" ? "#e8d5b8" : "#fffdf7"),
+  );
   const [loading, setLoading] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
 
   async function generateCover() {
@@ -67,8 +88,9 @@ export default function CoverStudio({
       if (!response.ok || !data.imageData) {
         throw new Error(String(data.error ?? "The AI cover could not be generated."));
       }
+      const sourceImageData = String(data.imageData);
       const imageData = await composeCover(
-        String(data.imageData),
+        sourceImageData,
         coverTitle.trim(),
         coverSubtitle.trim(),
         manuscript.author,
@@ -77,9 +99,16 @@ export default function CoverStudio({
         autoFitText,
         titleFontSize,
         subtitleFontSize,
+        titlePosition,
+        subtitlePosition,
+        titleAlignment,
+        subtitleAlignment,
+        titleColor,
+        subtitleColor,
       );
       onSave({
         imageData,
+        sourceImageData,
         style,
         finish,
         displayTitle: coverTitle.trim(),
@@ -87,6 +116,12 @@ export default function CoverStudio({
         autoFitText,
         titleFontSize,
         subtitleFontSize,
+        titlePosition,
+        subtitlePosition,
+        titleAlignment,
+        subtitleAlignment,
+        titleColor,
+        subtitleColor,
         createdAt: new Date().toISOString(),
       });
     } catch (coverError) {
@@ -99,6 +134,64 @@ export default function CoverStudio({
       setLoading(false);
     }
   }
+
+  async function applyTypography() {
+    const sourceImageData = manuscript.cover?.sourceImageData;
+    if (!sourceImageData) {
+      setError("Generate one new cover first to unlock reusable typography editing.");
+      return;
+    }
+    setApplying(true);
+    setError("");
+    try {
+      const imageData = await composeCover(
+        sourceImageData,
+        coverTitle.trim(),
+        coverSubtitle.trim(),
+        manuscript.author,
+        finish,
+        style,
+        autoFitText,
+        titleFontSize,
+        subtitleFontSize,
+        titlePosition,
+        subtitlePosition,
+        titleAlignment,
+        subtitleAlignment,
+        titleColor,
+        subtitleColor,
+      );
+      onSave({
+        ...manuscript.cover,
+        imageData,
+        sourceImageData,
+        style,
+        finish,
+        displayTitle: coverTitle.trim(),
+        displaySubtitle: coverSubtitle.trim(),
+        autoFitText,
+        titleFontSize,
+        subtitleFontSize,
+        titlePosition,
+        subtitlePosition,
+        titleAlignment,
+        subtitleAlignment,
+        titleColor,
+        subtitleColor,
+      });
+    } catch (applyError) {
+      setError(
+        applyError instanceof Error
+          ? applyError.message
+          : "The typography layout could not be applied.",
+      );
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  const previewSource =
+    manuscript.cover?.sourceImageData ?? manuscript.cover?.imageData;
 
   return (
     <section className="cover-studio" aria-label="AI Book Cover Studio">
@@ -114,7 +207,36 @@ export default function CoverStudio({
       <div className="cover-studio-grid">
         <div className="cover-preview">
           {manuscript.cover ? (
-            <img src={manuscript.cover.imageData} alt={`Cover for ${manuscript.title}`} />
+            <>
+              <img src={previewSource} alt={`Cover for ${manuscript.title}`} />
+              {manuscript.cover.sourceImageData ? (
+                <div className="cover-live-type" aria-hidden="true">
+                  <strong
+                    className={`align-${titleAlignment}`}
+                    style={{
+                      top: `${titlePosition}%`,
+                      color: titleColor,
+                      fontSize: `${titleFontSize / 12}cqw`,
+                    }}
+                  >
+                    {coverTitle}
+                  </strong>
+                  {coverSubtitle ? (
+                    <em
+                      className={`align-${subtitleAlignment}`}
+                      style={{
+                        top: `${subtitlePosition}%`,
+                        color: subtitleColor,
+                        fontSize: `${subtitleFontSize / 12}cqw`,
+                      }}
+                    >
+                      {coverSubtitle}
+                    </em>
+                  ) : null}
+                  <small>{manuscript.author.toUpperCase()}</small>
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="cover-placeholder">
               <ImageIcon size={32} />
@@ -163,7 +285,7 @@ export default function CoverStudio({
                   step="2"
                   value={titleFontSize}
                   onChange={(event) => setTitleFontSize(Number(event.target.value))}
-                  disabled={loading || autoFitText}
+                  disabled={loading}
                 />
               </label>
               <label>
@@ -175,9 +297,92 @@ export default function CoverStudio({
                   step="2"
                   value={subtitleFontSize}
                   onChange={(event) => setSubtitleFontSize(Number(event.target.value))}
-                  disabled={loading || autoFitText}
+                  disabled={loading}
                 />
               </label>
+              <label>
+                <span>Title position <strong>{titlePosition}%</strong></span>
+                <input
+                  type="range"
+                  min="3"
+                  max="38"
+                  step="1"
+                  value={titlePosition}
+                  onChange={(event) => setTitlePosition(Number(event.target.value))}
+                  disabled={loading}
+                />
+              </label>
+              <div className="cover-layout-row">
+                <span>Title alignment</span>
+                <div className="cover-align-options">
+                  {(["left", "center", "right"] as const).map((alignment) => (
+                    <button
+                      type="button"
+                      key={alignment}
+                      className={titleAlignment === alignment ? "selected" : ""}
+                      onClick={() => setTitleAlignment(alignment)}
+                      disabled={loading}
+                    >
+                      {alignment}
+                    </button>
+                  ))}
+                </div>
+                <label className="cover-color-control">
+                  <span>Title color</span>
+                  <input
+                    type="color"
+                    value={titleColor}
+                    onChange={(event) => setTitleColor(event.target.value)}
+                    disabled={loading}
+                  />
+                </label>
+              </div>
+              <label>
+                <span>Subtitle position <strong>{subtitlePosition}%</strong></span>
+                <input
+                  type="range"
+                  min="10"
+                  max="55"
+                  step="1"
+                  value={subtitlePosition}
+                  onChange={(event) => setSubtitlePosition(Number(event.target.value))}
+                  disabled={loading}
+                />
+              </label>
+              <div className="cover-layout-row">
+                <span>Subtitle alignment</span>
+                <div className="cover-align-options">
+                  {(["left", "center", "right"] as const).map((alignment) => (
+                    <button
+                      type="button"
+                      key={alignment}
+                      className={subtitleAlignment === alignment ? "selected" : ""}
+                      onClick={() => setSubtitleAlignment(alignment)}
+                      disabled={loading}
+                    >
+                      {alignment}
+                    </button>
+                  ))}
+                </div>
+                <label className="cover-color-control">
+                  <span>Subtitle color</span>
+                  <input
+                    type="color"
+                    value={subtitleColor}
+                    onChange={(event) => setSubtitleColor(event.target.value)}
+                    disabled={loading}
+                  />
+                </label>
+              </div>
+              <button
+                className="cover-apply-type"
+                type="button"
+                onClick={applyTypography}
+                disabled={loading || applying || !manuscript.cover?.sourceImageData}
+              >
+                {applying ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}
+                {applying ? "Applying typography…" : "Apply text layout"}
+              </button>
             </div>
             <p>
               {autoFitText
@@ -192,7 +397,16 @@ export default function CoverStudio({
                 type="button"
                 key={option.id}
                 className={style === option.id ? "selected" : ""}
-                onClick={() => setStyle(option.id)}
+                onClick={() => {
+                  setStyle(option.id);
+                  if (option.id === "eb-signature") {
+                    setTitleColor("#f1e3cf");
+                    setSubtitleColor("#e8d5b8");
+                  } else {
+                    setTitleColor("#fffdf7");
+                    setSubtitleColor("#fffdf7");
+                  }
+                }}
                 disabled={loading}
               >
                 {option.label}
@@ -251,6 +465,12 @@ async function composeCover(
   autoFitText: boolean,
   titleFontSize: number,
   subtitleFontSize: number,
+  titlePosition: number,
+  subtitlePosition: number,
+  titleAlignment: "left" | "center" | "right",
+  subtitleAlignment: "left" | "center" | "right",
+  titleColor: string,
+  subtitleColor: string,
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
@@ -297,11 +517,9 @@ async function composeCover(
   }
 
   const isEbSignature = style === "eb-signature";
-  const titleColor = isEbSignature ? "#f1e3cf" : "#fffdf7";
-  const subtitleColor = isEbSignature ? "#d7b98e" : "#fffdf7";
   const authorColor = isEbSignature ? "#e9dfcf" : "#fffdf7";
 
-  context.textAlign = "center";
+  context.textAlign = titleAlignment;
   context.textBaseline = "top";
   context.fillStyle = titleColor;
   context.shadowColor = isEbSignature
@@ -310,13 +528,7 @@ async function composeCover(
   context.shadowBlur = 24;
   context.shadowOffsetY = 6;
 
-  const titleStartSize = autoFitText
-    ? title.length > 55
-      ? 82
-      : title.length > 32
-        ? 96
-        : 112
-    : titleFontSize;
+  const titleStartSize = titleFontSize;
   const fittedTitle = fitText(
     context,
     title,
@@ -327,36 +539,49 @@ async function composeCover(
     (size) => `700 ${size}px Georgia, serif`,
   );
   context.font = `700 ${fittedTitle.size}px Georgia, serif`;
-  let y = 125;
+  const titleX = alignmentX(titleAlignment, canvas.width);
+  let y = (canvas.height * titlePosition) / 100;
   for (const line of fittedTitle.lines) {
-    context.fillText(line, canvas.width / 2, y);
+    context.fillText(line, titleX, y);
     y += fittedTitle.size * 1.04;
   }
 
   if (subtitle) {
-    y += 28;
+    context.textAlign = subtitleAlignment;
     context.fillStyle = subtitleColor;
     const fittedSubtitle = fitText(
       context,
       subtitle,
       900,
       4,
-      autoFitText ? 42 : subtitleFontSize,
+      subtitleFontSize,
       autoFitText ? 28 : subtitleFontSize,
       (size) => `italic ${size}px Georgia, serif`,
     );
     context.font = `italic ${fittedSubtitle.size}px Georgia, serif`;
+    const subtitleX = alignmentX(subtitleAlignment, canvas.width);
+    y = (canvas.height * subtitlePosition) / 100;
     for (const line of fittedSubtitle.lines) {
-      context.fillText(line, canvas.width / 2, y);
+      context.fillText(line, subtitleX, y);
       y += fittedSubtitle.size * 1.3;
     }
   }
 
+  context.textAlign = "center";
   context.fillStyle = authorColor;
   context.font = "700 38px Arial, sans-serif";
   context.letterSpacing = "3px";
   context.fillText(author.toUpperCase(), canvas.width / 2, 1660);
   return canvas.toDataURL("image/jpeg", 0.9);
+}
+
+function alignmentX(
+  alignment: "left" | "center" | "right",
+  width: number,
+) {
+  if (alignment === "left") return width * 0.09;
+  if (alignment === "right") return width * 0.91;
+  return width / 2;
 }
 
 function loadImage(source: string) {
