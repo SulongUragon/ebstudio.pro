@@ -32,6 +32,8 @@ export type CoverDesign = {
   imageData: string;
   style: string;
   finish?: string;
+  displayTitle?: string;
+  displaySubtitle?: string;
   createdAt: string;
 };
 
