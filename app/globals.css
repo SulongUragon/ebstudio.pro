@@ -593,9 +593,13 @@ p {
   z-index: 90;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(520px, calc(100vw - 32px));
-  height: min(690px, calc(100vh - 120px));
+  width: min(520px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  height: min(690px, calc(100dvh - 120px));
+  max-height: calc(100dvh - 120px);
+  min-width: 0;
   overflow: hidden;
+  contain: layout paint;
   border: 1px solid rgba(49, 74, 64, 0.32);
   border-radius: 18px;
   background: #fbfaf6;
@@ -607,6 +611,8 @@ p {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  min-width: 0;
+  overflow: hidden;
   padding: 18px 18px 16px;
   background: var(--sage);
   color: white;
@@ -625,6 +631,7 @@ p {
 
 .assistant-header small {
   display: block;
+  max-width: 100%;
   overflow: hidden;
   margin-top: 5px;
   color: rgba(255, 255, 255, 0.72);
@@ -652,7 +659,10 @@ p {
 }
 
 .assistant-body {
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 18px;
 }
 
@@ -696,7 +706,11 @@ p {
   color: #445149;
   font-size: 0.76rem;
   font-weight: 650;
+  width: 100%;
+  min-width: 0;
   line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   cursor: pointer;
 }
 
@@ -711,6 +725,10 @@ p {
   max-width: 90%;
   margin: 10px 0;
   padding: 11px 13px;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   border-radius: 12px;
 }
 
@@ -739,8 +757,11 @@ p {
 .assistant-message p {
   margin: 0;
   font-size: 0.86rem;
+  max-width: 100%;
   line-height: 1.5;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .assistant-thinking {
@@ -753,6 +774,9 @@ p {
 }
 
 .assistant-draft {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-top: 12px;
   overflow: hidden;
   border: 1px solid rgba(165, 83, 53, 0.32);
@@ -778,8 +802,11 @@ p {
   color: #323630;
   font-family: var(--font-serif), Georgia, serif;
   font-size: 0.88rem;
+  max-width: 100%;
   line-height: 1.62;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .assistant-draft footer {
