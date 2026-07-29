@@ -60,4 +60,20 @@ export type Manuscript = {
   sections: SectionContent[];
   providersUsed?: ActiveAIProvider[];
   cover?: CoverDesign;
+  optimization?: {
+    sourceFileName: string;
+    mode: "packaging" | "polish" | "viral" | "relaunch";
+    originalTitle: string;
+    originalText: string;
+    audit: {
+      score: number;
+      positioning: string;
+      strengths: string[];
+      weaknesses: string[];
+      title: string;
+      subtitle: string;
+      audience: string;
+      recommendations: string[];
+    };
+  };
 };
