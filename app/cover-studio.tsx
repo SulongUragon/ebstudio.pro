@@ -178,6 +178,7 @@ export default function CoverStudio({
         subtitleAlignment,
         titleColor,
         subtitleColor,
+        createdAt: manuscript.cover?.createdAt ?? new Date().toISOString(),
       });
     } catch (applyError) {
       setError(
