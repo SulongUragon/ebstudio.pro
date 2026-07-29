@@ -64,6 +64,7 @@ export default function CoverStudio({
         coverSubtitle.trim(),
         manuscript.author,
         finish,
+        style,
       );
       onSave({
         imageData,
@@ -192,6 +193,7 @@ async function composeCover(
   subtitle: string,
   author: string,
   finish: string,
+  style: string,
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
@@ -237,10 +239,17 @@ async function composeCover(
     context.fillRect(0, 0, canvas.width, canvas.height);
   }
 
+  const isEbSignature = style === "eb-signature";
+  const titleColor = isEbSignature ? "#f1e3cf" : "#fffdf7";
+  const subtitleColor = isEbSignature ? "#d7b98e" : "#fffdf7";
+  const authorColor = isEbSignature ? "#e9dfcf" : "#fffdf7";
+
   context.textAlign = "center";
   context.textBaseline = "top";
-  context.fillStyle = "#fffdf7";
-  context.shadowColor = "rgba(0,0,0,.55)";
+  context.fillStyle = titleColor;
+  context.shadowColor = isEbSignature
+    ? "rgba(6,20,16,.72)"
+    : "rgba(0,0,0,.55)";
   context.shadowBlur = 24;
   context.shadowOffsetY = 6;
 
@@ -263,6 +272,7 @@ async function composeCover(
 
   if (subtitle) {
     y += 28;
+    context.fillStyle = subtitleColor;
     const fittedSubtitle = fitText(
       context,
       subtitle,
@@ -279,6 +289,7 @@ async function composeCover(
     }
   }
 
+  context.fillStyle = authorColor;
   context.font = "700 38px Arial, sans-serif";
   context.letterSpacing = "3px";
   context.fillText(author.toUpperCase(), canvas.width / 2, 1660);
