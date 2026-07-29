@@ -692,6 +692,35 @@ p {
   background: white;
 }
 
+.cover-author-color {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(64, 86, 74, 0.2);
+  background: rgba(64, 86, 74, 0.04);
+}
+
+.cover-author-color > span {
+  color: #555650;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.cover-author-color input[type="color"] {
+  width: 34px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.cover-author-color strong {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
 .cover-apply-type {
   display: inline-flex;
   min-height: 38px;
