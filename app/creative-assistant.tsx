@@ -103,14 +103,27 @@ export default function CreativeAssistant({
           provider,
           assistantPrompt: question,
           assistantHistory: nextMessages.slice(0, -1),
-          manuscript,
+          manuscript: manuscript
+            ? {
+                title: manuscript.title,
+                subtitle: manuscript.subtitle,
+                sections: manuscript.sections.slice(0, 40).map((section, index) => ({
+                  title: section.title,
+                  summary: section.summary?.slice(0, 600),
+                  content:
+                    index === activeSection
+                      ? section.content.slice(0, 14000)
+                      : undefined,
+                })),
+              }
+            : null,
           activeSection,
         }),
       });
       const data = await readAssistantResponse(response);
       const nextResult: AssistantResult = {
-        answer: String(data.answer ?? ""),
-        draft: String(data.draft ?? ""),
+        answer: String(data.answer ?? "").slice(0, 6000),
+        draft: String(data.draft ?? "").slice(0, 30000),
         target: normalizeTarget(data.target),
         provider: data.provider ? String(data.provider) : undefined,
       };
