@@ -1,16 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "EB Studio Pro | AI Ebook Generator",
@@ -21,9 +10,31 @@ export const metadata: Metadata = {
     "codex-preview": "development",
   },
   icons: {
-    icon: "/favicon.png",
-    shortcut: "/favicon.png",
-    apple: "/favicon.png",
+    icon: [
+      {
+        url: "/brand/ebstudio-pro-favicon-64.png",
+        sizes: "64x64",
+        type: "image/png",
+      },
+      {
+        url: "/brand/ebstudio-pro-app-icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+    ],
+    shortcut: "/brand/ebstudio-pro-favicon-64.png",
+    apple: [
+      {
+        url: "/brand/ebstudio-pro-apple-touch-icon-180.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "EB Studio Pro",
+    statusBarStyle: "black-translucent",
   },
 };
 
@@ -34,11 +45,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
