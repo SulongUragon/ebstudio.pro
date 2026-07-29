@@ -32,6 +32,15 @@ export default function CoverStudio({
   const [coverSubtitle, setCoverSubtitle] = useState(
     manuscript.cover?.displaySubtitle ?? manuscript.subtitle,
   );
+  const [autoFitText, setAutoFitText] = useState(
+    manuscript.cover?.autoFitText ?? true,
+  );
+  const [titleFontSize, setTitleFontSize] = useState(
+    manuscript.cover?.titleFontSize ?? 96,
+  );
+  const [subtitleFontSize, setSubtitleFontSize] = useState(
+    manuscript.cover?.subtitleFontSize ?? 40,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -65,6 +74,9 @@ export default function CoverStudio({
         manuscript.author,
         finish,
         style,
+        autoFitText,
+        titleFontSize,
+        subtitleFontSize,
       );
       onSave({
         imageData,
@@ -72,6 +84,9 @@ export default function CoverStudio({
         finish,
         displayTitle: coverTitle.trim(),
         displaySubtitle: coverSubtitle.trim(),
+        autoFitText,
+        titleFontSize,
+        subtitleFontSize,
         createdAt: new Date().toISOString(),
       });
     } catch (coverError) {
@@ -129,7 +144,46 @@ export default function CoverStudio({
                 rows={3}
               />
             </label>
-            <p>The complete wording automatically resizes to fit—no silent truncation.</p>
+            <div className="cover-type-controls">
+              <label className="cover-auto-fit">
+                <input
+                  type="checkbox"
+                  checked={autoFitText}
+                  onChange={(event) => setAutoFitText(event.target.checked)}
+                  disabled={loading}
+                />
+                <span>Auto Fit typography</span>
+              </label>
+              <label>
+                <span>Title size <strong>{autoFitText ? "Auto" : `${titleFontSize}px`}</strong></span>
+                <input
+                  type="range"
+                  min="62"
+                  max="124"
+                  step="2"
+                  value={titleFontSize}
+                  onChange={(event) => setTitleFontSize(Number(event.target.value))}
+                  disabled={loading || autoFitText}
+                />
+              </label>
+              <label>
+                <span>Subtitle size <strong>{autoFitText ? "Auto" : `${subtitleFontSize}px`}</strong></span>
+                <input
+                  type="range"
+                  min="28"
+                  max="54"
+                  step="2"
+                  value={subtitleFontSize}
+                  onChange={(event) => setSubtitleFontSize(Number(event.target.value))}
+                  disabled={loading || autoFitText}
+                />
+              </label>
+            </div>
+            <p>
+              {autoFitText
+                ? "The complete wording automatically resizes to fit—no silent truncation."
+                : "Manual sizing preserves every word. Reduce the size if the title uses too many lines."}
+            </p>
           </div>
           <span>Choose a visual direction</span>
           <div className="cover-style-options">
@@ -194,6 +248,9 @@ async function composeCover(
   author: string,
   finish: string,
   style: string,
+  autoFitText: boolean,
+  titleFontSize: number,
+  subtitleFontSize: number,
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
@@ -253,14 +310,20 @@ async function composeCover(
   context.shadowBlur = 24;
   context.shadowOffsetY = 6;
 
-  const titleStartSize = title.length > 55 ? 82 : title.length > 32 ? 96 : 112;
+  const titleStartSize = autoFitText
+    ? title.length > 55
+      ? 82
+      : title.length > 32
+        ? 96
+        : 112
+    : titleFontSize;
   const fittedTitle = fitText(
     context,
     title,
     980,
     4,
     titleStartSize,
-    62,
+    autoFitText ? 62 : titleFontSize,
     (size) => `700 ${size}px Georgia, serif`,
   );
   context.font = `700 ${fittedTitle.size}px Georgia, serif`;
@@ -278,8 +341,8 @@ async function composeCover(
       subtitle,
       900,
       4,
-      42,
-      28,
+      autoFitText ? 42 : subtitleFontSize,
+      autoFitText ? 28 : subtitleFontSize,
       (size) => `italic ${size}px Georgia, serif`,
     );
     context.font = `italic ${fittedSubtitle.size}px Georgia, serif`;
