@@ -519,6 +519,41 @@ p {
   color: white;
 }
 
+.cover-finish-label {
+  margin-top: 17px;
+}
+
+.cover-finish-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.cover-finish-options button {
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: white;
+  color: #555b56;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.cover-finish-options button.selected {
+  border-color: var(--rust);
+  background: var(--rust);
+  color: white;
+}
+
+.cover-finish-note {
+  display: block;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
 .cover-generate-button {
   display: inline-flex;
   min-height: 46px;
@@ -1871,6 +1906,10 @@ p {
   }
 
   .cover-style-options {
+    grid-template-columns: 1fr;
+  }
+
+  .cover-finish-options {
     grid-template-columns: 1fr;
   }
 
