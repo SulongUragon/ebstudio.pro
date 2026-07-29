@@ -1552,6 +1552,18 @@ p {
   font-weight: 800;
 }
 
+.export-actions .bundle-export {
+  border-color: var(--sage);
+  background: var(--sage);
+  color: white;
+}
+
+.export-actions .bundle-export:hover {
+  border-color: #34483c;
+  background: #34483c;
+  color: white;
+}
+
 .export-actions button:hover {
   border-color: var(--rust);
   color: var(--rust);
