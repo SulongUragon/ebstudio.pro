@@ -11,6 +11,12 @@ const styles = [
   { id: "eb-signature", label: "EB Signature" },
 ];
 
+const finishes = [
+  { id: "matte", label: "Matte" },
+  { id: "satin", label: "Satin" },
+  { id: "glossy-premium", label: "Glossy Premium" },
+];
+
 export default function CoverStudio({
   manuscript,
   onSave,
@@ -19,6 +25,7 @@ export default function CoverStudio({
   onSave: (cover: CoverDesign) => void;
 }) {
   const [style, setStyle] = useState(manuscript.cover?.style ?? "cinematic");
+  const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,6 +41,7 @@ export default function CoverStudio({
           brief: manuscript.brief,
           subtitle: manuscript.subtitle,
           style,
+          finish,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -46,7 +54,7 @@ export default function CoverStudio({
         manuscript.subtitle,
         manuscript.author,
       );
-      onSave({ imageData, style, createdAt: new Date().toISOString() });
+      onSave({ imageData, style, finish, createdAt: new Date().toISOString() });
     } catch (coverError) {
       setError(
         coverError instanceof Error
@@ -102,6 +110,27 @@ export default function CoverStudio({
               ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
               : "The title, subtitle, and author are placed separately for sharper export quality."}
           </p>
+          <span className="cover-finish-label">Choose a cover finish</span>
+          <div className="cover-finish-options">
+            {finishes.map((option) => (
+              <button
+                type="button"
+                key={option.id}
+                className={finish === option.id ? "selected" : ""}
+                onClick={() => setFinish(option.id)}
+                disabled={loading}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <small className="cover-finish-note">
+            {finish === "glossy-premium"
+              ? "Polished depth, richer blacks, and controlled metallic highlights."
+              : finish === "matte"
+                ? "Soft, restrained color with a refined editorial finish."
+                : "Balanced color depth with a subtle premium sheen."}
+          </small>
           <button
             className="cover-generate-button"
             type="button"
