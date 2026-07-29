@@ -26,10 +26,20 @@ export default function CoverStudio({
 }) {
   const [style, setStyle] = useState(manuscript.cover?.style ?? "cinematic");
   const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
+  const [coverTitle, setCoverTitle] = useState(
+    manuscript.cover?.displayTitle ?? manuscript.title,
+  );
+  const [coverSubtitle, setCoverSubtitle] = useState(
+    manuscript.cover?.displaySubtitle ?? manuscript.subtitle,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function generateCover() {
+    if (!coverTitle.trim()) {
+      setError("Add a complete cover title before generating.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -38,8 +48,8 @@ export default function CoverStudio({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: manuscript.mode,
-          brief: manuscript.brief,
-          subtitle: manuscript.subtitle,
+          brief: { ...manuscript.brief, title: coverTitle.trim() },
+          subtitle: coverSubtitle.trim(),
           style,
           finish,
         }),
@@ -50,11 +60,19 @@ export default function CoverStudio({
       }
       const imageData = await composeCover(
         String(data.imageData),
-        manuscript.title,
-        manuscript.subtitle,
+        coverTitle.trim(),
+        coverSubtitle.trim(),
         manuscript.author,
+        finish,
       );
-      onSave({ imageData, style, finish, createdAt: new Date().toISOString() });
+      onSave({
+        imageData,
+        style,
+        finish,
+        displayTitle: coverTitle.trim(),
+        displaySubtitle: coverSubtitle.trim(),
+        createdAt: new Date().toISOString(),
+      });
     } catch (coverError) {
       setError(
         coverError instanceof Error
@@ -91,6 +109,27 @@ export default function CoverStudio({
         </div>
 
         <div className="cover-controls">
+          <div className="cover-wording">
+            <label>
+              <span>Cover title</span>
+              <textarea
+                value={coverTitle}
+                onChange={(event) => setCoverTitle(event.target.value)}
+                disabled={loading}
+                rows={2}
+              />
+            </label>
+            <label>
+              <span>Cover subtitle <small>Optional</small></span>
+              <textarea
+                value={coverSubtitle}
+                onChange={(event) => setCoverSubtitle(event.target.value)}
+                disabled={loading}
+                rows={3}
+              />
+            </label>
+            <p>The complete wording automatically resizes to fit—no silent truncation.</p>
+          </div>
           <span>Choose a visual direction</span>
           <div className="cover-style-options">
             {styles.map((option) => (
@@ -152,6 +191,7 @@ async function composeCover(
   title: string,
   subtitle: string,
   author: string,
+  finish: string,
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
@@ -160,7 +200,16 @@ async function composeCover(
   const context = canvas.getContext("2d");
   if (!context) throw new Error("This browser could not prepare the cover.");
 
+  context.save();
+  context.filter =
+    finish === "glossy-premium"
+      ? "contrast(1.12) saturate(1.1)"
+      : finish === "matte"
+        ? "contrast(0.97) saturate(0.94)"
+        : "contrast(1.04) saturate(1.03)";
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.restore();
+
   const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
   gradient.addColorStop(0, "rgba(10,14,12,.62)");
   gradient.addColorStop(0.34, "rgba(10,14,12,.04)");
@@ -169,6 +218,25 @@ async function composeCover(
   context.fillStyle = gradient;
   context.fillRect(0, 0, canvas.width, canvas.height);
 
+  if (finish === "glossy-premium") {
+    const sheen = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+    sheen.addColorStop(0, "rgba(255,255,255,.03)");
+    sheen.addColorStop(0.3, "rgba(255,255,255,.015)");
+    sheen.addColorStop(0.43, "rgba(255,248,228,.13)");
+    sheen.addColorStop(0.5, "rgba(255,255,255,.055)");
+    sheen.addColorStop(0.62, "rgba(255,255,255,0)");
+    sheen.addColorStop(1, "rgba(255,255,255,.025)");
+    context.fillStyle = sheen;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    const highlight = context.createRadialGradient(980, 210, 20, 980, 210, 520);
+    highlight.addColorStop(0, "rgba(255,245,214,.16)");
+    highlight.addColorStop(0.45, "rgba(255,255,255,.045)");
+    highlight.addColorStop(1, "rgba(255,255,255,0)");
+    context.fillStyle = highlight;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
   context.textAlign = "center";
   context.textBaseline = "top";
   context.fillStyle = "#fffdf7";
@@ -176,21 +244,38 @@ async function composeCover(
   context.shadowBlur = 24;
   context.shadowOffsetY = 6;
 
-  const titleSize = title.length > 55 ? 82 : title.length > 32 ? 96 : 112;
-  context.font = `700 ${titleSize}px Georgia, serif`;
-  const titleLines = wrapText(context, title, 980, 3);
-  let y = 135;
-  for (const line of titleLines) {
+  const titleStartSize = title.length > 55 ? 82 : title.length > 32 ? 96 : 112;
+  const fittedTitle = fitText(
+    context,
+    title,
+    980,
+    4,
+    titleStartSize,
+    62,
+    (size) => `700 ${size}px Georgia, serif`,
+  );
+  context.font = `700 ${fittedTitle.size}px Georgia, serif`;
+  let y = 125;
+  for (const line of fittedTitle.lines) {
     context.fillText(line, canvas.width / 2, y);
-    y += titleSize * 1.04;
+    y += fittedTitle.size * 1.04;
   }
 
   if (subtitle) {
-    y += 34;
-    context.font = "italic 42px Georgia, serif";
-    for (const line of wrapText(context, subtitle, 900, 3)) {
+    y += 28;
+    const fittedSubtitle = fitText(
+      context,
+      subtitle,
+      900,
+      4,
+      42,
+      28,
+      (size) => `italic ${size}px Georgia, serif`,
+    );
+    context.font = `italic ${fittedSubtitle.size}px Georgia, serif`;
+    for (const line of fittedSubtitle.lines) {
       context.fillText(line, canvas.width / 2, y);
-      y += 54;
+      y += fittedSubtitle.size * 1.3;
     }
   }
 
@@ -209,13 +294,30 @@ function loadImage(source: string) {
   });
 }
 
-function wrapText(
+function fitText(
   context: CanvasRenderingContext2D,
   text: string,
   maxWidth: number,
   maxLines: number,
+  startSize: number,
+  minSize: number,
+  font: (size: number) => string,
 ) {
-  const words = text.trim().split(/\s+/);
+  for (let size = startSize; size >= minSize; size -= 2) {
+    context.font = font(size);
+    const lines = wrapText(context, text, maxWidth);
+    if (lines.length <= maxLines) return { lines, size };
+  }
+  context.font = font(minSize);
+  return { lines: wrapText(context, text, maxWidth), size: minSize };
+}
+
+function wrapText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = "";
   for (const word of words) {
@@ -223,11 +325,10 @@ function wrapText(
     if (context.measureText(test).width > maxWidth && line) {
       lines.push(line);
       line = word;
-      if (lines.length === maxLines - 1) break;
     } else {
       line = test;
     }
   }
-  if (line && lines.length < maxLines) lines.push(line);
+  if (line) lines.push(line);
   return lines;
 }
