@@ -28,8 +28,8 @@ const initialBrief: Brief = {
 };
 
 export default function BlueprintStudio() {
-  const projectId = useRef(crypto.randomUUID());
-  const projectCreatedAt = useRef(new Date().toISOString());
+  const projectId = useRef("");
+  const projectCreatedAt = useRef("");
   const [brief, setBrief] = useState(initialBrief);
   const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
   const [approved, setApproved] = useState(false);
@@ -38,36 +38,42 @@ export default function BlueprintStudio() {
   const [busy, setBusy] = useState<"" | "blueprint" | "writing" | "exporting">("");
   const [error, setError] = useState("");
   const [savedNotice, setSavedNotice] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    projectId.current = crypto.randomUUID();
+    projectCreatedAt.current = new Date().toISOString();
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (!saved) return;
-      const project = JSON.parse(saved) as SavedProject;
-      projectId.current = project.projectId ?? projectId.current;
-      projectCreatedAt.current = project.createdAt ?? projectCreatedAt.current;
-      setBrief(project.brief ?? initialBrief);
-      setBlueprint(project.blueprint ?? null);
-      setApproved(Boolean(project.approved));
-      setSections(project.sections ?? []);
-      setProvider(project.provider ?? null);
-      setSavedNotice("Your saved Blueprint project was restored.");
+      if (saved) {
+        const project = JSON.parse(saved) as SavedProject;
+        projectId.current = project.projectId ?? projectId.current;
+        projectCreatedAt.current = project.createdAt ?? projectCreatedAt.current;
+        setBrief(project.brief ?? initialBrief);
+        setBlueprint(project.blueprint ?? null);
+        setApproved(Boolean(project.approved));
+        setSections(project.sections ?? []);
+        setProvider(project.provider ?? null);
+        setSavedNotice("Your saved Blueprint project was restored.");
+      }
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
+    setReady(true);
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     const project: SavedProject = { projectId: projectId.current, createdAt: projectCreatedAt.current, brief, blueprint, approved, sections, provider };
     const timer = window.setTimeout(() => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
       if (blueprint) setSavedNotice("Autosaved in this browser.");
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [brief, blueprint, approved, sections, provider]);
+  }, [ready, brief, blueprint, approved, sections, provider]);
 
   const plan = useMemo(() => blueprint ? buildPlan(blueprint) : [], [blueprint]);
-  const manuscript = useMemo(() => blueprint && sections.length ? buildManuscript(projectId.current, projectCreatedAt.current, brief, blueprint, plan, sections, provider) : null, [brief, blueprint, plan, sections, provider]);
+  const manuscript = useMemo(() => ready && blueprint && sections.length ? buildManuscript(projectId.current, projectCreatedAt.current, brief, blueprint, plan, sections, provider) : null, [ready, brief, blueprint, plan, sections, provider]);
   const set = (key: keyof Brief, value: string | number) => setBrief((b) => ({ ...b, [key]: value }));
 
   async function generateBlueprint() {
