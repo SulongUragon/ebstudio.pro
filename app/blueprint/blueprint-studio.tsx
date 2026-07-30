@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import type { Manuscript, SectionContent, SectionPlan } from "../book-types";
 import { exportBundle, exportDocx, exportEpub, exportPdf } from "../exporters";
 
@@ -287,7 +288,7 @@ function downloadBlob(content: string, filename: string, type: string) { const b
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label style={styles.label}>{label}<input style={styles.input} value={value} onChange={(e) => onChange(e.target.value)} /></label>; }
 function Area({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label style={styles.label}>{label}<textarea style={{ ...styles.input, minHeight: 88, resize: "vertical" }} value={value} onChange={(e) => onChange(e.target.value)} /></label>; }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   page: { maxWidth: 1500, margin: "0 auto", padding: "32px 20px 80px", color: "#eaf5ef", background: "#07110d", minHeight: "100vh" },
   header: { display: "flex", justifyContent: "space-between", gap: 24, alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap" },
   eyebrow: { color: "#62d49a", fontWeight: 800, margin: 0 }, h1: { fontSize: "clamp(2rem,5vw,4rem)", margin: "4px 0" }, sub: { color: "#a8bbb0", maxWidth: 700 },
