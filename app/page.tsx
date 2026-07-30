@@ -5,6 +5,7 @@ export default function Home() {
     <>
       <a
         href="/blueprint"
+        aria-label="Start a book with the Blueprint Engine"
         style={{
           position: "fixed",
           right: 18,
@@ -17,6 +18,8 @@ export default function Home() {
           fontWeight: 900,
           textDecoration: "none",
           boxShadow: "0 12px 36px rgba(0,0,0,.35)",
+          maxWidth: "calc(100vw - 36px)",
+          textAlign: "center",
         }}
       >
         Start with Blueprint
