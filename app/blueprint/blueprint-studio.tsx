@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Manuscript, SectionContent, SectionPlan } from "../book-types";
 import { exportBundle, exportDocx, exportEpub, exportPdf } from "../exporters";
 
@@ -18,7 +18,7 @@ type Blueprint = {
   conclusion: string; bonusChapters: string[]; appendixIdeas: string[];
 };
 type WrittenSection = { title: string; content: string; summary: string; kind: "introduction" | "chapter" | "conclusion"; number?: number; purpose: string };
-type SavedProject = { brief: Brief; blueprint: Blueprint | null; approved: boolean; sections: WrittenSection[]; provider: Provider | null };
+type SavedProject = { projectId?: string; createdAt?: string; brief: Brief; blueprint: Blueprint | null; approved: boolean; sections: WrittenSection[]; provider: Provider | null };
 
 const STORAGE_KEY = "ebstudio-blueprint-project-v1";
 const initialBrief: Brief = {
@@ -28,6 +28,8 @@ const initialBrief: Brief = {
 };
 
 export default function BlueprintStudio() {
+  const projectId = useRef(crypto.randomUUID());
+  const projectCreatedAt = useRef(new Date().toISOString());
   const [brief, setBrief] = useState(initialBrief);
   const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
   const [approved, setApproved] = useState(false);
@@ -42,6 +44,8 @@ export default function BlueprintStudio() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (!saved) return;
       const project = JSON.parse(saved) as SavedProject;
+      projectId.current = project.projectId ?? projectId.current;
+      projectCreatedAt.current = project.createdAt ?? projectCreatedAt.current;
       setBrief(project.brief ?? initialBrief);
       setBlueprint(project.blueprint ?? null);
       setApproved(Boolean(project.approved));
@@ -54,7 +58,7 @@ export default function BlueprintStudio() {
   }, []);
 
   useEffect(() => {
-    const project: SavedProject = { brief, blueprint, approved, sections, provider };
+    const project: SavedProject = { projectId: projectId.current, createdAt: projectCreatedAt.current, brief, blueprint, approved, sections, provider };
     const timer = window.setTimeout(() => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
       if (blueprint) setSavedNotice("Autosaved in this browser.");
@@ -63,7 +67,7 @@ export default function BlueprintStudio() {
   }, [brief, blueprint, approved, sections, provider]);
 
   const plan = useMemo(() => blueprint ? buildPlan(blueprint) : [], [blueprint]);
-  const manuscript = useMemo(() => blueprint && sections.length ? buildManuscript(brief, blueprint, plan, sections, provider) : null, [brief, blueprint, plan, sections, provider]);
+  const manuscript = useMemo(() => blueprint && sections.length ? buildManuscript(projectId.current, projectCreatedAt.current, brief, blueprint, plan, sections, provider) : null, [brief, blueprint, plan, sections, provider]);
   const set = (key: keyof Brief, value: string | number) => setBrief((b) => ({ ...b, [key]: value }));
 
   async function generateBlueprint() {
@@ -163,11 +167,13 @@ export default function BlueprintStudio() {
 
   function downloadJson() {
     if (!blueprint) return;
-    downloadBlob(JSON.stringify({ brief, blueprint, approved, sections }, null, 2), `${safeName(brief.title)}-blueprint.json`, "application/json");
+    downloadBlob(JSON.stringify({ projectId: projectId.current, createdAt: projectCreatedAt.current, brief, blueprint, approved, sections }, null, 2), `${safeName(brief.title)}-blueprint.json`, "application/json");
   }
 
   function startFresh() {
     localStorage.removeItem(STORAGE_KEY);
+    projectId.current = crypto.randomUUID();
+    projectCreatedAt.current = new Date().toISOString();
     setBrief(initialBrief); setBlueprint(null); setApproved(false); setSections([]); setProvider(null); setError(""); setSavedNotice("");
   }
 
@@ -253,11 +259,11 @@ function buildPlan(blueprint: Blueprint): SectionPlan[] {
   ];
 }
 
-function buildManuscript(brief: Brief, blueprint: Blueprint, plan: SectionPlan[], sections: WrittenSection[], provider: Provider | null): Manuscript {
+function buildManuscript(projectId: string, createdAt: string, brief: Brief, blueprint: Blueprint, plan: SectionPlan[], sections: WrittenSection[], provider: Provider | null): Manuscript {
   const completeSections: SectionContent[] = sections.map((section) => ({ kind: section.kind, number: section.number, title: section.title, purpose: section.purpose, content: section.content, summary: section.summary }));
   return {
-    id: crypto.randomUUID(), mode: brief.mode, title: brief.title, subtitle: blueprint.subtitle,
-    author: brief.author, createdAt: new Date().toISOString(),
+    id: projectId, mode: brief.mode, title: brief.title, subtitle: blueprint.subtitle,
+    author: brief.author, createdAt,
     brief: {
       title: brief.title, author: brief.author, genre: brief.genre, characters: brief.characters,
       premise: brief.premise, topic: brief.topic, audience: brief.audience,
@@ -268,9 +274,7 @@ function buildManuscript(brief: Brief, blueprint: Blueprint, plan: SectionPlan[]
   };
 }
 
-function normalizeBlueprint(value: Blueprint): Blueprint {
-  return { ...value, chapters: renumber((value.chapters ?? []).map((chapter) => ({ ...chapter, id: chapter.id || crypto.randomUUID() }))) };
-}
+function normalizeBlueprint(value: Blueprint): Blueprint { return { ...value, chapters: renumber((value.chapters ?? []).map((chapter) => ({ ...chapter, id: chapter.id || crypto.randomUUID() }))) }; }
 function renumber(chapters: Chapter[]) { return chapters.map((chapter, index) => ({ ...chapter, number: index + 1 })); }
 function safeName(value: string) { return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "book"; }
 function downloadBlob(content: string, filename: string, type: string) { const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url); }
