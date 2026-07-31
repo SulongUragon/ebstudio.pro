@@ -75,10 +75,157 @@ button {
 }
 
 .brand-logo-desktop {
-  width: clamp(270px, 24vw, 350px);
-  height: auto;
-  max-height: calc(100% - 16px);
-  mix-blend-mode: normal;
+  display: none;
+}
+
+.brand-lockup {
+  display: inline-flex;
+  width: clamp(300px, 32vw, 430px);
+  height: 72px;
+  align-items: center;
+  gap: 13px;
+  color: #f1e7d2;
+}
+
+.brand-mark {
+  position: relative;
+  display: block;
+  width: 66px;
+  height: 62px;
+  flex: 0 0 66px;
+}
+
+.brand-book {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  width: 54px;
+  height: 45px;
+  border-radius: 6px;
+  box-shadow: 0 5px 11px rgba(8, 13, 12, 0.2);
+  transform-origin: center;
+}
+
+.brand-book-green {
+  background: #315842;
+  transform: rotate(-8deg);
+}
+
+.brand-book-copper {
+  left: 10px;
+  background: #b85b34;
+  transform: rotate(7deg);
+}
+
+.brand-monogram {
+  position: absolute;
+  top: 2px;
+  left: 9px;
+  z-index: 2;
+  display: flex;
+  width: 54px;
+  height: 54px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(235, 218, 187, 0.9);
+  border-radius: 8px;
+  background: #f4ead5;
+  box-shadow: 0 5px 12px rgba(7, 12, 11, 0.26);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 29px;
+  letter-spacing: -0.13em;
+  line-height: 1;
+}
+
+.brand-e {
+  color: #315d42;
+}
+
+.brand-b {
+  color: #234f73;
+}
+
+.brand-leaf {
+  position: absolute;
+  bottom: 15px;
+  left: 24px;
+  width: 13px;
+  height: 7px;
+  border-radius: 100% 0 100% 0;
+  background: #466f43;
+  transform: rotate(-38deg);
+}
+
+.brand-word-group {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.brand-wordmark {
+  display: flex;
+  align-items: baseline;
+  overflow: hidden;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.75rem, 2.75vw, 2.55rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 0.95;
+  white-space: nowrap;
+}
+
+.brand-wordmark > b {
+  font-weight: 500;
+}
+
+.brand-wordmark > span {
+  color: #efe4d0;
+}
+
+.brand-wordmark > em {
+  color: #b85b34;
+  font-style: normal;
+}
+
+.brand-signature-rule {
+  display: block;
+  height: 2px;
+  margin: 7px 0 5px;
+  background: linear-gradient(90deg, #315d42 0 23%, #234f73 23% 66%, #b85b34 66%);
+  opacity: 0.88;
+}
+
+.brand-word-group small {
+  display: flex;
+  justify-content: space-between;
+  color: #d9cfbd;
+  font-size: clamp(0.43rem, 0.68vw, 0.58rem);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1;
+}
+
+.brand-word-group small b {
+  font-weight: 700;
+}
+
+.brand-word-group small b:first-child {
+  color: #6e956c;
+}
+
+.brand-word-group small b:nth-of-type(2) {
+  color: #7195b1;
+}
+
+.brand-word-group small b:last-child {
+  color: #c7774d;
+}
+
+.brand-word-group small i {
+  color: #c8b991;
+  font-style: normal;
 }
 
 .brand-logo-mobile {
@@ -2075,6 +2222,10 @@ p {
   .topbar {
     min-height: 74px;
     padding: 0 16px;
+  }
+
+  .brand-lockup {
+    display: none;
   }
 
   .brand-logo-desktop {
