@@ -1816,8 +1816,11 @@ p {
 }
 
 .manuscript-panel {
+  position: static;
   display: flex;
-  max-height: calc(100vh - 148px);
+  max-height: none;
+  min-height: 0;
+  overflow: visible;
   flex-direction: column;
   place-items: initial;
   background: var(--white);
@@ -2206,7 +2209,7 @@ p {
   }
 
   .manuscript-panel {
-    max-height: 780px;
+    max-height: none;
   }
 
   .form-column {
@@ -2278,8 +2281,8 @@ p {
   }
 
   .manuscript-panel {
-    min-height: 680px;
-    max-height: 78vh;
+    min-height: 0;
+    max-height: none;
   }
 
   .manuscript-toolbar {
