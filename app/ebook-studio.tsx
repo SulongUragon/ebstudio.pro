@@ -460,13 +460,29 @@ export default function EbookStudio() {
     <main className="app-shell">
       <header className="topbar">
         <button className="brand" onClick={() => setView("create")} aria-label="Go to creator">
-          <img
-            className="brand-logo brand-logo-desktop"
-            src="/brand/ebstudio-pro-horizontal-cream.svg"
-            alt="EB Studio Pro — Create, Design, Publish"
-            width="590"
-            height="210"
-          />
+          <span className="brand-lockup" aria-hidden="true">
+            <span className="brand-mark">
+              <i className="brand-book brand-book-green" />
+              <i className="brand-book brand-book-copper" />
+              <span className="brand-monogram">
+                <b className="brand-e">E</b>
+                <b className="brand-b">B</b>
+                <i className="brand-leaf" />
+              </span>
+            </span>
+            <span className="brand-word-group">
+              <span className="brand-wordmark">
+                <b className="brand-e">E</b>
+                <b className="brand-b">B</b>
+                <span>Studio</span>
+                <em>.Pro</em>
+              </span>
+              <span className="brand-signature-rule" />
+              <small>
+                <b>CREATE</b><i>•</i><b>DESIGN</b><i>•</i><b>PUBLISH</b>
+              </small>
+            </span>
+          </span>
           <img
             className="brand-logo brand-logo-mobile"
             src="/brand/ebstudio-pro-app-icon-192.png"
