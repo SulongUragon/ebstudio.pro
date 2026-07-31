@@ -75,8 +75,9 @@ button {
 }
 
 .brand-logo-desktop {
-  width: clamp(220px, 20vw, 285px);
+  width: clamp(235px, 21.5vw, 305px);
   height: auto;
+  max-height: calc(100% - 20px);
   mix-blend-mode: normal;
 }
 
