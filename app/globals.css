@@ -53,7 +53,7 @@ button {
   min-height: 92px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 3.4vw;
+  padding: 0 3.4vw 0 12px;
   border-top: 4px solid var(--ink);
   border-bottom: 1px solid rgba(91, 83, 73, 0.13);
   background: linear-gradient(180deg, #eee2d5 0%, #e8d8c8 100%);
@@ -75,9 +75,9 @@ button {
 }
 
 .brand-logo-desktop {
-  width: clamp(235px, 21.5vw, 305px);
+  width: clamp(270px, 24vw, 350px);
   height: auto;
-  max-height: calc(100% - 20px);
+  max-height: calc(100% - 16px);
   mix-blend-mode: normal;
 }
 
