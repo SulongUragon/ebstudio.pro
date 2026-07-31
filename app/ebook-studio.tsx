@@ -462,7 +462,7 @@ export default function EbookStudio() {
         <button className="brand" onClick={() => setView("create")} aria-label="Go to creator">
           <img
             className="brand-logo brand-logo-desktop"
-            src="/brand/ebstudio-pro-horizontal-light.webp"
+            src="/brand/ebstudio-pro-horizontal-cream.svg"
             alt="EB Studio Pro — Create, Design, Publish"
             width="590"
             height="210"
