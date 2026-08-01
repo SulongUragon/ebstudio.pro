@@ -18,12 +18,19 @@
 }
 
 html {
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--paper);
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
   min-width: 320px;
+  min-height: 100%;
   margin: 0;
+  overflow-x: hidden;
+  overflow-y: visible;
   background:
     radial-gradient(circle at 72% 12%, rgba(255, 255, 255, 0.75), transparent 31rem),
     var(--paper);
@@ -43,6 +50,8 @@ button {
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
+  overflow: visible;
 }
 
 .topbar {
@@ -537,8 +546,11 @@ p {
 }
 
 .cover-studio {
+  position: relative;
   margin: 18px 18px 92px;
   padding: 20px;
+  overflow: visible;
+  touch-action: pan-y;
   border: 1px solid rgba(64, 86, 74, 0.24);
   background: linear-gradient(145deg, rgba(64, 86, 74, 0.08), rgba(255, 254, 253, 0.92));
 }
@@ -1815,12 +1827,13 @@ p {
   }
 }
 
-.manuscript-panel {
+.preview-panel.manuscript-panel {
   position: static;
   display: flex;
   max-height: none;
   min-height: 0;
   overflow: visible;
+  overscroll-behavior-y: auto;
   flex-direction: column;
   place-items: initial;
   background: var(--white);
@@ -2015,7 +2028,7 @@ p {
 }
 
 .book-page {
-  overflow-y: auto;
+  overflow-y: visible;
   padding: clamp(40px, 5vw, 78px) clamp(36px, 6vw, 88px) 160px;
   scroll-padding-bottom: 160px;
   background:
@@ -2404,6 +2417,38 @@ p {
 
   .assistant-quick-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+
+/* iPad/iPhone: keep one native page scroller and avoid sticky-control gesture locks. */
+@media (hover: none), (pointer: coarse) {
+  html,
+  body,
+  .app-shell,
+  .studio-grid,
+  .preview-panel.manuscript-panel,
+  .cover-studio,
+  .cover-studio-grid,
+  .cover-controls,
+  .manuscript-workspace,
+  .book-page {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  html {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cover-generate-button {
+    position: static;
+    bottom: auto;
+  }
+
+  .cover-type-controls input[type="range"] {
+    touch-action: manipulation;
   }
 }
 
