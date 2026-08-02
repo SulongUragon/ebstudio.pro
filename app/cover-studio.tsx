@@ -10,6 +10,7 @@ const styles = [
   { id: "illustrated", label: "Illustrated" },
   { id: "photoreal-title", label: "Real Person + AI Title" },
   { id: "minimal-real-title", label: "Minimal Real Object + AI Title" },
+  { id: "fully-loaded-title", label: "Fully Loaded + AI Title" },
   { id: "eb-signature", label: "EB Signature" },
 ];
 
@@ -70,7 +71,9 @@ export default function CoverStudio({
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
   const aiTitleMode =
-    style === "photoreal-title" || style === "minimal-real-title";
+    style === "photoreal-title" ||
+    style === "minimal-real-title" ||
+    style === "fully-loaded-title";
 
   async function generateCover() {
     if (!coverTitle.trim()) {
@@ -228,7 +231,8 @@ export default function CoverStudio({
             <>
               <img src={previewSource} alt={`Cover for ${manuscript.title}`} />
               {manuscript.cover.sourceImageData && manuscript.cover.style !== "photoreal-title" &&
-                manuscript.cover.style !== "minimal-real-title" ? (
+                manuscript.cover.style !== "minimal-real-title" &&
+                manuscript.cover.style !== "fully-loaded-title" ? (
                 <div className="cover-live-type" aria-hidden="true">
                   <strong
                     className={`align-${titleAlignment}`}
@@ -451,7 +455,9 @@ export default function CoverStudio({
               ? "AI creates a lifelike human cover and designs the exact title directly into the artwork—title only."
               : style === "minimal-real-title"
                 ? "AI creates a minimalist still life using realistic objects connected to the book and prints the exact title—title only."
-                : style === "eb-signature"
+                : style === "fully-loaded-title"
+                  ? "AI builds a dense cinematic cover with layered scenes, characters, objects, and story details, then prints the exact title—title only."
+                  : style === "eb-signature"
                 ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
                 : "The title, subtitle, and author are placed separately for sharper export quality."}
           </p>
