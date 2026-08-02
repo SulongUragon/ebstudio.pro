@@ -8,6 +8,7 @@ const styles = [
   { id: "cinematic", label: "Cinematic" },
   { id: "minimalist", label: "Minimalist" },
   { id: "illustrated", label: "Illustrated" },
+  { id: "photoreal-title", label: "Real Person + AI Title" },
   { id: "eb-signature", label: "EB Signature" },
 ];
 
@@ -67,6 +68,7 @@ export default function CoverStudio({
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
+  const aiTitleMode = style === "photoreal-title";
 
   async function generateCover() {
     if (!coverTitle.trim()) {
@@ -92,31 +94,33 @@ export default function CoverStudio({
         throw new Error(String(data.error ?? "The AI cover could not be generated."));
       }
       const sourceImageData = String(data.imageData);
-      const imageData = await composeCover(
-        sourceImageData,
-        coverTitle.trim(),
-        coverSubtitle.trim(),
-        manuscript.author,
-        finish,
-        style,
-        autoFitText,
-        titleFontSize,
-        subtitleFontSize,
-        titlePosition,
-        subtitlePosition,
-        titleAlignment,
-        subtitleAlignment,
-        titleColor,
-        subtitleColor,
-        authorColor,
-      );
+      const imageData = aiTitleMode
+        ? sourceImageData
+        : await composeCover(
+            sourceImageData,
+            coverTitle.trim(),
+            coverSubtitle.trim(),
+            manuscript.author,
+            finish,
+            style,
+            autoFitText,
+            titleFontSize,
+            subtitleFontSize,
+            titlePosition,
+            subtitlePosition,
+            titleAlignment,
+            subtitleAlignment,
+            titleColor,
+            subtitleColor,
+            authorColor,
+          );
       onSave({
         imageData,
         sourceImageData,
         style,
         finish,
         displayTitle: coverTitle.trim(),
-        displaySubtitle: coverSubtitle.trim(),
+        displaySubtitle: aiTitleMode ? "" : coverSubtitle.trim(),
         autoFitText,
         titleFontSize,
         subtitleFontSize,
@@ -141,6 +145,10 @@ export default function CoverStudio({
   }
 
   async function applyTypography() {
+    if (aiTitleMode) {
+      setError("This cover already includes the AI-designed title. Choose another visual direction to use editable typography.");
+      return;
+    }
     const sourceImageData = manuscript.cover?.sourceImageData;
     if (!sourceImageData) {
       setError("Generate one new cover first to unlock reusable typography editing.");
@@ -217,7 +225,7 @@ export default function CoverStudio({
           {manuscript.cover ? (
             <>
               <img src={previewSource} alt={`Cover for ${manuscript.title}`} />
-              {manuscript.cover.sourceImageData ? (
+              {manuscript.cover.sourceImageData && manuscript.cover.style !== "photoreal-title" ? (
                 <div className="cover-live-type" aria-hidden="true">
                   <strong
                     className={`align-${titleAlignment}`}
@@ -272,7 +280,7 @@ export default function CoverStudio({
               <textarea
                 value={coverSubtitle}
                 onChange={(event) => setCoverSubtitle(event.target.value)}
-                disabled={loading}
+                disabled={loading || aiTitleMode}
                 rows={3}
               />
             </label>
@@ -398,16 +406,18 @@ export default function CoverStudio({
                 className="cover-apply-type"
                 type="button"
                 onClick={applyTypography}
-                disabled={loading || applying || !manuscript.cover?.sourceImageData}
+                disabled={loading || applying || aiTitleMode || !manuscript.cover?.sourceImageData}
               >
                 {applying ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}
                 {applying ? "Applying typography…" : "Apply text layout"}
               </button>
             </div>
             <p>
-              {autoFitText
-                ? "The complete wording automatically resizes to fit—no silent truncation."
-                : "Manual sizing preserves every word. Reduce the size if the title uses too many lines."}
+              {aiTitleMode
+                ? "AI prints the exact title into the photorealistic artwork. Subtitle, author, and extra text are excluded."
+                : autoFitText
+                  ? "The complete wording automatically resizes to fit—no silent truncation."
+                  : "Manual sizing preserves every word. Reduce the size if the title uses too many lines."}
             </p>
           </div>
           <span>Choose a visual direction</span>
@@ -434,9 +444,11 @@ export default function CoverStudio({
             ))}
           </div>
           <p>
-            {style === "eb-signature"
-              ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
-              : "The title, subtitle, and author are placed separately for sharper export quality."}
+            {style === "photoreal-title"
+              ? "AI creates a lifelike human cover and designs the exact title directly into the artwork—title only."
+              : style === "eb-signature"
+                ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
+                : "The title, subtitle, and author are placed separately for sharper export quality."}
           </p>
           <span className="cover-finish-label">Choose a cover finish</span>
           <div className="cover-finish-options">
