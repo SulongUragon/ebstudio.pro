@@ -31,6 +31,8 @@ const STYLE_DIRECTIONS: Record<string, string> = {
     "high-end photorealistic editorial photography featuring a believable real human subject relevant to the story or topic, natural skin texture, anatomically correct face and hands, authentic expression, cinematic lighting, premium commercial book-cover art direction",
   "minimal-real-title":
     "minimalist photorealistic still-life photography using one or two real physical objects meaningfully connected to the story or topic, refined negative space, precise lighting, tactile natural materials, premium contemporary book-cover art direction",
+  "fully-loaded-title":
+    "maximalist cinematic book-cover design packed with layered story-specific scenes, characters, symbolic objects, environmental details, dramatic atmosphere, premium depth, and high-impact commercial publishing art direction",
   "eb-signature":
     "concept-led editorial artwork derived directly from the book title and subject, emotionally specific and immediately relevant to the book, using the EB Studio Pro signature palette: dark forest green, deep navy blue, burnished copper and rust, warm parchment and muted gold, anchored by charcoal black; premium restrained color harmony, sophisticated depth, memorable focal symbolism, high-end publishing aesthetic",
 };
@@ -68,11 +70,15 @@ export async function POST(request: Request) {
         : "";
 
     const aiPrintedTitle =
-      style === "photoreal-title" || style === "minimal-real-title";
+      style === "photoreal-title" ||
+      style === "minimal-real-title" ||
+      style === "fully-loaded-title";
     const subjectDirection =
       style === "minimal-real-title"
         ? "Use one or two convincingly real physical objects as the sole visual subject. Choose objects that symbolize this specific book, with tactile material detail, restrained shadows, clean negative space, and a deliberate minimalist composition. Do not include people, faces, hands, silhouettes, crowds, or human figures. Avoid decorative clutter and generic stock-photo props."
-        : "Feature a convincingly real human subject whose identity, emotion, wardrobe, environment, and pose are meaningfully connected to this specific book. Preserve natural skin texture, realistic eyes, anatomically correct hands, believable proportions, and cinematic editorial lighting. Avoid plastic skin, uncanny faces, extra fingers, malformed anatomy, and generic stock-photo posing.";
+        : style === "fully-loaded-title"
+          ? "Build a visually crowded, fully loaded, maximalist cover using multiple layered scenes, relevant characters when appropriate, symbolic objects, environmental storytelling, foreground and background details, dramatic light, atmosphere, and controlled depth. Every element must connect directly to this specific book. Make it dense, immersive, cinematic, and high-impact without becoming random or unreadable. Keep a deliberate visual hierarchy and preserve a strong title zone."
+          : "Feature a convincingly real human subject whose identity, emotion, wardrobe, environment, and pose are meaningfully connected to this specific book. Preserve natural skin texture, realistic eyes, anatomically correct hands, believable proportions, and cinematic editorial lighting. Avoid plastic skin, uncanny faces, extra fingers, malformed anatomy, and generic stock-photo posing.";
     const prompt = aiPrintedTitle
       ? `Create a complete premium front cover for a ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
 
