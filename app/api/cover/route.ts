@@ -27,6 +27,8 @@ const STYLE_DIRECTIONS: Record<string, string> = {
     "minimalist conceptual editorial art, one powerful symbolic focal point, refined negative space, premium modern publishing aesthetic",
   illustrated:
     "detailed contemporary book illustration, expressive atmosphere, layered visual storytelling, polished commercial publishing aesthetic",
+  "photoreal-title":
+    "high-end photorealistic editorial photography featuring a believable real human subject relevant to the story or topic, natural skin texture, anatomically correct face and hands, authentic expression, cinematic lighting, premium commercial book-cover art direction",
   "eb-signature":
     "concept-led editorial artwork derived directly from the book title and subject, emotionally specific and immediately relevant to the book, using the EB Studio Pro signature palette: dark forest green, deep navy blue, burnished copper and rust, warm parchment and muted gold, anchored by charcoal black; premium restrained color harmony, sophisticated depth, memorable focal symbolism, high-end publishing aesthetic",
 };
@@ -63,7 +65,21 @@ export async function POST(request: Request) {
         ? "Palette requirement: use dark forest green, deep navy, burnished copper or rust, warm parchment or muted gold, and charcoal as the dominant and nearly exclusive color system. Preserve natural tonal variation within those hues. Do not introduce neon colors, rainbow palettes, bright candy colors, or unrelated dominant hues."
         : "";
 
-    const prompt = `Create original front-cover artwork for a premium ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
+    const aiPrintedTitle = style === "photoreal-title";
+    const prompt = aiPrintedTitle
+      ? `Create a complete premium front cover for a ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
+
+Exact title to print once: "${body.brief.title}"
+${bookContext}
+Visual direction: ${direction}.
+Cover finish: ${finishDirection}.
+
+Feature a convincingly real human subject whose identity, emotion, wardrobe, environment, and pose are meaningfully connected to this specific book. Preserve natural skin texture, realistic eyes, anatomically correct hands, believable proportions, and cinematic editorial lighting. Avoid plastic skin, uncanny faces, extra fingers, malformed anatomy, and generic stock-photo posing.
+
+Integrate the exact title into the artwork as intentional professional book-cover typography. The title must be spelled exactly as provided, fully readable, visually balanced, and readable at thumbnail size. Render the title once only. Do not add a subtitle, author name, tagline, badge, logo, watermark, publisher mark, or any other letters or words.
+
+Portrait front-cover composition, 2:3 aspect ratio, edge-to-edge artwork, premium commercial publishing quality. Do not show a physical book, device, mockup, frame, or border.`
+      : `Create original front-cover artwork for a premium ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
 
 Book title for creative context only: ${body.brief.title}
 ${bookContext}
