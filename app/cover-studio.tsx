@@ -309,7 +309,12 @@ export default function CoverStudio({
                 rows={3}
               />
             </label>
-            <div className="cover-type-controls">
+            <details className="cover-advanced-settings">
+              <summary>
+                <span>Typography & layout</span>
+                <strong>{getCoverTypographyPreset(typographyPreset).label}</strong>
+              </summary>
+              <div className="cover-type-controls">
               <label className="cover-auto-fit">
                 <input
                   type="checkbox"
@@ -362,19 +367,20 @@ export default function CoverStudio({
               </label>
               <div className="cover-layout-row">
                 <span>Title alignment</span>
-                <div className="cover-align-options">
-                  {(["left", "center", "right"] as const).map((alignment) => (
-                    <button
-                      type="button"
-                      key={alignment}
-                      className={titleAlignment === alignment ? "selected" : ""}
-                      onClick={() => setTitleAlignment(alignment)}
-                      disabled={loading}
-                    >
-                      {alignment}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  className="cover-alignment-select"
+                  value={titleAlignment}
+                  onChange={(event) =>
+                    setTitleAlignment(
+                      event.target.value as "left" | "center" | "right",
+                    )
+                  }
+                  disabled={loading}
+                >
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
                 <label className="cover-color-control">
                   <span>Title color</span>
                   <input
@@ -399,19 +405,20 @@ export default function CoverStudio({
               </label>
               <div className="cover-layout-row">
                 <span>Subtitle alignment</span>
-                <div className="cover-align-options">
-                  {(["left", "center", "right"] as const).map((alignment) => (
-                    <button
-                      type="button"
-                      key={alignment}
-                      className={subtitleAlignment === alignment ? "selected" : ""}
-                      onClick={() => setSubtitleAlignment(alignment)}
-                      disabled={loading}
-                    >
-                      {alignment}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  className="cover-alignment-select"
+                  value={subtitleAlignment}
+                  onChange={(event) =>
+                    setSubtitleAlignment(
+                      event.target.value as "left" | "center" | "right",
+                    )
+                  }
+                  disabled={loading}
+                >
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
                 <label className="cover-color-control">
                   <span>Subtitle color</span>
                   <input
@@ -441,36 +448,38 @@ export default function CoverStudio({
                 {applying ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}
                 {applying ? "Applying typography…" : "Apply text layout"}
               </button>
-            </div>
+              </div>
+            </details>
             <p>
               {autoFitText
                 ? "EB Studio Pro places the exact title, subtitle, and author, then automatically resizes them to fit. Select Apply text layout after an edit to refresh the final cover preview."
                 : "Manual sizing preserves every word. Reduce the size if the title uses too many lines, then select Apply text layout."}
             </p>
           </div>
-          <span>Choose a visual direction</span>
-          <div className="cover-style-options">
-            {styles.map((option) => (
-              <button
-                type="button"
-                key={option.id}
-                className={style === option.id ? "selected" : ""}
-                onClick={() => {
-                  setStyle(option.id);
-                  if (option.id === "eb-signature") {
-                    setTitleColor("#f1e3cf");
-                    setSubtitleColor("#e8d5b8");
-                  } else {
-                    setTitleColor("#fffdf7");
-                    setSubtitleColor("#fffdf7");
-                  }
-                }}
-                disabled={loading}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <label className="cover-select-control">
+            <span>Visual direction</span>
+            <select
+              value={style}
+              onChange={(event) => {
+                const nextStyle = event.target.value;
+                setStyle(nextStyle);
+                if (nextStyle === "eb-signature") {
+                  setTitleColor("#f1e3cf");
+                  setSubtitleColor("#e8d5b8");
+                } else {
+                  setTitleColor("#fffdf7");
+                  setSubtitleColor("#fffdf7");
+                }
+              }}
+              disabled={loading}
+            >
+              {styles.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <p>
             {style === "photoreal-title"
               ? "AI creates the lifelike human artwork; EB Studio Pro always places the exact title using a varied premium design."
@@ -482,20 +491,20 @@ export default function CoverStudio({
                 ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
                 : "The title, subtitle, and author are placed separately for sharper export quality."}
           </p>
-          <span className="cover-finish-label">Choose a cover finish</span>
-          <div className="cover-finish-options">
-            {finishes.map((option) => (
-              <button
-                type="button"
-                key={option.id}
-                className={finish === option.id ? "selected" : ""}
-                onClick={() => setFinish(option.id)}
-                disabled={loading}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <label className="cover-select-control cover-finish-label">
+            <span>Cover finish</span>
+            <select
+              value={finish}
+              onChange={(event) => setFinish(event.target.value)}
+              disabled={loading}
+            >
+              {finishes.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <small className="cover-finish-note">
             {finish === "glossy-premium"
               ? "Polished depth, richer blacks, and controlled metallic highlights."
