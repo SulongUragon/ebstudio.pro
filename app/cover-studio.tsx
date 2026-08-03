@@ -15,9 +15,9 @@ const styles = [
   { id: "cinematic", label: "Cinematic" },
   { id: "minimalist", label: "Minimalist" },
   { id: "illustrated", label: "Illustrated" },
-  { id: "photoreal-title", label: "Real Person + Exact Title" },
-  { id: "minimal-real-title", label: "Minimal Object + Exact Title" },
-  { id: "fully-loaded-title", label: "Fully Loaded + Exact Title" },
+  { id: "photoreal-title", label: "Real Person" },
+  { id: "minimal-real-title", label: "Minimal Object" },
+  { id: "fully-loaded-title", label: "Fully Loaded" },
   { id: "eb-signature", label: "EB Signature" },
 ];
 
@@ -249,6 +249,10 @@ export default function CoverStudio({
       const nextAuthorColor = shouldVaryTitleDesign
         ? typography.authorColor
         : authorColor;
+      // A fresh AI image is requested without typography, so always restore the
+      // deterministic exact-title layer. The visibility toggle only applies to
+      // the current artwork when an image model unexpectedly bakes in text.
+      const showGeneratedTitle = true;
       const imageData = await composeCover(
         sourceImageData,
         exactTitle,
@@ -257,7 +261,7 @@ export default function CoverStudio({
         finish,
         style,
         selectedTypographyPreset,
-        showTitle,
+        showGeneratedTitle,
         autoFitText,
         nextTitleFontSize,
         subtitleFontSize,
@@ -269,6 +273,8 @@ export default function CoverStudio({
         nextSubtitleColor,
         nextAuthorColor,
       );
+      setCoverTitle(exactTitle);
+      setShowTitle(showGeneratedTitle);
       setTypographyPreset(selectedTypographyPreset);
       setTitleFontSize(nextTitleFontSize);
       setTitlePosition(nextTitlePosition);
@@ -286,7 +292,7 @@ export default function CoverStudio({
         finish,
         displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
-        showTitle,
+        showTitle: showGeneratedTitle,
         autoFitText,
         titleFontSize: nextTitleFontSize,
         subtitleFontSize,
@@ -463,7 +469,7 @@ export default function CoverStudio({
               <div className="cover-title-design-status">
                 <span>Title design</span>
                 <strong>{getCoverTypographyPreset(typographyPreset).label}</strong>
-                <small>+ Exact Title directions rotate this automatically on every new cover.</small>
+                <small>Every visual direction uses the exact title and rotates premium font designs automatically.</small>
               </div>
               <label>
                 <span>Title size <strong>{autoFitText ? "Auto" : `${titleFontSize}px`}</strong></span>
@@ -619,15 +625,9 @@ export default function CoverStudio({
             </select>
           </label>
           <p>
-            {style === "photoreal-title"
-              ? "AI creates the lifelike human artwork; EB Studio Pro always places the exact title using a varied premium design."
-              : style === "minimal-real-title"
-                ? "AI creates a minimalist still life; EB Studio Pro always places the exact title using a varied premium design."
-                : style === "fully-loaded-title"
-                  ? "AI builds the dense cinematic artwork; EB Studio Pro always places the exact title using a varied premium design."
-                  : style === "eb-signature"
-                ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
-                : "The title, subtitle, and author are placed separately for sharper export quality."}
+            {style === "eb-signature"
+              ? "AI connects the artwork to your book concept using EB Studio Pro’s signature palette. The exact title is added with a premium font design."
+              : "AI creates the selected artwork while EB Studio Pro adds the exact title with a varied premium font design."}
           </p>
           <label className="cover-select-control cover-finish-label">
             <span>Cover finish</span>
