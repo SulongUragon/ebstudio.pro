@@ -4,6 +4,7 @@ import type { Manuscript } from "../app/book-types";
 import {
   contrastingTextStroke,
   getCoverTypographyPreset,
+  normalizeCoverTypographyPreset,
   resolveExactCoverTitle,
   selectCoverTypographyPreset,
   usesAutomaticTitleVariety,
@@ -80,6 +81,21 @@ test("selected title designs are stable for the same generated artwork", () => {
     selected,
   );
   assert.equal(getCoverTypographyPreset(selected).id, selected);
+});
+
+test("real-person covers reject generic condensed and sans title presets", () => {
+  assert.equal(
+    normalizeCoverTypographyPreset("photoreal-title", "dramatic-stacked"),
+    "classic-gold",
+  );
+  assert.equal(
+    normalizeCoverTypographyPreset("photoreal-title", "modern-clean"),
+    "classic-gold",
+  );
+  assert.equal(
+    normalizeCoverTypographyPreset("photoreal-title", "quiet-editorial"),
+    "quiet-editorial",
+  );
 });
 
 test("every premium title design uses a distinct embedded font", () => {
