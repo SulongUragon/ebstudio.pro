@@ -90,6 +90,7 @@ export default function CoverStudio({
     setLoading(true);
     setError("");
     try {
+      await ensureCoverFontsLoaded();
       const response = await fetch("/api/cover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -206,6 +207,7 @@ export default function CoverStudio({
     setApplying(true);
     setError("");
     try {
+      await ensureCoverFontsLoaded();
       const selectedTypographyPreset =
         manuscript.cover?.typographyPreset ?? typographyPreset;
       const imageData = await composeCover(
@@ -757,6 +759,32 @@ function loadImage(source: string) {
     image.onerror = () => reject(new Error("The generated artwork could not be loaded."));
     image.src = source;
   });
+}
+
+const COVER_FONT_SPECS = [
+  { weight: 400, name: "Cinzel" },
+  { weight: 700, name: "Playfair Display" },
+  { weight: 800, name: "Montserrat" },
+  { weight: 400, name: "Bebas Neue" },
+  { weight: 400, name: "Cormorant Garamond" },
+];
+
+async function ensureCoverFontsLoaded() {
+  if (!document.fonts) return;
+  await Promise.all(
+    COVER_FONT_SPECS.map(({ weight, name }) =>
+      document.fonts.load(`${weight} 124px "${name}"`),
+    ),
+  );
+  const missing = COVER_FONT_SPECS.filter(
+    ({ weight, name }) =>
+      !document.fonts.check(`${weight} 124px "${name}"`),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      "The premium title fonts are still loading. Please try again in a moment.",
+    );
+  }
 }
 
 function fitText(
