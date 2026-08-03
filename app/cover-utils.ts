@@ -10,6 +10,7 @@ export type CoverTypographyPresetId =
 export type CoverTypographyPreset = {
   id: CoverTypographyPresetId;
   label: string;
+  fontName: string;
   fontFamily: string;
   fontWeight: number;
   uppercase: boolean;
@@ -34,7 +35,8 @@ const COVER_TYPOGRAPHY_PRESETS: Record<
   "classic-gold": {
     id: "classic-gold",
     label: "Classic Gold",
-    fontFamily: 'Georgia, "Times New Roman", serif',
+    fontName: "Cinzel",
+    fontFamily: '"Cinzel", Georgia, "Times New Roman", serif',
     fontWeight: 400,
     uppercase: true,
     titleColor: "#d7b77a",
@@ -53,7 +55,8 @@ const COVER_TYPOGRAPHY_PRESETS: Record<
   "cinematic-ivory": {
     id: "cinematic-ivory",
     label: "Cinematic Ivory",
-    fontFamily: 'Georgia, "Times New Roman", serif',
+    fontName: "Playfair Display",
+    fontFamily: '"Playfair Display", Georgia, "Times New Roman", serif',
     fontWeight: 700,
     uppercase: false,
     titleColor: "#fff7e8",
@@ -72,7 +75,8 @@ const COVER_TYPOGRAPHY_PRESETS: Record<
   "modern-clean": {
     id: "modern-clean",
     label: "Modern Clean",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    fontName: "Montserrat",
+    fontFamily: '"Montserrat", Arial, Helvetica, sans-serif',
     fontWeight: 800,
     uppercase: true,
     titleColor: "#fffdf7",
@@ -91,8 +95,9 @@ const COVER_TYPOGRAPHY_PRESETS: Record<
   "dramatic-stacked": {
     id: "dramatic-stacked",
     label: "Dramatic Stacked",
-    fontFamily: 'Georgia, "Times New Roman", serif',
-    fontWeight: 700,
+    fontName: "Bebas Neue",
+    fontFamily: '"Bebas Neue", Impact, sans-serif',
+    fontWeight: 400,
     uppercase: true,
     titleColor: "#f3e2bd",
     subtitleColor: "#f5ead5",
@@ -110,7 +115,8 @@ const COVER_TYPOGRAPHY_PRESETS: Record<
   "quiet-editorial": {
     id: "quiet-editorial",
     label: "Quiet Editorial",
-    fontFamily: 'Georgia, "Times New Roman", serif',
+    fontName: "Cormorant Garamond",
+    fontFamily: '"Cormorant Garamond", Georgia, "Times New Roman", serif',
     fontWeight: 400,
     uppercase: true,
     titleColor: "#f1e7d4",
