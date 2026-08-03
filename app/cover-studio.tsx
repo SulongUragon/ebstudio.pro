@@ -6,6 +6,7 @@ import type { CoverDesign, Manuscript } from "./book-types";
 import {
   contrastingTextStroke,
   getCoverTypographyPreset,
+  normalizeCoverTypographyPreset,
   resolveExactCoverTitle,
   selectCoverTypographyPreset,
   usesAutomaticTitleVariety,
@@ -34,7 +35,16 @@ export default function CoverStudio({
   manuscript: Manuscript;
   onSave: (cover: CoverDesign) => void;
 }) {
-  const [style, setStyle] = useState(manuscript.cover?.style ?? "cinematic");
+  const initialStyle = manuscript.cover?.style ?? "cinematic";
+  const savedTypographyPreset =
+    manuscript.cover?.typographyPreset ?? "cinematic-ivory";
+  const initialTypographyPreset = normalizeCoverTypographyPreset(
+    initialStyle,
+    savedTypographyPreset,
+  );
+  const shouldUpgradeSavedTypography =
+    initialTypographyPreset !== savedTypographyPreset;
+  const [style, setStyle] = useState(initialStyle);
   const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
   const [coverTitle, setCoverTitle] = useState(
     manuscript.cover?.displayTitle ?? manuscript.title,
@@ -78,7 +88,7 @@ export default function CoverStudio({
     manuscript.cover?.authorColor ?? "#e9dfcf",
   );
   const [typographyPreset, setTypographyPreset] = useState(
-    manuscript.cover?.typographyPreset ?? "cinematic-ivory",
+    initialTypographyPreset,
   );
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -86,7 +96,7 @@ export default function CoverStudio({
   const onSaveRef = useRef(onSave);
   const manuscriptRef = useRef(manuscript);
   const coverRef = useRef(manuscript.cover);
-  const skippedInitialAutoApply = useRef(false);
+  const skippedInitialAutoApply = useRef(shouldUpgradeSavedTypography);
   const autoApplySequence = useRef(0);
 
   useEffect(() => {
@@ -332,8 +342,10 @@ export default function CoverStudio({
     setError("");
     try {
       await ensureCoverFontsLoaded();
-      const selectedTypographyPreset =
-        manuscript.cover?.typographyPreset ?? typographyPreset;
+      const selectedTypographyPreset = normalizeCoverTypographyPreset(
+        style,
+        manuscript.cover?.typographyPreset ?? typographyPreset,
+      );
       const imageData = await composeCover(
         sourceImageData,
         exactTitle,
@@ -607,6 +619,9 @@ export default function CoverStudio({
               onChange={(event) => {
                 const nextStyle = event.target.value;
                 setStyle(nextStyle);
+                setTypographyPreset(
+                  normalizeCoverTypographyPreset(nextStyle, typographyPreset),
+                );
                 if (nextStyle === "eb-signature") {
                   setTitleColor("#f1e3cf");
                   setSubtitleColor("#e8d5b8");
