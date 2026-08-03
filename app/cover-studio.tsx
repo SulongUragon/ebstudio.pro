@@ -3,6 +3,7 @@
 import { Check, ImageIcon, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
 import { useState } from "react";
 import type { CoverDesign, Manuscript } from "./book-types";
+import { contrastingTextStroke, resolveExactCoverTitle } from "./cover-utils";
 
 const styles = [
   { id: "cinematic", label: "Cinematic" },
@@ -70,8 +71,10 @@ export default function CoverStudio({
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
+
   async function generateCover() {
-    if (!coverTitle.trim()) {
+    const exactTitle = resolveExactCoverTitle(manuscript, coverTitle);
+    if (!exactTitle) {
       setError("Add a complete cover title before generating.");
       return;
     }
@@ -83,7 +86,7 @@ export default function CoverStudio({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: manuscript.mode,
-          brief: { ...manuscript.brief, title: coverTitle.trim() },
+          brief: { ...manuscript.brief, title: exactTitle },
           subtitle: coverSubtitle.trim(),
           style,
           finish,
@@ -96,7 +99,7 @@ export default function CoverStudio({
       const sourceImageData = String(data.imageData);
       const imageData = await composeCover(
         sourceImageData,
-        coverTitle.trim(),
+        exactTitle,
         coverSubtitle.trim(),
         manuscript.author,
         finish,
@@ -119,7 +122,7 @@ export default function CoverStudio({
         sourceImageData,
         style,
         finish,
-        displayTitle: coverTitle.trim(),
+        displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
         autoFitText,
         titleFontSize,
@@ -145,6 +148,11 @@ export default function CoverStudio({
   }
 
   async function applyTypography() {
+    const exactTitle = resolveExactCoverTitle(manuscript, coverTitle);
+    if (!exactTitle) {
+      setError("Add a complete cover title before applying typography.");
+      return;
+    }
     const sourceImageData = manuscript.cover?.sourceImageData;
     if (!sourceImageData) {
       setError("Generate one new cover first to unlock reusable typography editing.");
@@ -155,7 +163,7 @@ export default function CoverStudio({
     try {
       const imageData = await composeCover(
         sourceImageData,
-        coverTitle.trim(),
+        exactTitle,
         coverSubtitle.trim(),
         manuscript.author,
         finish,
@@ -179,7 +187,7 @@ export default function CoverStudio({
         sourceImageData,
         style,
         finish,
-        displayTitle: coverTitle.trim(),
+        displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
         autoFitText,
         titleFontSize,
@@ -204,9 +212,6 @@ export default function CoverStudio({
     }
   }
 
-  const previewSource =
-    manuscript.cover?.sourceImageData ?? manuscript.cover?.imageData;
-
   return (
     <section className="cover-studio" aria-label="AI Book Cover Studio">
       <div className="cover-studio-heading">
@@ -221,38 +226,10 @@ export default function CoverStudio({
       <div className="cover-studio-grid">
         <div className="cover-preview">
           {manuscript.cover ? (
-            <>
-              <img src={previewSource} alt={`Cover for ${manuscript.title}`} />
-              {manuscript.cover.sourceImageData ? (
-                <div className="cover-live-type" aria-hidden="true">
-                  <strong
-                    className={`align-${titleAlignment}`}
-                    style={{
-                      top: `${titlePosition}%`,
-                      color: titleColor,
-                      fontSize: `${titleFontSize / 12}cqw`,
-                    }}
-                  >
-                    {coverTitle}
-                  </strong>
-                  {coverSubtitle ? (
-                    <em
-                      className={`align-${subtitleAlignment} ${subtitlePosition >= 70 ? "anchor-bottom" : ""}`}
-                      style={{
-                        top: `${subtitlePosition}%`,
-                        color: subtitleColor,
-                        fontSize: `${subtitleFontSize / 12}cqw`,
-                      }}
-                    >
-                      {coverSubtitle}
-                    </em>
-                  ) : null}
-                  <small style={{ color: authorColor }}>
-                    {manuscript.author.toUpperCase()}
-                  </small>
-                </div>
-              ) : null}
-            </>
+            <img
+              src={manuscript.cover.imageData}
+              alt={`Final cover for ${resolveExactCoverTitle(manuscript, coverTitle)}`}
+            />
           ) : (
             <div className="cover-placeholder">
               <ImageIcon size={32} />
@@ -412,8 +389,8 @@ export default function CoverStudio({
             </div>
             <p>
               {autoFitText
-                ? "EB Studio Pro places the exact title, subtitle, and author, then automatically resizes them to fit."
-                : "Manual sizing preserves every word. Reduce the size if the title uses too many lines."}
+                ? "EB Studio Pro places the exact title, subtitle, and author, then automatically resizes them to fit. Select Apply text layout after an edit to refresh the final cover preview."
+                : "Manual sizing preserves every word. Reduce the size if the title uses too many lines, then select Apply text layout."}
             </p>
           </div>
           <span>Choose a visual direction</span>
@@ -571,9 +548,13 @@ async function composeCover(
     (size) => `700 ${size}px Georgia, serif`,
   );
   context.font = `700 ${fittedTitle.size}px Georgia, serif`;
+  context.lineJoin = "round";
+  context.lineWidth = Math.max(3, fittedTitle.size * 0.055);
+  context.strokeStyle = contrastingTextStroke(titleColor);
   const titleX = alignmentX(titleAlignment, canvas.width);
   let y = (canvas.height * titlePosition) / 100;
   for (const line of fittedTitle.lines) {
+    context.strokeText(line, titleX, y);
     context.fillText(line, titleX, y);
     y += fittedTitle.size * 1.04;
   }
@@ -591,6 +572,8 @@ async function composeCover(
       (size) => `italic ${size}px Georgia, serif`,
     );
     context.font = `italic ${fittedSubtitle.size}px Georgia, serif`;
+    context.lineWidth = Math.max(2, fittedSubtitle.size * 0.05);
+    context.strokeStyle = contrastingTextStroke(subtitleColor);
     const subtitleX = alignmentX(subtitleAlignment, canvas.width);
     const subtitleLineHeight = fittedSubtitle.size * 1.3;
     y = (canvas.height * subtitlePosition) / 100;
@@ -598,6 +581,7 @@ async function composeCover(
       y -= fittedSubtitle.lines.length * subtitleLineHeight;
     }
     for (const line of fittedSubtitle.lines) {
+      context.strokeText(line, subtitleX, y);
       context.fillText(line, subtitleX, y);
       y += fittedSubtitle.size * 1.3;
     }
@@ -607,6 +591,9 @@ async function composeCover(
   context.fillStyle = authorColor;
   context.font = "700 48px Arial, sans-serif";
   context.letterSpacing = "3px";
+  context.lineWidth = 3;
+  context.strokeStyle = contrastingTextStroke(authorColor);
+  context.strokeText(author.toUpperCase(), canvas.width / 2, 2380);
   context.fillText(author.toUpperCase(), canvas.width / 2, 2380);
   return canvas.toDataURL("image/jpeg", 0.92);
 }
