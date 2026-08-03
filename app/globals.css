@@ -705,6 +705,53 @@ p {
   padding-top: 2px;
 }
 
+.cover-advanced-settings {
+  overflow: hidden;
+  border: 1px solid rgba(64, 86, 74, 0.22);
+  background: rgba(64, 86, 74, 0.045);
+}
+
+.cover-advanced-settings > summary {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 13px;
+  color: #555650;
+  font-size: 0.7rem;
+  font-weight: 750;
+  list-style: none;
+  cursor: pointer;
+}
+
+.cover-advanced-settings > summary::-webkit-details-marker {
+  display: none;
+}
+
+.cover-advanced-settings > summary::after {
+  content: "+";
+  color: var(--rust);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.cover-advanced-settings[open] > summary::after {
+  content: "−";
+}
+
+.cover-advanced-settings > summary strong {
+  margin-left: auto;
+  color: var(--rust-dark);
+  font-size: 0.66rem;
+}
+
+.cover-advanced-settings .cover-type-controls {
+  padding: 13px;
+  border-top: 1px solid rgba(64, 86, 74, 0.18);
+  background: rgba(255, 254, 253, 0.62);
+}
+
 .cover-type-controls > label:not(.cover-auto-fit) {
   display: grid;
   gap: 5px;
@@ -768,6 +815,24 @@ p {
   border-color: var(--sage);
   background: var(--sage);
   color: white;
+}
+
+.cover-alignment-select {
+  min-width: 112px;
+  min-height: 36px;
+  padding: 0 32px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  outline: 0;
+  background: var(--white);
+  color: #555650;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.cover-alignment-select:focus {
+  border-color: var(--rust);
+  box-shadow: 0 0 0 3px rgba(171, 87, 56, 0.08);
 }
 
 .cover-color-control {
@@ -894,6 +959,36 @@ p {
   color: #555650;
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+.cover-select-control {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.cover-select-control > span {
+  color: #555650;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.cover-select-control > select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 42px 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  outline: 0;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.cover-select-control > select:focus {
+  border-color: var(--rust);
+  box-shadow: 0 0 0 3px rgba(171, 87, 56, 0.08);
 }
 
 .cover-style-options {
