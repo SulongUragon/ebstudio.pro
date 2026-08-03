@@ -854,6 +854,33 @@ p {
   justify-content: flex-start !important;
 }
 
+.cover-title-design-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(171, 87, 56, 0.22);
+  background: rgba(171, 87, 56, 0.055);
+}
+
+.cover-title-design-status > span {
+  color: #555650;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.cover-title-design-status > strong {
+  color: var(--rust-dark);
+  font-size: 0.68rem;
+}
+
+.cover-title-design-status > small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
 .cover-wording > p {
   margin: 0;
   color: var(--sage);
