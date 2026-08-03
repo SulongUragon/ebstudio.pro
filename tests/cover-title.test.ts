@@ -98,6 +98,15 @@ test("real-person covers reject generic condensed and sans title presets", () =>
   );
 });
 
+test("real-person covers use the exact EB Signature title engine", () => {
+  for (const seed of ["cover-a", "cover-b", "cover-c", "cover-d"]) {
+    assert.equal(
+      selectCoverTypographyPreset("photoreal-title", seed),
+      selectCoverTypographyPreset("eb-signature", seed),
+    );
+  }
+});
+
 test("every premium title design uses a distinct embedded font", () => {
   const fonts = [
     getCoverTypographyPreset("classic-gold").fontName,
