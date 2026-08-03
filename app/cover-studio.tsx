@@ -3,7 +3,13 @@
 import { Check, ImageIcon, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
 import { useState } from "react";
 import type { CoverDesign, Manuscript } from "./book-types";
-import { contrastingTextStroke, resolveExactCoverTitle } from "./cover-utils";
+import {
+  contrastingTextStroke,
+  getCoverTypographyPreset,
+  resolveExactCoverTitle,
+  selectCoverTypographyPreset,
+  usesAutomaticTitleVariety,
+} from "./cover-utils";
 
 const styles = [
   { id: "cinematic", label: "Cinematic" },
@@ -68,6 +74,9 @@ export default function CoverStudio({
   const [authorColor, setAuthorColor] = useState(
     manuscript.cover?.authorColor ?? "#e9dfcf",
   );
+  const [typographyPreset, setTypographyPreset] = useState(
+    manuscript.cover?.typographyPreset ?? "cinematic-ivory",
+  );
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
@@ -97,6 +106,32 @@ export default function CoverStudio({
         throw new Error(String(data.error ?? "The AI cover could not be generated."));
       }
       const sourceImageData = String(data.imageData);
+      const shouldVaryTitleDesign = usesAutomaticTitleVariety(style);
+      const selectedTypographyPreset = shouldVaryTitleDesign
+        ? selectCoverTypographyPreset(style, sourceImageData)
+        : typographyPreset;
+      const typography = getCoverTypographyPreset(selectedTypographyPreset);
+      const nextTitleFontSize = shouldVaryTitleDesign
+        ? typography.titleSize
+        : titleFontSize;
+      const nextTitlePosition = shouldVaryTitleDesign
+        ? typography.titlePosition
+        : titlePosition;
+      const nextTitleAlignment = shouldVaryTitleDesign
+        ? typography.titleAlignment
+        : titleAlignment;
+      const nextSubtitleAlignment = shouldVaryTitleDesign
+        ? typography.titleAlignment
+        : subtitleAlignment;
+      const nextTitleColor = shouldVaryTitleDesign
+        ? typography.titleColor
+        : titleColor;
+      const nextSubtitleColor = shouldVaryTitleDesign
+        ? typography.subtitleColor
+        : subtitleColor;
+      const nextAuthorColor = shouldVaryTitleDesign
+        ? typography.authorColor
+        : authorColor;
       const imageData = await composeCover(
         sourceImageData,
         exactTitle,
@@ -104,17 +139,26 @@ export default function CoverStudio({
         manuscript.author,
         finish,
         style,
+        selectedTypographyPreset,
         autoFitText,
-        titleFontSize,
+        nextTitleFontSize,
         subtitleFontSize,
-        titlePosition,
+        nextTitlePosition,
         subtitlePosition,
-        titleAlignment,
-        subtitleAlignment,
-        titleColor,
-        subtitleColor,
-        authorColor,
+        nextTitleAlignment,
+        nextSubtitleAlignment,
+        nextTitleColor,
+        nextSubtitleColor,
+        nextAuthorColor,
       );
+      setTypographyPreset(selectedTypographyPreset);
+      setTitleFontSize(nextTitleFontSize);
+      setTitlePosition(nextTitlePosition);
+      setTitleAlignment(nextTitleAlignment);
+      setSubtitleAlignment(nextSubtitleAlignment);
+      setTitleColor(nextTitleColor);
+      setSubtitleColor(nextSubtitleColor);
+      setAuthorColor(nextAuthorColor);
       onSave({
         imageData,
         width: 1600,
@@ -125,15 +169,16 @@ export default function CoverStudio({
         displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
         autoFitText,
-        titleFontSize,
+        titleFontSize: nextTitleFontSize,
         subtitleFontSize,
-        titlePosition,
+        titlePosition: nextTitlePosition,
         subtitlePosition,
-        titleAlignment,
-        subtitleAlignment,
-        titleColor,
-        subtitleColor,
-        authorColor,
+        titleAlignment: nextTitleAlignment,
+        subtitleAlignment: nextSubtitleAlignment,
+        titleColor: nextTitleColor,
+        subtitleColor: nextSubtitleColor,
+        authorColor: nextAuthorColor,
+        typographyPreset: selectedTypographyPreset,
         createdAt: new Date().toISOString(),
       });
     } catch (coverError) {
@@ -161,6 +206,8 @@ export default function CoverStudio({
     setApplying(true);
     setError("");
     try {
+      const selectedTypographyPreset =
+        manuscript.cover?.typographyPreset ?? typographyPreset;
       const imageData = await composeCover(
         sourceImageData,
         exactTitle,
@@ -168,6 +215,7 @@ export default function CoverStudio({
         manuscript.author,
         finish,
         style,
+        selectedTypographyPreset,
         autoFitText,
         titleFontSize,
         subtitleFontSize,
@@ -179,6 +227,7 @@ export default function CoverStudio({
         subtitleColor,
         authorColor,
       );
+      setTypographyPreset(selectedTypographyPreset);
       onSave({
         ...manuscript.cover,
         imageData,
@@ -199,6 +248,7 @@ export default function CoverStudio({
         titleColor,
         subtitleColor,
         authorColor,
+        typographyPreset: selectedTypographyPreset,
         createdAt: manuscript.cover?.createdAt ?? new Date().toISOString(),
       });
     } catch (applyError) {
@@ -269,6 +319,11 @@ export default function CoverStudio({
                 />
                 <span>Auto Fit typography</span>
               </label>
+              <div className="cover-title-design-status">
+                <span>Title design</span>
+                <strong>{getCoverTypographyPreset(typographyPreset).label}</strong>
+                <small>+ Exact Title directions rotate this automatically on every new cover.</small>
+              </div>
               <label>
                 <span>Title size <strong>{autoFitText ? "Auto" : `${titleFontSize}px`}</strong></span>
                 <input
@@ -418,11 +473,11 @@ export default function CoverStudio({
           </div>
           <p>
             {style === "photoreal-title"
-              ? "AI creates the lifelike human artwork; EB Studio Pro places the exact title, subtitle, and author."
+              ? "AI creates the lifelike human artwork; EB Studio Pro always places the exact title using a varied premium design."
               : style === "minimal-real-title"
-                ? "AI creates a minimalist still life; EB Studio Pro places the exact title, subtitle, and author."
+                ? "AI creates a minimalist still life; EB Studio Pro always places the exact title using a varied premium design."
                 : style === "fully-loaded-title"
-                  ? "AI builds the dense cinematic artwork; EB Studio Pro places the exact title, subtitle, and author."
+                  ? "AI builds the dense cinematic artwork; EB Studio Pro always places the exact title using a varied premium design."
                   : style === "eb-signature"
                 ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
                 : "The title, subtitle, and author are placed separately for sharper export quality."}
@@ -471,6 +526,7 @@ async function composeCover(
   author: string,
   finish: string,
   style: string,
+  typographyPreset: string,
   autoFitText: boolean,
   titleFontSize: number,
   subtitleFontSize: number,
@@ -527,6 +583,8 @@ async function composeCover(
   }
 
   const isEbSignature = style === "eb-signature";
+  const typography = getCoverTypographyPreset(typographyPreset);
+  const displayTitle = typography.uppercase ? title.toUpperCase() : title;
 
   context.textAlign = titleAlignment;
   context.textBaseline = "top";
@@ -536,18 +594,21 @@ async function composeCover(
     : "rgba(0,0,0,.55)";
   context.shadowBlur = 24;
   context.shadowOffsetY = 6;
+  context.letterSpacing = `${typography.letterSpacing}px`;
 
   const titleStartSize = titleFontSize;
   const fittedTitle = fitText(
     context,
-    title,
-    1320,
-    4,
+    displayTitle,
+    typography.maxWidth,
+    typography.maxLines,
     titleStartSize,
-    autoFitText ? 62 : titleFontSize,
-    (size) => `700 ${size}px Georgia, serif`,
+    autoFitText ? typography.minSize : titleFontSize,
+    (size) => `${typography.fontWeight} ${size}px ${typography.fontFamily}`,
+    (value, maxWidth) =>
+      wrapCoverTitle(context, value, maxWidth, typography.id),
   );
-  context.font = `700 ${fittedTitle.size}px Georgia, serif`;
+  context.font = `${typography.fontWeight} ${fittedTitle.size}px ${typography.fontFamily}`;
   context.lineJoin = "round";
   context.lineWidth = Math.max(3, fittedTitle.size * 0.055);
   context.strokeStyle = contrastingTextStroke(titleColor);
@@ -556,10 +617,22 @@ async function composeCover(
   for (const line of fittedTitle.lines) {
     context.strokeText(line, titleX, y);
     context.fillText(line, titleX, y);
-    y += fittedTitle.size * 1.04;
+    y += fittedTitle.size * typography.lineHeight;
   }
 
+  if (typography.rule) {
+    drawTitleRule(
+      context,
+      titleAlignment,
+      titleX,
+      y + fittedTitle.size * 0.18,
+      titleColor,
+    );
+  }
+  const titleBottom = y + (typography.rule ? fittedTitle.size * 0.35 : 0);
+
   if (subtitle) {
+    context.letterSpacing = "0px";
     context.textAlign = subtitleAlignment;
     context.fillStyle = subtitleColor;
     const fittedSubtitle = fitText(
@@ -579,6 +652,8 @@ async function composeCover(
     y = (canvas.height * subtitlePosition) / 100;
     if (subtitlePosition >= 70) {
       y -= fittedSubtitle.lines.length * subtitleLineHeight;
+    } else {
+      y = Math.max(y, titleBottom + fittedTitle.size * 0.25);
     }
     for (const line of fittedSubtitle.lines) {
       context.strokeText(line, subtitleX, y);
@@ -596,6 +671,33 @@ async function composeCover(
   context.strokeText(author.toUpperCase(), canvas.width / 2, 2380);
   context.fillText(author.toUpperCase(), canvas.width / 2, 2380);
   return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+function drawTitleRule(
+  context: CanvasRenderingContext2D,
+  alignment: "left" | "center" | "right",
+  anchorX: number,
+  y: number,
+  color: string,
+) {
+  const width = 250;
+  const startX =
+    alignment === "left"
+      ? anchorX
+      : alignment === "right"
+        ? anchorX - width
+        : anchorX - width / 2;
+  context.save();
+  context.shadowBlur = 0;
+  context.shadowOffsetY = 0;
+  context.globalAlpha = 0.82;
+  context.lineWidth = 3;
+  context.strokeStyle = color;
+  context.beginPath();
+  context.moveTo(startX, y);
+  context.lineTo(startX + width, y);
+  context.stroke();
+  context.restore();
 }
 
 function drawImageCover(
@@ -656,14 +758,45 @@ function fitText(
   startSize: number,
   minSize: number,
   font: (size: number) => string,
+  wrap: (text: string, maxWidth: number) => string[] = (value, width) =>
+    wrapText(context, value, width),
 ) {
   for (let size = startSize; size >= minSize; size -= 2) {
     context.font = font(size);
-    const lines = wrapText(context, text, maxWidth);
+    const lines = wrap(text, maxWidth);
     if (lines.length <= maxLines) return { lines, size };
   }
   context.font = font(minSize);
-  return { lines: wrapText(context, text, maxWidth), size: minSize };
+  return { lines: wrap(text, maxWidth), size: minSize };
+}
+
+function wrapCoverTitle(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  preset: string,
+) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (
+    preset === "classic-gold" &&
+    words.length >= 4 &&
+    words.length <= 6 &&
+    /^(the|a|an)$/i.test(words[0])
+  ) {
+    const posterLines = [
+      words[0],
+      words.slice(1, -1).join(" "),
+      words.at(-1) ?? "",
+    ];
+    if (
+      posterLines.every(
+        (line) => line && context.measureText(line).width <= maxWidth,
+      )
+    ) {
+      return posterLines;
+    }
+  }
+  return wrapText(context, text, maxWidth);
 }
 
 function wrapText(

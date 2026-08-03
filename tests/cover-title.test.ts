@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Manuscript } from "../app/book-types";
-import { contrastingTextStroke, resolveExactCoverTitle } from "../app/cover-utils";
+import {
+  contrastingTextStroke,
+  getCoverTypographyPreset,
+  resolveExactCoverTitle,
+  selectCoverTypographyPreset,
+  usesAutomaticTitleVariety,
+} from "../app/cover-utils";
 
 const manuscript = {
   id: "cover-title-fixture",
@@ -42,4 +48,27 @@ test("cover title preserves the user's exact non-empty wording", () => {
 test("title outline contrasts with both light and dark text", () => {
   assert.match(contrastingTextStroke("#fffdf7"), /0,0,0/);
   assert.match(contrastingTextStroke("#101418"), /255,255,255/);
+});
+
+test("exact-title directions rotate through multiple premium title designs", () => {
+  const designs = new Set(
+    Array.from({ length: 24 }, (_, index) =>
+      selectCoverTypographyPreset("minimal-real-title", `artwork-${index}`),
+    ),
+  );
+  assert.ok(designs.size >= 3);
+  assert.equal(usesAutomaticTitleVariety("minimal-real-title"), true);
+  assert.equal(usesAutomaticTitleVariety("cinematic"), false);
+});
+
+test("selected title designs are stable for the same generated artwork", () => {
+  const selected = selectCoverTypographyPreset(
+    "photoreal-title",
+    "generated-artwork-data",
+  );
+  assert.equal(
+    selectCoverTypographyPreset("photoreal-title", "generated-artwork-data"),
+    selected,
+  );
+  assert.equal(getCoverTypographyPreset(selected).id, selected);
 });

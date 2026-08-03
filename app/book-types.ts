@@ -47,6 +47,7 @@ export type CoverDesign = {
   titleColor?: string;
   subtitleColor?: string;
   authorColor?: string;
+  typographyPreset?: string;
   createdAt: string;
 };
 
