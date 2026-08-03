@@ -96,7 +96,9 @@ export default function CoverStudio({
   const onSaveRef = useRef(onSave);
   const manuscriptRef = useRef(manuscript);
   const coverRef = useRef(manuscript.cover);
-  const skippedInitialAutoApply = useRef(shouldUpgradeSavedTypography);
+  const skippedInitialAutoApply = useRef(
+    shouldUpgradeSavedTypography || initialStyle === "photoreal-title",
+  );
   const autoApplySequence = useRef(0);
 
   useEffect(() => {
