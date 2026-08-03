@@ -160,8 +160,7 @@ const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
   "photoreal-title": [
     "classic-gold",
     "cinematic-ivory",
-    "dramatic-stacked",
-    "modern-clean",
+    "quiet-editorial",
   ],
   "minimal-real-title": [
     "classic-gold",
@@ -225,4 +224,11 @@ export function selectCoverTypographyPreset(style: string, seed: string) {
 
 export function usesAutomaticTitleVariety(style: string) {
   return Object.hasOwn(STYLE_PRESET_POOLS, style);
+}
+
+export function normalizeCoverTypographyPreset(style: string, id?: string) {
+  const pool = STYLE_PRESET_POOLS[style] ?? ALL_PRESETS;
+  return pool.includes(id as CoverTypographyPresetId)
+    ? (id as CoverTypographyPresetId)
+    : pool[0];
 }
