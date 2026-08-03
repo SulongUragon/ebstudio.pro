@@ -72,3 +72,21 @@ test("selected title designs are stable for the same generated artwork", () => {
   );
   assert.equal(getCoverTypographyPreset(selected).id, selected);
 });
+
+test("every premium title design uses a distinct embedded font", () => {
+  const fonts = [
+    getCoverTypographyPreset("classic-gold").fontName,
+    getCoverTypographyPreset("cinematic-ivory").fontName,
+    getCoverTypographyPreset("modern-clean").fontName,
+    getCoverTypographyPreset("dramatic-stacked").fontName,
+    getCoverTypographyPreset("quiet-editorial").fontName,
+  ];
+  assert.deepEqual(fonts, [
+    "Cinzel",
+    "Playfair Display",
+    "Montserrat",
+    "Bebas Neue",
+    "Cormorant Garamond",
+  ]);
+  assert.equal(new Set(fonts).size, 5);
+});
