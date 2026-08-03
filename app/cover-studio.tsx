@@ -342,8 +342,10 @@ export default function CoverStudio({
     setError("");
     try {
       await ensureCoverFontsLoaded();
-      const selectedTypographyPreset =
-        manuscript.cover?.typographyPreset ?? typographyPreset;
+      const selectedTypographyPreset = normalizeCoverTypographyPreset(
+        style,
+        manuscript.cover?.typographyPreset ?? typographyPreset,
+      );
       const imageData = await composeCover(
         sourceImageData,
         exactTitle,
