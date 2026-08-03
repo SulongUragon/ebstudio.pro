@@ -25,7 +25,14 @@ import type {
   SectionContent,
   SectionPlan,
 } from "./book-types";
-import { exportBundle, exportDocx, exportEpub, exportPdf } from "./exporters";
+import {
+  exportBundle,
+  exportCover,
+  exportDocx,
+  exportEpub,
+  exportPdf,
+  getKdpReadiness,
+} from "./exporters";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
 import ExistingEbookOptimizer from "./existing-ebook-optimizer";
@@ -433,7 +440,7 @@ export default function EbookStudio() {
     setActiveProvider(null);
   }
 
-  async function runExport(format: "bundle" | "docx" | "pdf" | "epub") {
+  async function runExport(format: "bundle" | "cover" | "docx" | "pdf" | "epub") {
     if (!manuscript || manuscript.sections.length === 0) return;
     setExporting(format);
     setError("");
@@ -442,6 +449,7 @@ export default function EbookStudio() {
       if (format === "docx") await exportDocx(manuscript);
       if (format === "pdf") await exportPdf(manuscript);
       if (format === "epub") await exportEpub(manuscript);
+      if (format === "cover") await exportCover(manuscript);
     } catch (exportError) {
       const detail =
         exportError instanceof Error && exportError.message
@@ -871,7 +879,7 @@ function BookPreview({
   activeSection: number;
   setActiveSection: (index: number) => void;
   exporting: string;
-  onExport: (format: "bundle" | "docx" | "pdf" | "epub") => void;
+  onExport: (format: "bundle" | "cover" | "docx" | "pdf" | "epub") => void;
   activeProvider: ActiveAIProvider | null;
   onSaveCover: (cover: NonNullable<Manuscript["cover"]>) => void;
 }) {
@@ -915,6 +923,7 @@ function BookPreview({
     manuscript.sections[manuscript.sections.length - 1] ??
     null;
   const isComplete = status === "complete";
+  const kdpReadiness = getKdpReadiness(manuscript);
 
   return (
     <aside className="preview-panel manuscript-panel" aria-live="polite">
@@ -937,10 +946,10 @@ function BookPreview({
             <button
               className="bundle-export"
               onClick={() => onExport("bundle")}
-              disabled={Boolean(exporting)}
+              disabled={Boolean(exporting) || !kdpReadiness.ready}
             >
               <Download size={16} />
-              {exporting === "bundle" ? "Packaging all formats" : "Complete ZIP"}
+              {exporting === "bundle" ? "Packaging all formats" : "KDP Package"}
             </button>
             <button onClick={() => onExport("docx")} disabled={Boolean(exporting)}>
               <FileText size={16} />
@@ -950,13 +959,34 @@ function BookPreview({
               <FileText size={16} />
               {exporting === "pdf" ? "Preparing" : "PDF"}
             </button>
-            <button onClick={() => onExport("epub")} disabled={Boolean(exporting)}>
+            <button
+              onClick={() => onExport("epub")}
+              disabled={Boolean(exporting) || !kdpReadiness.ready}
+            >
               <Download size={16} />
               {exporting === "epub" ? "Preparing" : "EPUB"}
+            </button>
+            <button
+              onClick={() => onExport("cover")}
+              disabled={Boolean(exporting) || !kdpReadiness.ready}
+            >
+              <Download size={16} />
+              {exporting === "cover" ? "Preparing" : "Cover JPG"}
             </button>
           </div>
         ) : null}
       </div>
+
+      {isComplete ? (
+        <div className={`kdp-readiness ${kdpReadiness.ready ? "ready" : "blocked"}`} role="status">
+          <strong>{kdpReadiness.ready ? "KDP package ready" : "KDP preflight"}</strong>
+          <span>
+            {kdpReadiness.ready
+              ? "DOCX, EPUB, and the separate 1600 × 2560 cover can now be exported."
+              : kdpReadiness.errors[0]}
+          </span>
+        </div>
+      ) : null}
 
       <div className="progress-track" aria-label={`${progress}% complete`}>
         <span style={{ width: `${progress}%` }} />

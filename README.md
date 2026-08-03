@@ -2,7 +2,8 @@
 
 EB Studio Pro is an AI ebook creation suite for generating complete fiction and
 non-fiction books chapter by chapter. Authors can preview the finished book and
-export it as EPUB, PDF, or DOCX.
+export a KDP production package with a Kindle Create DOCX, reflowable EPUB,
+1600 × 2560 JPEG cover, PDF reference copy, and upload guide.
 
 ## Features
 
@@ -10,7 +11,11 @@ export it as EPUB, PDF, or DOCX.
 - Structured introduction, chapters, and conclusion
 - OpenAI generation with optional Anthropic fallback
 - Chapter-by-chapter progress and preview
-- EPUB, PDF, and DOCX export with a cover page
+- KDP preflight status before EPUB and package export
+- Kindle Create-ready DOCX with semantic chapter headings, true italics, and linked Contents
+- Reflowable EPUB 3 with HTML TOC, logical navigation, NCX fallback, metadata, and internal cover declaration
+- Separate 1600 × 2560 KDP marketing cover JPEG
+- Complete KDP ZIP package plus PDF reference copy and upload guide
 - Responsive interface for desktop and mobile
 
 ## Local setup

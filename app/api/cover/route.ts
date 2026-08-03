@@ -69,38 +69,24 @@ export async function POST(request: Request) {
         ? "Palette requirement: use dark forest green, deep navy, burnished copper or rust, warm parchment or muted gold, and charcoal as the dominant and nearly exclusive color system. Preserve natural tonal variation within those hues. Do not introduce neon colors, rainbow palettes, bright candy colors, or unrelated dominant hues."
         : "";
 
-    const aiPrintedTitle =
-      style === "photoreal-title" ||
-      style === "minimal-real-title" ||
-      style === "fully-loaded-title";
     const subjectDirection =
       style === "minimal-real-title"
         ? "Use one or two convincingly real physical objects as the sole visual subject. Choose objects that symbolize this specific book, with tactile material detail, restrained shadows, clean negative space, and a deliberate minimalist composition. Do not include people, faces, hands, silhouettes, crowds, or human figures. Avoid decorative clutter and generic stock-photo props."
         : style === "fully-loaded-title"
           ? "Build a visually crowded, fully loaded, maximalist cover using multiple layered scenes, relevant characters when appropriate, symbolic objects, environmental storytelling, foreground and background details, dramatic light, atmosphere, and controlled depth. Every element must connect directly to this specific book. Make it dense, immersive, cinematic, and high-impact without becoming random or unreadable. Keep a deliberate visual hierarchy and preserve a strong title zone."
-          : "Feature a convincingly real human subject whose identity, emotion, wardrobe, environment, and pose are meaningfully connected to this specific book. Preserve natural skin texture, realistic eyes, anatomically correct hands, believable proportions, and cinematic editorial lighting. Avoid plastic skin, uncanny faces, extra fingers, malformed anatomy, and generic stock-photo posing.";
-    const prompt = aiPrintedTitle
-      ? `Create a complete premium front cover for a ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
-
-Exact title to print once: "${body.brief.title}"
-${bookContext}
-Visual direction: ${direction}.
-Cover finish: ${finishDirection}.
-
-${subjectDirection}
-
-Integrate the exact title into the artwork as intentional professional book-cover typography. The title must be spelled exactly as provided, fully readable, visually balanced, and readable at thumbnail size. Render the title once only. Do not add a subtitle, author name, tagline, badge, logo, watermark, publisher mark, or any other letters or words.
-
-Portrait front-cover composition, 2:3 aspect ratio, edge-to-edge artwork, premium commercial publishing quality. Do not show a physical book, device, mockup, frame, or border.`
-      : `Create original front-cover artwork for a premium ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
+          : style === "photoreal-title"
+            ? "Feature a convincingly real human subject whose identity, emotion, wardrobe, environment, and pose are meaningfully connected to this specific book. Preserve natural skin texture, realistic eyes, anatomically correct hands, believable proportions, and cinematic editorial lighting. Avoid plastic skin, uncanny faces, extra fingers, malformed anatomy, and generic stock-photo posing."
+            : "";
+    const prompt = `Create original front-cover artwork for a premium ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
 
 Book title for creative context only: ${body.brief.title}
 ${bookContext}
 Visual direction: ${direction}.
 Cover finish: ${finishDirection}.
 ${paletteGuard}
+${subjectDirection}
 
-The cover finish should be expressed through lighting, tonal depth, surface character, and color treatment while keeping the artwork clean and the typography zones readable. The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Portrait book-cover composition, 2:3 aspect ratio. Create a strong focal image with clear visual hierarchy and generous quiet space for typography in the upper and lower thirds. Edge-to-edge artwork, commercially polished, emotionally specific to the book, readable at thumbnail size. Do not render any words, letters, title, author name, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
+The cover finish should be expressed through lighting, tonal depth, surface character, and color treatment while keeping the artwork clean and the typography zones readable. The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Compose for a 5:8 portrait book cover, keeping all important subjects inside the central 85% safe area so the source can be cropped cleanly. Create a strong focal image with clear visual hierarchy and generous quiet space for deterministic typography in the upper and lower thirds. Edge-to-edge artwork, commercially polished, emotionally specific to the book, readable at thumbnail size. Do not render any words, letters, numbers, title, author name, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",

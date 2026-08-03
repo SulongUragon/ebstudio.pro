@@ -1,117 +1,359 @@
-import type { Manuscript } from "./book-types";
+import type { Manuscript, Mode, SectionKind } from "./book-types";
+import type { ParagraphChild, TextRun as DocxTextRun } from "docx";
+
+type InlineToken = {
+  text: string;
+  bold?: boolean;
+  italics?: boolean;
+  code?: boolean;
+};
+
+type RichBlock =
+  | { type: "paragraph"; inlines: InlineToken[] }
+  | { type: "heading"; level: 2 | 3; inlines: InlineToken[] }
+  | { type: "list"; ordered: boolean; items: InlineToken[][] }
+  | { type: "scene-break" };
+
+type NormalizedSection = {
+  kind: SectionKind;
+  number: number;
+  title: string;
+  content: string;
+};
+
+type NormalizedBook = {
+  id: string;
+  mode: Mode;
+  title: string;
+  subtitle: string;
+  author: string;
+  createdAt: string;
+  coverImage: string;
+  sections: NormalizedSection[];
+};
+
+export type KdpReadiness = {
+  ready: boolean;
+  errors: string[];
+  warnings: string[];
+};
+
+export function getKdpReadiness(book: Manuscript): KdpReadiness {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const title = cleanText(book?.title).trim();
+  const author = cleanText(book?.author).trim();
+  const sections = Array.isArray(book?.sections) ? book.sections : [];
+
+  if (!title || title === "Untitled Book") errors.push("Add the exact final book title.");
+  if (!author || author === "Unknown Author") errors.push("Add the exact author name.");
+  if (!sections.length) errors.push("Generate at least one complete manuscript section.");
+  if (book?.plan?.length && sections.length !== book.plan.length) {
+    errors.push(`Complete all ${book.plan.length} planned sections.`);
+  }
+  if (sections.some((section) => !cleanText(section?.content).trim())) {
+    errors.push("Every manuscript section must contain finished text.");
+  }
+
+  const cover = book?.cover;
+  if (!cover?.imageData) {
+    errors.push("Generate the final KDP cover.");
+  } else {
+    if (!/^data:image\/jpe?g;base64,/i.test(cover.imageData)) {
+      errors.push("The KDP cover must be a JPEG.");
+    }
+    if (cover.width !== 1600 || cover.height !== 2560) {
+      errors.push("Regenerate the cover at the KDP-ready 1600 × 2560 size.");
+    }
+    if (cleanText(cover.displayTitle).trim() !== title) {
+      errors.push("The cover title must exactly match the book title.");
+    }
+    if (book.subtitle && cleanText(cover.displaySubtitle).trim() !== cleanText(book.subtitle).trim()) {
+      errors.push("The cover subtitle must exactly match the book subtitle.");
+    }
+  }
+
+  if (title.length > 180) warnings.push("The title is unusually long; inspect its cover fit carefully.");
+  return { ready: errors.length === 0, errors, warnings };
+}
 
 export async function exportDocx(book: Manuscript, shouldDownload = true) {
   const exportBook = normalizeExportBook(book);
   const {
     AlignmentType,
+    Bookmark,
     Document,
     HeadingLevel,
-    ImageRun,
+    InternalHyperlink,
+    LevelFormat,
     Packer,
     PageBreak,
     Paragraph,
     TextRun,
   } = await import("docx");
 
-  const coverChildren = exportBook.coverImage
-    ? [
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [
-            new ImageRun({
-              data: dataUriToBytes(exportBook.coverImage),
-              transformation: { width: 408, height: 612 },
-              type: "jpg",
-            }),
-          ],
-        }),
-        new Paragraph({ children: [new PageBreak()] }),
-      ]
-    : [
-        new Paragraph({ spacing: { before: 2800 } }),
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [
-            new TextRun({
-              text: exportBook.title,
-              bold: true,
-              size: 52,
-              font: "Georgia",
-              color: "8F442B",
-            }),
-          ],
-        }),
-        ...(exportBook.subtitle
-          ? [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 260 },
-                children: [
-                  new TextRun({
-                    text: exportBook.subtitle,
-                    italics: true,
-                    size: 25,
-                    font: "Georgia",
-                    color: "5F5A53",
-                  }),
-                ],
-              }),
-            ]
-          : []),
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 850 },
-          children: [new TextRun({ text: `by ${exportBook.author}`, size: 24, font: "Arial" })],
-        }),
-        new Paragraph({ children: [new PageBreak()] }),
-      ];
-
   const children = [
-    ...coverChildren,
-    new Paragraph({ text: "Contents", heading: HeadingLevel.TITLE }),
-    ...exportBook.sections.map(
-      (section) =>
-        new Paragraph({
-          text: section.kind === "chapter" ? `Chapter ${section.number}: ${section.title}` : section.title,
-          spacing: { after: 120 },
+    new Paragraph({ spacing: { before: 2500 } }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [
+        new TextRun({
+          text: exportBook.title,
+          bold: true,
+          size: 52,
+          font: "Georgia",
+          color: "173B33",
         }),
+      ],
+    }),
+    ...(exportBook.subtitle
+      ? [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 280 },
+            children: [
+              new TextRun({
+                text: exportBook.subtitle,
+                italics: true,
+                size: 25,
+                font: "Georgia",
+                color: "5F5A53",
+              }),
+            ],
+          }),
+        ]
+      : []),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 850 },
+      children: [new TextRun({ text: `by ${exportBook.author}`, size: 24, font: "Arial" })],
+    }),
+    new Paragraph({ children: [new PageBreak()] }),
+    new Paragraph({ text: "Copyright", style: "KdpFrontMatterTitle" }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 640, after: 240 },
+      children: [
+        new TextRun({
+          text: `Copyright © ${copyrightYear(exportBook.createdAt)} by ${exportBook.author}`,
+          font: "Georgia",
+          size: 22,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: "All rights reserved.", font: "Georgia", size: 22 })],
+    }),
+    new Paragraph({ children: [new PageBreak()] }),
+    new Paragraph({ text: "Contents", style: "KdpContentsTitle" }),
+    ...exportBook.sections.map((section, index) =>
+      new Paragraph({
+        style: "KdpContentsEntry",
+        children: [
+          new InternalHyperlink({
+            anchor: sectionBookmark(index),
+            children: [
+              new TextRun({ text: sectionTocLabel(section, exportBook.mode), style: "Hyperlink" }),
+            ],
+          }),
+        ],
+      }),
     ),
-    ...exportBook.sections.flatMap((section) => [
+  ];
+
+  exportBook.sections.forEach((section, index) => {
+    const headingText = sectionTocLabel(section, exportBook.mode);
+    children.push(
       new Paragraph({ children: [new PageBreak()] }),
       new Paragraph({
-        text: exportSectionLabel(section),
-        heading: HeadingLevel.HEADING_2,
-        spacing: { after: shouldShowExportTitle(section) ? 140 : 320 },
-      }),
-      ...(shouldShowExportTitle(section)
-        ? [
-            new Paragraph({
-              text: section.title,
-              heading: HeadingLevel.TITLE,
-              spacing: { after: 320 },
-            }),
-          ]
-        : []),
-      ...toPlainParagraphs(section.content, section.title, exportSectionLabel(section)).map(
-        (paragraph) =>
-          new Paragraph({
-            text: paragraph,
-            spacing: { after: 180, line: 360 },
+        heading: HeadingLevel.HEADING_1,
+        children: [
+          new Bookmark({
+            id: sectionBookmark(index),
+            children: [new TextRun({ text: headingText, bold: true, font: "Georgia" })],
           }),
-      ),
-    ]),
-  ];
+        ],
+      }),
+    );
+
+    let firstBodyParagraph = true;
+    for (const block of parseRichBlocks(section.content, section.title, headingText)) {
+      if (block.type === "scene-break") {
+        children.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            style: "KdpSceneBreak",
+            children: [new TextRun({ text: "* * *", font: "Georgia" })],
+          }),
+        );
+        firstBodyParagraph = true;
+        continue;
+      }
+      if (block.type === "heading") {
+        children.push(
+          new Paragraph({
+            heading: block.level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
+            children: docxRuns(block.inlines, TextRun),
+          }),
+        );
+        firstBodyParagraph = true;
+        continue;
+      }
+      if (block.type === "list") {
+        block.items.forEach((item) => {
+          children.push(
+            new Paragraph({
+              style: "KdpList",
+              ...(block.ordered
+                ? { numbering: { reference: "kdp-numbered-list", level: 0 } }
+                : { bullet: { level: 0 } }),
+              children: docxRuns(item, TextRun),
+            }),
+          );
+        });
+        firstBodyParagraph = true;
+        continue;
+      }
+      children.push(
+        new Paragraph({
+          style:
+            exportBook.mode === "fiction"
+              ? firstBodyParagraph
+                ? "KdpFictionFirst"
+                : "KdpFictionBody"
+              : "KdpNonfictionBody",
+          children: docxRuns(block.inlines, TextRun),
+        }),
+      );
+      firstBodyParagraph = false;
+    }
+  });
 
   const document = new Document({
     creator: exportBook.author,
     title: exportBook.title,
+    subject: exportBook.subtitle,
     description: exportBook.subtitle,
-    sections: [{ properties: {}, children }],
+    keywords: "Kindle ebook; KDP; EB Studio Pro",
+    styles: {
+      default: {
+        document: {
+          run: { font: "Georgia", size: 22, color: "191A18" },
+          paragraph: { spacing: { line: 360 } },
+        },
+        heading1: {
+          run: { font: "Georgia", size: 34, bold: true, color: "191A18" },
+          paragraph: { spacing: { before: 0, after: 360 }, keepNext: true },
+        },
+        heading2: {
+          run: { font: "Georgia", size: 28, bold: true, color: "191A18" },
+          paragraph: { spacing: { before: 280, after: 180 }, keepNext: true },
+        },
+        heading3: {
+          run: { font: "Georgia", size: 24, bold: true, color: "191A18" },
+          paragraph: { spacing: { before: 240, after: 140 }, keepNext: true },
+        },
+      },
+      paragraphStyles: [
+        {
+          id: "KdpFrontMatterTitle",
+          name: "KDP Front Matter Title",
+          basedOn: "Normal",
+          next: "Normal",
+          quickFormat: true,
+          run: { font: "Georgia", size: 34, bold: true },
+          paragraph: { alignment: AlignmentType.CENTER, spacing: { before: 900, after: 300 } },
+        },
+        {
+          id: "KdpContentsTitle",
+          name: "KDP Contents Title",
+          basedOn: "Normal",
+          next: "Normal",
+          quickFormat: true,
+          run: { font: "Georgia", size: 34, bold: true },
+          paragraph: { spacing: { after: 320 } },
+        },
+        {
+          id: "KdpContentsEntry",
+          name: "KDP Contents Entry",
+          basedOn: "Normal",
+          next: "KdpContentsEntry",
+          run: { font: "Georgia", size: 22 },
+          paragraph: { spacing: { after: 140 } },
+        },
+        {
+          id: "KdpFictionFirst",
+          name: "KDP Fiction First Paragraph",
+          basedOn: "Normal",
+          next: "KdpFictionBody",
+          run: { font: "Georgia", size: 22 },
+          paragraph: { spacing: { line: 360, after: 0 } },
+        },
+        {
+          id: "KdpFictionBody",
+          name: "KDP Fiction Body",
+          basedOn: "Normal",
+          next: "KdpFictionBody",
+          run: { font: "Georgia", size: 22 },
+          paragraph: { indent: { firstLine: 288 }, spacing: { line: 360, after: 0 } },
+        },
+        {
+          id: "KdpNonfictionBody",
+          name: "KDP Nonfiction Body",
+          basedOn: "Normal",
+          next: "KdpNonfictionBody",
+          run: { font: "Georgia", size: 22 },
+          paragraph: { spacing: { line: 360, after: 180 } },
+        },
+        {
+          id: "KdpList",
+          name: "KDP List",
+          basedOn: "Normal",
+          next: "KdpList",
+          run: { font: "Georgia", size: 22 },
+          paragraph: { spacing: { line: 330, after: 80 } },
+        },
+        {
+          id: "KdpSceneBreak",
+          name: "KDP Scene Break",
+          basedOn: "Normal",
+          next: "KdpFictionFirst",
+          run: { font: "Georgia", size: 22 },
+          paragraph: { spacing: { before: 220, after: 220 }, keepNext: true },
+        },
+      ],
+    },
+    numbering: {
+      config: [
+        {
+          reference: "kdp-numbered-list",
+          levels: [
+            {
+              level: 0,
+              format: LevelFormat.DECIMAL,
+              text: "%1.",
+              alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 720, hanging: 360 } } },
+            },
+          ],
+        },
+      ],
+    },
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: { top: 720, right: 720, bottom: 720, left: 720 },
+          },
+        },
+        children,
+      },
+    ],
   });
+
   const blob = await Packer.toBlob(document);
-  if (shouldDownload) {
-    downloadBlob(blob, `${safeFilename(exportBook.title)}.docx`);
-  }
+  if (shouldDownload) downloadBlob(blob, `${safeFilename(exportBook.title)}-Kindle-Create.docx`);
   return blob;
 }
 
@@ -127,24 +369,12 @@ export async function exportPdf(book: Manuscript, shouldDownload = true) {
   if (exportBook.coverImage) {
     pdf.addImage(exportBook.coverImage, "JPEG", 0, 0, pageWidth, pageHeight);
   } else {
-    pdf.setFillColor(244, 241, 233);
-  pdf.rect(0, 0, pageWidth, pageHeight, "F");
-  pdf.setTextColor(143, 68, 43);
-  pdf.setFont("times", "bold");
-  pdf.setFontSize(32);
-  const titleLines = pdf.splitTextToSize(exportBook.title, usableWidth - 44);
-  pdf.text(titleLines, pageWidth / 2, 285, { align: "center" });
-  if (exportBook.subtitle) {
-    pdf.setTextColor(94, 90, 83);
-    pdf.setFont("times", "italic");
-    pdf.setFontSize(15);
-    const subtitleLines = pdf.splitTextToSize(exportBook.subtitle, usableWidth - 80);
-    pdf.text(subtitleLines, pageWidth / 2, 365, { align: "center" });
-  }
-  pdf.setTextColor(25, 26, 24);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(13);
-  pdf.text(`by ${exportBook.author}`, pageWidth / 2, 470, { align: "center" });
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(32);
+    pdf.text(pdf.splitTextToSize(exportBook.title, usableWidth), pageWidth / 2, 285, { align: "center" });
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(13);
+    pdf.text(`by ${exportBook.author}`, pageWidth / 2, 470, { align: "center" });
   }
 
   pdf.addPage();
@@ -153,81 +383,49 @@ export async function exportPdf(book: Manuscript, shouldDownload = true) {
   pdf.text("Contents", margin, 82);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(11);
-  let contentsY = 118;
-  for (const section of exportBook.sections) {
-    const label = section.kind === "chapter" ? `Chapter ${section.number}: ${section.title}` : section.title;
-    const lines = pdf.splitTextToSize(label, usableWidth);
-    if (contentsY + lines.length * 16 > pageHeight - margin) {
-      pdf.addPage();
-      contentsY = 72;
-    }
-    pdf.text(lines, margin, contentsY);
-    contentsY += lines.length * 16 + 5;
-  }
+  exportBook.sections.forEach((section, index) => {
+    pdf.text(sectionTocLabel(section, exportBook.mode), margin, 118 + index * 20);
+  });
 
   for (const section of exportBook.sections) {
     pdf.addPage();
-    let y = 76;
-    pdf.setTextColor(171, 87, 56);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(10);
-    const sectionLabel =
-      section.kind === "chapter"
-        ? `CHAPTER ${section.number}`
-        : section.kind === "introduction"
-          ? "INTRODUCTION"
-          : "CONCLUSION";
-    pdf.text(sectionLabel, margin, y);
-    y += 32;
-    if (shouldShowExportTitle(section)) {
-      pdf.setTextColor(25, 26, 24);
-      pdf.setFont("times", "bold");
-      pdf.setFontSize(24);
-      const headingLines = pdf.splitTextToSize(section.title, usableWidth);
-      pdf.text(headingLines, margin, y);
-      y += headingLines.length * 28 + 24;
-    }
-    pdf.setTextColor(25, 26, 24);
+    let y = 82;
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(24);
+    pdf.text(pdf.splitTextToSize(sectionTocLabel(section, exportBook.mode), usableWidth), margin, y);
+    y += 52;
     pdf.setFont("times", "normal");
     pdf.setFontSize(11.5);
-
-    for (const paragraph of toPlainParagraphs(section.content, section.title, sectionLabel)) {
-      const lines = pdf.splitTextToSize(paragraph, usableWidth);
+    for (const block of parseRichBlocks(section.content, section.title, sectionTocLabel(section, exportBook.mode))) {
+      const text = blockPlainText(block);
+      if (!text) continue;
+      const lines = pdf.splitTextToSize(text, usableWidth);
       for (const line of lines) {
         if (y + 17 > pageHeight - 62) {
           pdf.addPage();
           y = 68;
-          pdf.setFont("times", "normal");
-          pdf.setFontSize(11.5);
         }
         pdf.text(line, margin, y);
         y += 17;
       }
-      y += 13;
+      y += 11;
     }
   }
 
-  const pages = pdf.getNumberOfPages();
-  for (let page = 2; page <= pages; page += 1) {
-    pdf.setPage(page);
-    pdf.setTextColor(126, 122, 115);
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(9);
-    pdf.text(String(page - 1), pageWidth / 2, pageHeight - 28, { align: "center" });
-  }
   const blob = pdf.output("blob");
-  if (shouldDownload) {
-    downloadBlob(blob, `${safeFilename(exportBook.title)}.pdf`);
-  }
+  if (shouldDownload) downloadBlob(blob, `${safeFilename(exportBook.title)}-Reference.pdf`);
   return blob;
 }
 
 export async function exportEpub(book: Manuscript, shouldDownload = true) {
+  const readiness = getKdpReadiness(book);
+  if (!readiness.ready) throw new Error(readiness.errors[0]);
   const exportBook = normalizeExportBook(book);
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   const identifier = `urn:uuid:${exportBook.id}`;
   const sectionFiles = exportBook.sections.map((_, index) => `section-${index + 1}.xhtml`);
+  const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 
   zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
   zip.file(
@@ -237,81 +435,86 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
   <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
 </container>`,
   );
+  zip.file("OEBPS/cover.jpg", dataUriToBase64(exportBook.coverImage), { base64: true });
   zip.file(
     "OEBPS/style.css",
-    `body{font-family:Georgia,serif;line-height:1.65;color:#191a18;margin:7% 9%}h1,h2{line-height:1.15}h1{color:#8f442b;font-size:2.4em}.cover{text-align:center;padding-top:28%}.cover.generated{padding:0;margin:0}.cover.generated img{display:block;width:100%;height:auto}.cover p{font-style:italic;color:#5f5a53}.kicker{text-transform:uppercase;letter-spacing:.16em;color:#ab5738;font:700 .72em Arial,sans-serif}nav ol{padding-left:1.4em}li{margin:.65em 0}`,
+    `body{font-family:serif;line-height:1.45;margin:5%;}h1{font-size:1.65em;margin:1.5em 0 1em;}h2{font-size:1.3em;margin:1.4em 0 .7em;}h3{font-size:1.12em;margin:1.3em 0 .6em;}p{margin:.35em 0;}p.fiction{text-indent:1.2em;margin:0;}p.first,p.scene-break{text-indent:0;}p.scene-break{text-align:center;margin:1.25em 0;}nav ol{padding-left:1.4em;}li{margin:.45em 0;}.title-page{text-align:center;margin-top:25%;}.title-page h1{font-size:2.2em}.copyright{text-align:center;margin-top:25%;}code{font-family:monospace;}`,
   );
-  if (exportBook.coverImage) {
-    zip.file("OEBPS/cover.jpg", dataUriToBase64(exportBook.coverImage), { base64: true });
-  }
   zip.file(
-    "OEBPS/cover.xhtml",
+    "OEBPS/title.xhtml",
     xhtmlPage(
       exportBook.title,
-      exportBook.coverImage
-        ? `<main class="cover generated"><img src="cover.jpg" alt="${escapeXml(exportBook.title)} cover"/></main>`
-        : `<main class="cover"><h1>${escapeXml(exportBook.title)}</h1>${exportBook.subtitle ? `<p>${escapeXml(exportBook.subtitle)}</p>` : ""}<p>by ${escapeXml(exportBook.author)}</p></main>`,
+      `<main epub:type="titlepage" class="title-page"><h1>${escapeXml(exportBook.title)}</h1>${exportBook.subtitle ? `<p><em>${escapeXml(exportBook.subtitle)}</em></p>` : ""}<p>by ${escapeXml(exportBook.author)}</p></main>`,
+    ),
+  );
+  zip.file(
+    "OEBPS/copyright.xhtml",
+    xhtmlPage(
+      "Copyright",
+      `<main epub:type="copyright-page" class="copyright"><h1>Copyright</h1><p>Copyright © ${copyrightYear(exportBook.createdAt)} by ${escapeXml(exportBook.author)}</p><p>All rights reserved.</p></main>`,
     ),
   );
 
   exportBook.sections.forEach((section, index) => {
-    const label =
-      section.kind === "chapter"
-        ? `Chapter ${section.number}`
-        : section.kind === "introduction"
-          ? "Introduction"
-          : "Conclusion";
-    const paragraphs = toPlainParagraphs(section.content, section.title, label)
-      .map((paragraph) => `<p>${escapeXml(paragraph)}</p>`)
-      .join("");
-    const visibleTitle = shouldShowExportTitle(section)
-      ? `<h1>${escapeXml(section.title)}</h1>`
-      : "";
+    const label = sectionTocLabel(section, exportBook.mode);
+    const epubType = sectionEpubType(section, exportBook.mode);
+    const blocks = epubBlocks(parseRichBlocks(section.content, section.title, label), exportBook.mode);
     zip.file(
       `OEBPS/${sectionFiles[index]}`,
-      xhtmlPage(
-        section.title,
-        `<main><p class="kicker">${label}</p>${visibleTitle}${paragraphs}</main>`,
-      ),
+      xhtmlPage(section.title, `<main epub:type="${epubType}"><h1 id="section-title">${escapeXml(label)}</h1>${blocks}</main>`),
     );
   });
 
   const navItems = exportBook.sections
-    .map(
-      (section, index) =>
-        `<li><a href="${sectionFiles[index]}">${escapeXml(section.kind === "chapter" ? `Chapter ${section.number}: ${section.title}` : section.title)}</a></li>`,
-    )
+    .map((section, index) => `<li><a href="${sectionFiles[index]}#section-title">${escapeXml(sectionTocLabel(section, exportBook.mode))}</a></li>`)
     .join("");
   zip.file(
     "OEBPS/nav.xhtml",
-    xhtmlPage("Contents", `<nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${navItems}</ol></nav>`, true),
+    xhtmlPage(
+      "Contents",
+      `<nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${navItems}</ol></nav><nav epub:type="landmarks" hidden="hidden"><h2>Landmarks</h2><ol><li><a epub:type="cover" href="cover.jpg">Cover</a></li><li><a epub:type="titlepage" href="title.xhtml">Title Page</a></li><li><a epub:type="bodymatter" href="section-1.xhtml">Start Reading</a></li></ol></nav>`,
+    ),
+  );
+
+  const ncxPoints = [
+    `<navPoint id="title" playOrder="1"><navLabel><text>Title Page</text></navLabel><content src="title.xhtml"/></navPoint>`,
+    ...exportBook.sections.map(
+      (section, index) => `<navPoint id="section-${index + 1}" playOrder="${index + 2}"><navLabel><text>${escapeXml(sectionTocLabel(section, exportBook.mode))}</text></navLabel><content src="${sectionFiles[index]}#section-title"/></navPoint>`,
+    ),
+  ].join("");
+  zip.file(
+    "OEBPS/toc.ncx",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="${escapeXml(identifier)}"/></head><docTitle><text>${escapeXml(exportBook.title)}</text></docTitle><navMap>${ncxPoints}</navMap></ncx>`,
   );
 
   const manifestItems = sectionFiles
     .map((file, index) => `<item id="section-${index + 1}" href="${file}" media-type="application/xhtml+xml"/>`)
     .join("");
-  const spineItems = sectionFiles
-    .map((_, index) => `<itemref idref="section-${index + 1}"/>`)
-    .join("");
+  const spineItems = sectionFiles.map((_, index) => `<itemref idref="section-${index + 1}"/>`).join("");
   zip.file(
     "OEBPS/content.opf",
     `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id" prefix="rendition: http://www.idpf.org/vocab/rendition/#">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="book-id">${identifier}</dc:identifier>
+    <dc:identifier id="book-id">${escapeXml(identifier)}</dc:identifier>
     <dc:title>${escapeXml(exportBook.title)}</dc:title>
-    <dc:creator>${escapeXml(exportBook.author)}</dc:creator>
+    <dc:creator id="creator">${escapeXml(exportBook.author)}</dc:creator>
     <dc:language>en</dc:language>
-    <meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")}</meta>
+    <meta property="dcterms:modified">${modified}</meta>
+    <meta property="rendition:layout">reflowable</meta>
+    <meta name="cover" content="cover-image"/>
   </metadata>
   <manifest>
-    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>
-    ${exportBook.coverImage ? '<item id="cover-image" href="cover.jpg" media-type="image/jpeg" properties="cover-image"/>' : ""}
+    <item id="cover-image" href="cover.jpg" media-type="image/jpeg" properties="cover-image"/>
+    <item id="title" href="title.xhtml" media-type="application/xhtml+xml"/>
+    <item id="copyright" href="copyright.xhtml" media-type="application/xhtml+xml"/>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
     <item id="style" href="style.css" media-type="text/css"/>
     ${manifestItems}
   </manifest>
-  <spine><itemref idref="cover"/><itemref idref="nav"/>${spineItems}</spine>
+  <spine toc="ncx"><itemref idref="title"/><itemref idref="copyright"/><itemref idref="nav"/>${spineItems}</spine>
 </package>`,
   );
 
@@ -321,56 +524,216 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
     compression: "DEFLATE",
     compressionOptions: { level: 9 },
   });
-  if (shouldDownload) {
-    downloadBlob(blob, `${safeFilename(exportBook.title)}.epub`);
-  }
+  if (shouldDownload) downloadBlob(blob, `${safeFilename(exportBook.title)}.epub`);
+  return blob;
+}
+
+export async function exportCover(book: Manuscript, shouldDownload = true) {
+  const readiness = getKdpReadiness(book);
+  if (!readiness.ready) throw new Error(readiness.errors[0]);
+  const bytes = dataUriToBytes(book.cover?.imageData ?? "");
+  const blob = new Blob([bytes], { type: "image/jpeg" });
+  if (shouldDownload) downloadBlob(blob, `${safeFilename(book.title)}-KDP-Cover.jpg`);
   return blob;
 }
 
 export async function exportBundle(book: Manuscript) {
+  const readiness = getKdpReadiness(book);
+  if (!readiness.ready) throw new Error(readiness.errors[0]);
   const exportBook = normalizeExportBook(book);
   const { default: JSZip } = await import("jszip");
-  const [docxBlob, pdfBlob, epubBlob] = await Promise.all([
+  const [docxBlob, pdfBlob, epubBlob, coverBlob] = await Promise.all([
     exportDocx(book, false),
     exportPdf(book, false),
     exportEpub(book, false),
+    exportCover(book, false),
   ]);
   const filename = safeFilename(exportBook.title);
   const bundle = new JSZip();
-  bundle.file(`${filename}.docx`, docxBlob);
-  bundle.file(`${filename}.pdf`, pdfBlob);
+  bundle.file(`${filename}-Kindle-Create.docx`, docxBlob);
   bundle.file(`${filename}.epub`, epubBlob);
+  bundle.file(`${filename}-KDP-Cover.jpg`, coverBlob);
+  bundle.file(`${filename}-Reference.pdf`, pdfBlob);
+  bundle.file("KDP-UPLOAD-GUIDE.txt", kdpUploadGuide(exportBook));
   const zipBlob = await bundle.generateAsync({
     type: "blob",
     mimeType: "application/zip",
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });
-  downloadBlob(zipBlob, `${filename}-Complete-Package.zip`);
+  downloadBlob(zipBlob, `${filename}-KDP-Package.zip`);
 }
 
-function xhtmlPage(title: string, body: string, nav = false) {
+function kdpUploadGuide(book: NormalizedBook) {
+  return `EB STUDIO PRO — KDP UPLOAD GUIDE
+
+BOOK: ${book.title}
+AUTHOR: ${book.author}
+
+RECOMMENDED KINDLE WORKFLOW
+1. Open ${safeFilename(book.title)}-Kindle-Create.docx in Amazon Kindle Create.
+2. Review every chapter, the linked Contents, scene breaks, lists, and formatting.
+3. Export a KPF file from Kindle Create.
+4. In KDP, upload the KPF as the ebook manuscript.
+5. Upload ${safeFilename(book.title)}-KDP-Cover.jpg separately as the marketing cover.
+6. Run KDP's Online Previewer before publishing.
+
+EPUB ALTERNATIVE
+You may upload ${safeFilename(book.title)}.epub instead of KPF. Do not upload KPF and EPUB together; choose one manuscript format.
+
+PDF
+The PDF is a reference copy. It is not the recommended reflowable Kindle manuscript.
+`;
+}
+
+function xhtmlPage(title: string, body: string) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml"${nav ? ' xmlns:epub="http://www.idpf.org/2007/ops"' : ""} lang="en">
-<head><title>${escapeXml(title)}</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en" xml:lang="en">
+<head><meta charset="UTF-8"/><title>${escapeXml(title)}</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
 <body>${body}</body>
 </html>`;
 }
 
-function toPlainParagraphs(content: unknown, sectionTitle = "", sectionLabel = "") {
-  return removeLeadingDuplicateHeading(cleanText(content), sectionTitle, sectionLabel)
-    .split(/\n{2,}/)
-    .map((paragraph) =>
-      paragraph
-        .replace(/^#{1,4}\s+/gm, "")
-        .replace(/^[-*]\s+/gm, "• ")
-        .replace(/\*\*(.*?)\*\*/g, "$1")
-        .replace(/__(.*?)__/g, "$1")
-        .replace(/`(.*?)`/g, "$1")
-        .trim(),
-    )
-    .filter(Boolean);
+function parseRichBlocks(content: unknown, sectionTitle = "", sectionLabel = ""): RichBlock[] {
+  const source = removeLeadingDuplicateHeading(cleanText(content), sectionTitle, sectionLabel);
+  const lines = source.split("\n");
+  const blocks: RichBlock[] = [];
+  let paragraphLines: string[] = [];
+  let lastHeadingLevel: 1 | 2 | 3 = 1;
+
+  const flushParagraph = () => {
+    const text = paragraphLines.join(" ").replace(/\s+/g, " ").trim();
+    if (text) blocks.push({ type: "paragraph", inlines: parseInlineMarkdown(text) });
+    paragraphLines = [];
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) {
+      flushParagraph();
+      continue;
+    }
+    if (/^(?:\*\s*){3,}$/.test(line) || /^-{3,}$/.test(line)) {
+      flushParagraph();
+      blocks.push({ type: "scene-break" });
+      continue;
+    }
+    const heading = line.match(/^#{2,6}\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      const requestedLevel = Number(heading[0].match(/^#+/)?.[0].length ?? 2) <= 2 ? 2 : 3;
+      const safeLevel = Math.min(requestedLevel, lastHeadingLevel + 1) as 2 | 3;
+      blocks.push({ type: "heading", level: safeLevel, inlines: parseInlineMarkdown(heading[1].trim()) });
+      lastHeadingLevel = safeLevel;
+      continue;
+    }
+    const unordered = line.match(/^[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      flushParagraph();
+      const isOrdered = Boolean(ordered);
+      const items: InlineToken[][] = [];
+      let listIndex = index;
+      while (listIndex < lines.length) {
+        const candidate = lines[listIndex].trim();
+        const match = isOrdered
+          ? candidate.match(/^\d+[.)]\s+(.+)$/)
+          : candidate.match(/^[-*+]\s+(.+)$/);
+        if (!match) break;
+        items.push(parseInlineMarkdown(match[1].trim()));
+        listIndex += 1;
+      }
+      blocks.push({ type: "list", ordered: isOrdered, items });
+      index = listIndex - 1;
+      continue;
+    }
+    paragraphLines.push(line);
+  }
+  flushParagraph();
+  return blocks;
+}
+
+function parseInlineMarkdown(value: string): InlineToken[] {
+  const tokens: InlineToken[] = [];
+  const pattern = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`)/g;
+  let lastIndex = 0;
+  for (const match of value.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) tokens.push({ text: value.slice(lastIndex, index) });
+    const marker = match[0];
+    if (marker.startsWith("**") || marker.startsWith("__")) {
+      tokens.push({ text: marker.slice(2, -2), bold: true });
+    } else if (marker.startsWith("`")) {
+      tokens.push({ text: marker.slice(1, -1), code: true });
+    } else {
+      tokens.push({ text: marker.slice(1, -1), italics: true });
+    }
+    lastIndex = index + marker.length;
+  }
+  if (lastIndex < value.length) tokens.push({ text: value.slice(lastIndex) });
+  return tokens.filter((token) => token.text.length > 0);
+}
+
+function docxRuns(
+  tokens: InlineToken[],
+  TextRun: typeof DocxTextRun,
+): ParagraphChild[] {
+  return tokens.map(
+    (token) =>
+      new TextRun({
+        text: token.text,
+        bold: token.bold,
+        italics: token.italics,
+        font: token.code ? "Courier New" : "Georgia",
+      }),
+  );
+}
+
+function epubBlocks(blocks: RichBlock[], mode: Mode) {
+  let firstParagraph = true;
+  return blocks
+    .map((block) => {
+      if (block.type === "scene-break") {
+        firstParagraph = true;
+        return '<p class="scene-break" role="separator">* * *</p>';
+      }
+      if (block.type === "heading") {
+        firstParagraph = true;
+        return `<h${block.level}>${epubInlines(block.inlines)}</h${block.level}>`;
+      }
+      if (block.type === "list") {
+        firstParagraph = true;
+        const tag = block.ordered ? "ol" : "ul";
+        return `<${tag}>${block.items.map((item) => `<li>${epubInlines(item)}</li>`).join("")}</${tag}>`;
+      }
+      const className = mode === "fiction" ? ` class="fiction${firstParagraph ? " first" : ""}"` : "";
+      firstParagraph = false;
+      return `<p${className}>${epubInlines(block.inlines)}</p>`;
+    })
+    .join("");
+}
+
+function epubInlines(tokens: InlineToken[]) {
+  return tokens
+    .map((token) => {
+      const text = escapeXml(token.text);
+      if (token.bold) return `<strong>${text}</strong>`;
+      if (token.italics) return `<em>${text}</em>`;
+      if (token.code) return `<code>${text}</code>`;
+      return text;
+    })
+    .join("");
+}
+
+function blockPlainText(block: RichBlock) {
+  if (block.type === "scene-break") return "* * *";
+  if (block.type === "list") {
+    return block.items
+      .map((item, index) => `${block.ordered ? `${index + 1}.` : "•"} ${item.map((token) => token.text).join("")}`)
+      .join("\n");
+  }
+  return block.inlines.map((token) => token.text).join("");
 }
 
 function removeLeadingDuplicateHeading(content: string, title: string, label: string) {
@@ -380,10 +743,7 @@ function removeLeadingDuplicateHeading(content: string, title: string, label: st
     const first = lines[0].trim();
     const heading = first.replace(/^#{1,6}\s*/, "").replace(/^[*_]+|[*_]+$/g, "").trim();
     const normalized = normalizeHeading(heading);
-    if (
-      normalized === normalizeHeading(title) ||
-      normalized === normalizeHeading(label)
-    ) {
+    if (normalized === normalizeHeading(title) || normalized === normalizeHeading(label)) {
       lines.shift();
       while (lines.length && !lines[0].trim()) lines.shift();
       continue;
@@ -393,16 +753,27 @@ function removeLeadingDuplicateHeading(content: string, title: string, label: st
   return lines.join("\n");
 }
 
-function exportSectionLabel(section: { kind: string; number: number }) {
-  return section.kind === "chapter"
-    ? `Chapter ${section.number}`
-    : section.kind === "introduction"
-      ? "Introduction"
-      : "Conclusion";
+function sectionRole(section: NormalizedSection, mode: Mode) {
+  if (section.kind === "introduction") return mode === "fiction" ? "Prologue" : "Introduction";
+  if (section.kind === "conclusion") return mode === "fiction" ? "Epilogue" : "Conclusion";
+  return `Chapter ${section.number}`;
 }
 
-function shouldShowExportTitle(section: { kind: string; number: number; title: string }) {
-  return normalizeHeading(section.title) !== normalizeHeading(exportSectionLabel(section));
+function sectionTocLabel(section: NormalizedSection, mode: Mode) {
+  const role = sectionRole(section, mode);
+  return normalizeHeading(section.title) === normalizeHeading(role)
+    ? role
+    : `${role}: ${section.title}`;
+}
+
+function sectionEpubType(section: NormalizedSection, mode: Mode) {
+  if (section.kind === "introduction") return mode === "fiction" ? "prologue" : "introduction";
+  if (section.kind === "conclusion") return mode === "fiction" ? "epilogue" : "conclusion";
+  return "chapter";
+}
+
+function sectionBookmark(index: number) {
+  return `chapter-${index + 1}-${index + 1}`;
 }
 
 function normalizeHeading(value: string) {
@@ -419,20 +790,11 @@ function escapeXml(value: unknown) {
 }
 
 function safeFilename(value: unknown) {
-  return (
-    cleanText(value)
-      .normalize("NFKD")
-      .replace(/[^\w\s-]/g, "")
-      .trim()
-      .replace(/\s+/g, "-")
-      .slice(0, 90) || "eb-studio-pro-book"
-  );
+  return cleanText(value).normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 90) || "eb-studio-pro-book";
 }
 
 function downloadBlob(blob: Blob, filename: string) {
-  if (!(blob instanceof Blob) || blob.size === 0) {
-    throw new Error("The generated file was empty.");
-  }
+  if (!(blob instanceof Blob) || blob.size === 0) throw new Error("The generated file was empty.");
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -444,38 +806,30 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-function normalizeExportBook(book: Manuscript) {
+function normalizeExportBook(book: Manuscript): NormalizedBook {
   const rawSections = Array.isArray(book?.sections) ? book.sections : [];
   const sections = rawSections.map((section, index) => {
-    const kind =
-      section?.kind === "introduction" || section?.kind === "conclusion"
-        ? section.kind
-        : "chapter";
+    const kind: SectionKind = section?.kind === "introduction" || section?.kind === "conclusion" ? section.kind : "chapter";
     const parsedNumber = Number(section?.number);
     const number = Number.isFinite(parsedNumber) && parsedNumber > 0 ? parsedNumber : index + 1;
-    const fallbackTitle =
-      kind === "introduction"
-        ? "Introduction"
-        : kind === "conclusion"
-          ? "Conclusion"
-          : `Chapter ${number}`;
-
-    return {
-      kind,
-      number,
-      title: cleanText(section?.title).trim() || fallbackTitle,
-      content: cleanText(section?.content),
-    };
+    const fallbackTitle = kind === "introduction" ? (book.mode === "fiction" ? "Prologue" : "Introduction") : kind === "conclusion" ? (book.mode === "fiction" ? "Epilogue" : "Conclusion") : `Chapter ${number}`;
+    return { kind, number, title: cleanText(section?.title).trim() || fallbackTitle, content: cleanText(section?.content) };
   });
-
   return {
     id: cleanText(book?.id).trim() || `eb-studio-pro-${Date.now()}`,
+    mode: book?.mode === "nonfiction" ? "nonfiction" : "fiction",
     title: cleanText(book?.title).trim() || "Untitled Book",
     subtitle: cleanText(book?.subtitle).trim(),
     author: cleanText(book?.author).trim() || "Unknown Author",
+    createdAt: cleanText(book?.createdAt).trim() || new Date().toISOString(),
     coverImage: typeof book?.cover?.imageData === "string" ? book.cover.imageData : "",
     sections,
   };
+}
+
+function copyrightYear(value: string) {
+  const year = new Date(value).getUTCFullYear();
+  return Number.isFinite(year) ? year : new Date().getUTCFullYear();
 }
 
 function dataUriToBase64(dataUri: string) {
@@ -483,44 +837,35 @@ function dataUriToBase64(dataUri: string) {
 }
 
 function dataUriToBytes(dataUri: string) {
-  const binary = atob(dataUriToBase64(dataUri));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
+  const base64 = dataUriToBase64(dataUri);
+  if (typeof atob === "function") {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
   }
-  return bytes;
+  return Uint8Array.from(Buffer.from(base64, "base64"));
 }
 
 function cleanText(value: unknown) {
   const input = String(value ?? "").replace(/\r\n?/g, "\n");
   let output = "";
-
   for (let index = 0; index < input.length; index += 1) {
     const code = input.charCodeAt(index);
-
     if (code >= 0xd800 && code <= 0xdbff) {
       const next = input.charCodeAt(index + 1);
       if (next >= 0xdc00 && next <= 0xdfff) {
         output += input[index] + input[index + 1];
         index += 1;
-      } else {
-        output += "\uFFFD";
-      }
+      } else output += "\uFFFD";
       continue;
     }
-
     if (code >= 0xdc00 && code <= 0xdfff) {
       output += "\uFFFD";
       continue;
     }
-
-    if ((code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) || code === 0xfffe || code === 0xffff) {
-      output += " ";
-      continue;
-    }
-
-    output += input[index];
+    if ((code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) || code === 0xfffe || code === 0xffff) output += " ";
+    else output += input[index];
   }
-
   return output;
 }
