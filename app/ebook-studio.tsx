@@ -992,7 +992,13 @@ function BookPreview({
         <span style={{ width: `${progress}%` }} />
       </div>
 
-      {isComplete ? <CoverStudio manuscript={manuscript} onSave={onSaveCover} /> : null}
+      {isComplete ? (
+        <CoverStudio
+          key={manuscript.id}
+          manuscript={manuscript}
+          onSave={onSaveCover}
+        />
+      ) : null}
 
       <div className="manuscript-workspace">
         <nav className="contents-rail" aria-label="Book contents">

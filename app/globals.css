@@ -611,7 +611,7 @@ p {
   position: relative;
   overflow: hidden;
   container-type: inline-size;
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 5 / 8;
   border-radius: 4px;
   background: #23352e;
   box-shadow: 0 18px 36px rgba(26, 37, 31, 0.24);
@@ -622,70 +622,6 @@ p {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.cover-live-type {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  color: white;
-  text-shadow: 0 0.35cqw 1.4cqw rgba(4, 14, 11, 0.78);
-}
-
-.cover-live-type strong,
-.cover-live-type em {
-  position: absolute;
-  width: 82%;
-  line-height: 1.04;
-  overflow-wrap: anywhere;
-}
-
-.cover-live-type strong {
-  font-family: Georgia, "Times New Roman", serif;
-  font-weight: 700;
-  font-style: normal;
-}
-
-.cover-live-type em {
-  font-family: Georgia, "Times New Roman", serif;
-  font-weight: 400;
-  line-height: 1.28;
-}
-
-.cover-live-type .align-left {
-  left: 9%;
-  text-align: left;
-}
-
-.cover-live-type .align-center {
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-}
-
-.cover-live-type .align-right {
-  right: 9%;
-  text-align: right;
-}
-
-.cover-live-type .align-left.anchor-bottom,
-.cover-live-type .align-right.anchor-bottom {
-  transform: translateY(-100%);
-}
-
-.cover-live-type .align-center.anchor-bottom {
-  transform: translate(-50%, -100%);
-}
-
-.cover-live-type small {
-  position: absolute;
-  right: 8%;
-  bottom: 6%;
-  left: 8%;
-  color: #e9dfcf;
-  font: 700 3.1cqw Arial, sans-serif;
-  letter-spacing: 0.22em;
-  text-align: center;
 }
 
 .cover-placeholder {
