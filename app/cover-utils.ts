@@ -139,6 +139,24 @@ const ALL_PRESETS = Object.keys(
 ) as CoverTypographyPresetId[];
 
 const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
+  cinematic: [
+    "cinematic-ivory",
+    "classic-gold",
+    "dramatic-stacked",
+    "quiet-editorial",
+  ],
+  minimalist: [
+    "quiet-editorial",
+    "modern-clean",
+    "classic-gold",
+    "cinematic-ivory",
+  ],
+  illustrated: [
+    "classic-gold",
+    "modern-clean",
+    "quiet-editorial",
+    "cinematic-ivory",
+  ],
   "photoreal-title": [
     "classic-gold",
     "cinematic-ivory",
@@ -156,6 +174,12 @@ const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
     "cinematic-ivory",
     "modern-clean",
     "classic-gold",
+  ],
+  "eb-signature": [
+    "classic-gold",
+    "cinematic-ivory",
+    "quiet-editorial",
+    "modern-clean",
   ],
 };
 

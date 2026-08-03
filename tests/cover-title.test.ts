@@ -50,15 +50,24 @@ test("title outline contrasts with both light and dark text", () => {
   assert.match(contrastingTextStroke("#101418"), /255,255,255/);
 });
 
-test("exact-title directions rotate through multiple premium title designs", () => {
-  const designs = new Set(
-    Array.from({ length: 24 }, (_, index) =>
-      selectCoverTypographyPreset("minimal-real-title", `artwork-${index}`),
-    ),
-  );
-  assert.ok(designs.size >= 3);
-  assert.equal(usesAutomaticTitleVariety("minimal-real-title"), true);
-  assert.equal(usesAutomaticTitleVariety("cinematic"), false);
+test("every visual direction rotates through premium title designs", () => {
+  for (const style of [
+    "cinematic",
+    "minimalist",
+    "illustrated",
+    "photoreal-title",
+    "minimal-real-title",
+    "fully-loaded-title",
+    "eb-signature",
+  ]) {
+    const designs = new Set(
+      Array.from({ length: 24 }, (_, index) =>
+        selectCoverTypographyPreset(style, `artwork-${index}`),
+      ),
+    );
+    assert.ok(designs.size >= 3, `${style} should rotate title designs`);
+    assert.equal(usesAutomaticTitleVariety(style), true);
+  }
 });
 
 test("selected title designs are stable for the same generated artwork", () => {
