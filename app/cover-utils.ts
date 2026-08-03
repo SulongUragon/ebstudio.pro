@@ -157,6 +157,7 @@ const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
     "quiet-editorial",
     "cinematic-ivory",
   ],
+  // Human-led covers stay editorial: no condensed display or generic sans title.
   "photoreal-title": [
     "classic-gold",
     "cinematic-ivory",
