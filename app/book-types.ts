@@ -36,6 +36,7 @@ export type CoverDesign = {
   finish?: string;
   displayTitle?: string;
   displaySubtitle?: string;
+  showTitle?: boolean;
   autoFitText?: boolean;
   titleFontSize?: number;
   subtitleFontSize?: number;

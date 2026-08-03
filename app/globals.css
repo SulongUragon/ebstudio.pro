@@ -699,6 +699,33 @@ p {
   box-shadow: 0 0 0 3px rgba(171, 87, 56, 0.08);
 }
 
+.cover-overlay-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 9px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(171, 87, 56, 0.24);
+  background: rgba(171, 87, 56, 0.055);
+}
+
+.cover-overlay-toggle input {
+  grid-row: 1 / span 2;
+  accent-color: var(--rust);
+}
+
+.cover-overlay-toggle > span {
+  color: #555650;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.cover-overlay-toggle > small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
 .cover-type-controls {
   display: grid;
   gap: 10px;
