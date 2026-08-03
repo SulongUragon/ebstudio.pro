@@ -138,6 +138,10 @@ const ALL_PRESETS = Object.keys(
   COVER_TYPOGRAPHY_PRESETS,
 ) as CoverTypographyPresetId[];
 
+const TYPOGRAPHY_STYLE_ALIASES: Record<string, string> = {
+  "photoreal-title": "eb-signature",
+};
+
 const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
   cinematic: [
     "cinematic-ivory",
@@ -157,12 +161,6 @@ const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
     "quiet-editorial",
     "cinematic-ivory",
   ],
-  // Human-led covers stay editorial: no condensed display or generic sans title.
-  "photoreal-title": [
-    "classic-gold",
-    "cinematic-ivory",
-    "quiet-editorial",
-  ],
   "minimal-real-title": [
     "classic-gold",
     "quiet-editorial",
@@ -179,9 +177,12 @@ const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
     "classic-gold",
     "cinematic-ivory",
     "quiet-editorial",
-    "modern-clean",
   ],
 };
+
+function resolveTypographyStyle(style: string) {
+  return TYPOGRAPHY_STYLE_ALIASES[style] ?? style;
+}
 
 export function resolveExactCoverTitle(manuscript: Manuscript, candidate: string) {
   return (
@@ -209,13 +210,14 @@ export function getCoverTypographyPreset(id?: string) {
 }
 
 export function selectCoverTypographyPreset(style: string, seed: string) {
-  const pool = STYLE_PRESET_POOLS[style] ?? ALL_PRESETS;
+  const typographyStyle = resolveTypographyStyle(style);
+  const pool = STYLE_PRESET_POOLS[typographyStyle] ?? ALL_PRESETS;
   const compactSeed =
     seed.length > 1024
       ? `${seed.slice(0, 512)}:${seed.slice(-512)}:${seed.length}`
       : seed;
   let hash = 2166136261;
-  const input = `${style}:${compactSeed}`;
+  const input = `${typographyStyle}:${compactSeed}`;
   for (let index = 0; index < input.length; index += 1) {
     hash ^= input.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
@@ -224,11 +226,12 @@ export function selectCoverTypographyPreset(style: string, seed: string) {
 }
 
 export function usesAutomaticTitleVariety(style: string) {
-  return Object.hasOwn(STYLE_PRESET_POOLS, style);
+  return Object.hasOwn(STYLE_PRESET_POOLS, resolveTypographyStyle(style));
 }
 
 export function normalizeCoverTypographyPreset(style: string, id?: string) {
-  const pool = STYLE_PRESET_POOLS[style] ?? ALL_PRESETS;
+  const pool =
+    STYLE_PRESET_POOLS[resolveTypographyStyle(style)] ?? ALL_PRESETS;
   return pool.includes(id as CoverTypographyPresetId)
     ? (id as CoverTypographyPresetId)
     : pool[0];
