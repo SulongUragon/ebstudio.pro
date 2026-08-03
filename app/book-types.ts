@@ -30,6 +30,8 @@ export type SectionContent = SectionPlan & {
 
 export type CoverDesign = {
   imageData: string;
+  width?: number;
+  height?: number;
   style: string;
   finish?: string;
   displayTitle?: string;

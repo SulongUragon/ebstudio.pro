@@ -8,9 +8,9 @@ const styles = [
   { id: "cinematic", label: "Cinematic" },
   { id: "minimalist", label: "Minimalist" },
   { id: "illustrated", label: "Illustrated" },
-  { id: "photoreal-title", label: "Real Person + AI Title" },
-  { id: "minimal-real-title", label: "Minimal Real Object + AI Title" },
-  { id: "fully-loaded-title", label: "Fully Loaded + AI Title" },
+  { id: "photoreal-title", label: "Real Person + Exact Title" },
+  { id: "minimal-real-title", label: "Minimal Object + Exact Title" },
+  { id: "fully-loaded-title", label: "Fully Loaded + Exact Title" },
   { id: "eb-signature", label: "EB Signature" },
 ];
 
@@ -70,11 +70,6 @@ export default function CoverStudio({
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
-  const aiTitleMode =
-    style === "photoreal-title" ||
-    style === "minimal-real-title" ||
-    style === "fully-loaded-title";
-
   async function generateCover() {
     if (!coverTitle.trim()) {
       setError("Add a complete cover title before generating.");
@@ -99,33 +94,33 @@ export default function CoverStudio({
         throw new Error(String(data.error ?? "The AI cover could not be generated."));
       }
       const sourceImageData = String(data.imageData);
-      const imageData = aiTitleMode
-        ? sourceImageData
-        : await composeCover(
-            sourceImageData,
-            coverTitle.trim(),
-            coverSubtitle.trim(),
-            manuscript.author,
-            finish,
-            style,
-            autoFitText,
-            titleFontSize,
-            subtitleFontSize,
-            titlePosition,
-            subtitlePosition,
-            titleAlignment,
-            subtitleAlignment,
-            titleColor,
-            subtitleColor,
-            authorColor,
-          );
+      const imageData = await composeCover(
+        sourceImageData,
+        coverTitle.trim(),
+        coverSubtitle.trim(),
+        manuscript.author,
+        finish,
+        style,
+        autoFitText,
+        titleFontSize,
+        subtitleFontSize,
+        titlePosition,
+        subtitlePosition,
+        titleAlignment,
+        subtitleAlignment,
+        titleColor,
+        subtitleColor,
+        authorColor,
+      );
       onSave({
         imageData,
+        width: 1600,
+        height: 2560,
         sourceImageData,
         style,
         finish,
         displayTitle: coverTitle.trim(),
-        displaySubtitle: aiTitleMode ? "" : coverSubtitle.trim(),
+        displaySubtitle: coverSubtitle.trim(),
         autoFitText,
         titleFontSize,
         subtitleFontSize,
@@ -150,10 +145,6 @@ export default function CoverStudio({
   }
 
   async function applyTypography() {
-    if (aiTitleMode) {
-      setError("This cover already includes the AI-designed title. Choose another visual direction to use editable typography.");
-      return;
-    }
     const sourceImageData = manuscript.cover?.sourceImageData;
     if (!sourceImageData) {
       setError("Generate one new cover first to unlock reusable typography editing.");
@@ -183,6 +174,8 @@ export default function CoverStudio({
       onSave({
         ...manuscript.cover,
         imageData,
+        width: 1600,
+        height: 2560,
         sourceImageData,
         style,
         finish,
@@ -230,9 +223,7 @@ export default function CoverStudio({
           {manuscript.cover ? (
             <>
               <img src={previewSource} alt={`Cover for ${manuscript.title}`} />
-              {manuscript.cover.sourceImageData && manuscript.cover.style !== "photoreal-title" &&
-                manuscript.cover.style !== "minimal-real-title" &&
-                manuscript.cover.style !== "fully-loaded-title" ? (
+              {manuscript.cover.sourceImageData ? (
                 <div className="cover-live-type" aria-hidden="true">
                   <strong
                     className={`align-${titleAlignment}`}
@@ -287,7 +278,7 @@ export default function CoverStudio({
               <textarea
                 value={coverSubtitle}
                 onChange={(event) => setCoverSubtitle(event.target.value)}
-                disabled={loading || aiTitleMode}
+                disabled={loading}
                 rows={3}
               />
             </label>
@@ -413,18 +404,16 @@ export default function CoverStudio({
                 className="cover-apply-type"
                 type="button"
                 onClick={applyTypography}
-                disabled={loading || applying || aiTitleMode || !manuscript.cover?.sourceImageData}
+                disabled={loading || applying || !manuscript.cover?.sourceImageData}
               >
                 {applying ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}
                 {applying ? "Applying typography…" : "Apply text layout"}
               </button>
             </div>
             <p>
-              {aiTitleMode
-                ? "AI prints the exact title into the photorealistic artwork. Subtitle, author, and extra text are excluded."
-                : autoFitText
-                  ? "The complete wording automatically resizes to fit—no silent truncation."
-                  : "Manual sizing preserves every word. Reduce the size if the title uses too many lines."}
+              {autoFitText
+                ? "EB Studio Pro places the exact title, subtitle, and author, then automatically resizes them to fit."
+                : "Manual sizing preserves every word. Reduce the size if the title uses too many lines."}
             </p>
           </div>
           <span>Choose a visual direction</span>
@@ -452,11 +441,11 @@ export default function CoverStudio({
           </div>
           <p>
             {style === "photoreal-title"
-              ? "AI creates a lifelike human cover and designs the exact title directly into the artwork—title only."
+              ? "AI creates the lifelike human artwork; EB Studio Pro places the exact title, subtitle, and author."
               : style === "minimal-real-title"
-                ? "AI creates a minimalist still life using realistic objects connected to the book and prints the exact title—title only."
+                ? "AI creates a minimalist still life; EB Studio Pro places the exact title, subtitle, and author."
                 : style === "fully-loaded-title"
-                  ? "AI builds a dense cinematic cover with layered scenes, characters, objects, and story details, then prints the exact title—title only."
+                  ? "AI builds the dense cinematic artwork; EB Studio Pro places the exact title, subtitle, and author."
                   : style === "eb-signature"
                 ? "AI connects the artwork to your book concept using EB Studio Pro’s forest, navy, copper, parchment, and charcoal palette."
                 : "The title, subtitle, and author are placed separately for sharper export quality."}
@@ -518,8 +507,8 @@ async function composeCover(
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 1800;
+  canvas.width = 1600;
+  canvas.height = 2560;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("This browser could not prepare the cover.");
 
@@ -530,7 +519,7 @@ async function composeCover(
       : finish === "matte"
         ? "contrast(0.97) saturate(0.94)"
         : "contrast(1.04) saturate(1.03)";
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  drawImageCover(context, image, canvas.width, canvas.height);
   context.restore();
 
   const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
@@ -575,7 +564,7 @@ async function composeCover(
   const fittedTitle = fitText(
     context,
     title,
-    980,
+    1320,
     4,
     titleStartSize,
     autoFitText ? 62 : titleFontSize,
@@ -595,7 +584,7 @@ async function composeCover(
     const fittedSubtitle = fitText(
       context,
       subtitle,
-      900,
+      1240,
       4,
       subtitleFontSize,
       autoFitText ? 28 : subtitleFontSize,
@@ -616,10 +605,42 @@ async function composeCover(
 
   context.textAlign = "center";
   context.fillStyle = authorColor;
-  context.font = "700 38px Arial, sans-serif";
+  context.font = "700 48px Arial, sans-serif";
   context.letterSpacing = "3px";
-  context.fillText(author.toUpperCase(), canvas.width / 2, 1660);
-  return canvas.toDataURL("image/jpeg", 0.9);
+  context.fillText(author.toUpperCase(), canvas.width / 2, 2380);
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+function drawImageCover(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  targetWidth: number,
+  targetHeight: number,
+) {
+  const sourceRatio = image.naturalWidth / image.naturalHeight;
+  const targetRatio = targetWidth / targetHeight;
+  let sourceWidth = image.naturalWidth;
+  let sourceHeight = image.naturalHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+  if (sourceRatio > targetRatio) {
+    sourceWidth = image.naturalHeight * targetRatio;
+    sourceX = (image.naturalWidth - sourceWidth) / 2;
+  } else {
+    sourceHeight = image.naturalWidth / targetRatio;
+    sourceY = (image.naturalHeight - sourceHeight) / 2;
+  }
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    targetWidth,
+    targetHeight,
+  );
 }
 
 function alignmentX(

@@ -1903,8 +1903,33 @@ p {
 }
 
 .export-actions button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.58;
+}
+
+.kdp-readiness {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: .72rem;
+}
+
+.kdp-readiness strong {
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.kdp-readiness.ready {
+  background: #eaf3ed;
+  color: #244f3d;
+}
+
+.kdp-readiness.blocked {
+  background: #fff4e5;
+  color: #7a421f;
 }
 
 .progress-track {
