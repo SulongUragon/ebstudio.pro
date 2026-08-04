@@ -51,6 +51,19 @@ type GenerationStatus =
   | "cancelled"
   | "error";
 type CompanionSource = NonNullable<Manuscript["companionOf"]>;
+type CreationMode = "single" | "dual";
+type DualBookInput = {
+  fictionSubtitle: string;
+  nonfictionSubtitle: string;
+  concept: string;
+  audience: string;
+};
+type DualBookProject = {
+  id: string;
+  title: string;
+  fiction: Manuscript;
+  nonfiction: Manuscript;
+};
 
 const chapterPresets = [3, 5, 8, 10, 12, 15, 20];
 const blankBrief: BookBrief = {
@@ -69,6 +82,7 @@ const blankBrief: BookBrief = {
 export default function EbookStudio() {
   const [view, setView] = useState<View>("create");
   const [creatorMode, setCreatorMode] = useState<"new" | "optimize">("new");
+  const [creationMode, setCreationMode] = useState<CreationMode>("single");
   const [mode, setMode] = useState<Mode>("fiction");
   const [provider, setProvider] = useState<AIProvider>("auto");
   const [activeProvider, setActiveProvider] = useState<ActiveAIProvider | null>(null);
@@ -89,6 +103,13 @@ export default function EbookStudio() {
   const [repairingSection, setRepairingSection] = useState<number | null>(null);
   const [companionSource, setCompanionSource] = useState<CompanionSource | null>(null);
   const [isCreatingCompanion, setIsCreatingCompanion] = useState(false);
+  const [dualInput, setDualInput] = useState<DualBookInput>({
+    fictionSubtitle: "",
+    nonfictionSubtitle: "",
+    concept: "",
+    audience: "",
+  });
+  const [dualProject, setDualProject] = useState<DualBookProject | null>(null);
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -137,8 +158,26 @@ export default function EbookStudio() {
   function chooseMode(nextMode: Mode) {
     if (fieldsLocked) return;
     setMode(nextMode);
+    setCreationMode("single");
+    setDualProject(null);
     setStatus("idle");
     setManuscript(null);
+    setError("");
+    setAutoFillMessage("");
+    setTitlePromptDismissed(false);
+    setTitleSuggestions([]);
+    setTitleImproveError("");
+    setActiveProvider(null);
+    setCompanionSource(null);
+  }
+
+  function chooseDualMode() {
+    if (fieldsLocked) return;
+    setCreationMode("dual");
+    setMode("fiction");
+    setStatus("idle");
+    setManuscript(null);
+    setDualProject(null);
     setError("");
     setAutoFillMessage("");
     setTitlePromptDismissed(false);
@@ -154,6 +193,14 @@ export default function EbookStudio() {
   }
 
   function validateBrief() {
+    if (creationMode === "dual") {
+      return (
+        !brief.title.trim() ||
+        !brief.author.trim() ||
+        !dualInput.concept.trim() ||
+        !dualInput.audience.trim()
+      );
+    }
     const commonMissing = !brief.title.trim() || !brief.author.trim();
     const modeMissing =
       mode === "fiction"
@@ -286,6 +333,8 @@ export default function EbookStudio() {
     setStatus("complete");
     setActiveSection(0);
     setCompanionSource(null);
+    setCreationMode("single");
+    setDualProject(null);
     saveBook(book);
   }
 
@@ -311,6 +360,10 @@ export default function EbookStudio() {
   async function generateBook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isAutoFilling) return;
+    if (creationMode === "dual") {
+      await generateDualBooks();
+      return;
+    }
     if (validateBrief()) {
       setError("Complete every book detail before generating.");
       return;
@@ -415,13 +468,253 @@ export default function EbookStudio() {
     }
   }
 
+  async function generateDualBooks() {
+    if (validateBrief()) {
+      setError("Complete the shared title, author, concept, and target audience.");
+      return;
+    }
+
+    cancelRef.current = false;
+    setError("");
+    setStatus("outlining");
+    setManuscript(null);
+    setDualProject(null);
+    setActiveProvider(null);
+
+    let fictionWorking: Manuscript | null = null;
+    let nonfictionWorking: Manuscript | null = null;
+
+    try {
+      const briefResponse = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "dual_brief",
+          mode: "fiction",
+          brief,
+          provider,
+          dualPair: dualInput,
+        }),
+      });
+      const pairData = await readResponse(briefResponse);
+      const fictionData = (pairData.fiction ?? {}) as Record<string, unknown>;
+      const nonfictionData = (pairData.nonfiction ?? {}) as Record<string, unknown>;
+      const pairProvider = pairData.provider as ActiveAIProvider;
+      setActiveProvider(pairProvider);
+
+      const fictionBrief: BookBrief = {
+        ...blankBrief,
+        title: brief.title.trim(),
+        subtitle: dualInput.fictionSubtitle.trim(),
+        author: brief.author.trim(),
+        genre: String(fictionData.genre ?? ""),
+        characters: String(fictionData.characters ?? ""),
+        premise: String(fictionData.premise ?? ""),
+        chapterCount: brief.chapterCount,
+      };
+      const nonfictionBrief: BookBrief = {
+        ...blankBrief,
+        title: brief.title.trim(),
+        subtitle: dualInput.nonfictionSubtitle.trim(),
+        author: brief.author.trim(),
+        topic: String(nonfictionData.topic ?? ""),
+        audience: String(nonfictionData.audience ?? dualInput.audience),
+        keyPoints: String(nonfictionData.key_points ?? ""),
+        chapterCount: brief.chapterCount,
+      };
+
+      const outlineRequest = (bookMode: Mode, bookBrief: BookBrief) =>
+        fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "outline",
+            mode: bookMode,
+            brief: bookBrief,
+            provider,
+            preferredProvider: provider === "auto" ? pairProvider : undefined,
+          }),
+        }).then(readResponse);
+      const [fictionOutline, nonfictionOutline] = await Promise.all([
+        outlineRequest("fiction", fictionBrief),
+        outlineRequest("nonfiction", nonfictionBrief),
+      ]);
+
+      const pairId = crypto.randomUUID();
+      const fictionId = crypto.randomUUID();
+      const nonfictionId = crypto.randomUUID();
+      const fictionProvider = fictionOutline.provider as ActiveAIProvider;
+      const nonfictionProvider = nonfictionOutline.provider as ActiveAIProvider;
+      const finalFictionBrief: BookBrief = {
+        ...fictionBrief,
+        subtitle: String(fictionOutline.subtitle ?? "").trim(),
+      };
+      const finalNonfictionBrief: BookBrief = {
+        ...nonfictionBrief,
+        subtitle: String(nonfictionOutline.subtitle ?? "").trim(),
+      };
+
+      fictionWorking = {
+        id: fictionId,
+        mode: "fiction",
+        title: finalFictionBrief.title,
+        subtitle: finalFictionBrief.subtitle ?? "",
+        author: finalFictionBrief.author,
+        createdAt: new Date().toISOString(),
+        brief: finalFictionBrief,
+        plan: fictionOutline.plan as SectionPlan[],
+        sections: [],
+        providersUsed: [fictionProvider],
+        companionOf: {
+          id: nonfictionId,
+          title: finalNonfictionBrief.title,
+          mode: "nonfiction",
+        },
+      };
+      nonfictionWorking = {
+        id: nonfictionId,
+        mode: "nonfiction",
+        title: finalNonfictionBrief.title,
+        subtitle: finalNonfictionBrief.subtitle ?? "",
+        author: finalNonfictionBrief.author,
+        createdAt: new Date().toISOString(),
+        brief: finalNonfictionBrief,
+        plan: nonfictionOutline.plan as SectionPlan[],
+        sections: [],
+        providersUsed: [nonfictionProvider],
+        companionOf: {
+          id: fictionId,
+          title: finalFictionBrief.title,
+          mode: "fiction",
+        },
+      };
+      setDualProject({
+        id: pairId,
+        title: brief.title.trim(),
+        fiction: fictionWorking,
+        nonfiction: nonfictionWorking,
+      });
+      setStatus("writing");
+
+      const fictionSummaries: string[] = [];
+      const nonfictionSummaries: string[] = [];
+      const sectionCount = Math.max(
+        fictionWorking.plan.length,
+        nonfictionWorking.plan.length,
+      );
+
+      const writeSection = async (
+        book: Manuscript,
+        index: number,
+        summaries: string[],
+        preferredProvider: ActiveAIProvider,
+      ) => {
+        const sectionResponse = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "section",
+            mode: book.mode,
+            brief: book.brief,
+            plan: book.plan,
+            section: book.plan[index],
+            sectionIndex: index,
+            previousSummaries: summaries.slice(-10),
+            provider,
+            preferredProvider: provider === "auto" ? preferredProvider : undefined,
+          }),
+        });
+        const data = await readResponse(sectionResponse);
+        const content = String(data.content ?? "").trim();
+        const summary = String(data.summary ?? "").trim();
+        if (!content || !summary) {
+          throw new Error(`The writer did not finish \"${book.plan[index].title}\".`);
+        }
+        return {
+          section: { ...book.plan[index], content, summary } as SectionContent,
+          provider: data.provider as ActiveAIProvider,
+        };
+      };
+
+      let activeFictionProvider = fictionProvider;
+      let activeNonfictionProvider = nonfictionProvider;
+      for (let index = 0; index < sectionCount; index += 1) {
+        if (cancelRef.current) {
+          setStatus("cancelled");
+          saveBooks([fictionWorking, nonfictionWorking]);
+          return;
+        }
+
+        const [fictionResult, nonfictionResult] = await Promise.all([
+          writeSection(
+            fictionWorking,
+            index,
+            fictionSummaries,
+            activeFictionProvider,
+          ),
+          writeSection(
+            nonfictionWorking,
+            index,
+            nonfictionSummaries,
+            activeNonfictionProvider,
+          ),
+        ]);
+        activeFictionProvider = fictionResult.provider;
+        activeNonfictionProvider = nonfictionResult.provider;
+        fictionSummaries.push(fictionResult.section.summary);
+        nonfictionSummaries.push(nonfictionResult.section.summary);
+        fictionWorking = {
+          ...fictionWorking,
+          sections: [...fictionWorking.sections, fictionResult.section],
+          providersUsed: Array.from(
+            new Set([...(fictionWorking.providersUsed ?? []), activeFictionProvider]),
+          ),
+        };
+        nonfictionWorking = {
+          ...nonfictionWorking,
+          sections: [...nonfictionWorking.sections, nonfictionResult.section],
+          providersUsed: Array.from(
+            new Set([...(nonfictionWorking.providersUsed ?? []), activeNonfictionProvider]),
+          ),
+        };
+        setDualProject({
+          id: pairId,
+          title: brief.title.trim(),
+          fiction: fictionWorking,
+          nonfiction: nonfictionWorking,
+        });
+      }
+
+      setStatus("complete");
+      saveBooks([fictionWorking, nonfictionWorking]);
+    } catch (dualError) {
+      setStatus("error");
+      if (fictionWorking && nonfictionWorking) {
+        saveBooks([fictionWorking, nonfictionWorking]);
+      }
+      setError(
+        dualError instanceof Error
+          ? dualError.message
+          : "EB Studio Pro could not finish the dual book pair.",
+      );
+    }
+  }
+
   function cancelGeneration() {
     cancelRef.current = true;
   }
 
   function saveBook(book: Manuscript) {
+    saveBooks([book]);
+  }
+
+  function saveBooks(books: Manuscript[]) {
     setLibrary((current) => {
-      const next = [book, ...current.filter((item) => item.id !== book.id)].slice(0, 8);
+      const savedIds = new Set(books.map((book) => book.id));
+      const next = [
+        ...books,
+        ...current.filter((item) => !savedIds.has(item.id)),
+      ].slice(0, 8);
       void persistStoredLibrary(next).catch(() => {
         setError(
           "The book is open, but this browser could not permanently save its latest cover.",
@@ -439,6 +732,8 @@ export default function EbookStudio() {
     setStatus("complete");
     setActiveSection(0);
     setCompanionSource(book.companionOf ?? null);
+    setCreationMode("single");
+    setDualProject(null);
     setView("create");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -467,6 +762,14 @@ export default function EbookStudio() {
     setActiveProvider(null);
     setCompanionSource(null);
     setIsCreatingCompanion(false);
+    setCreationMode("single");
+    setDualProject(null);
+    setDualInput({
+      fictionSubtitle: "",
+      nonfictionSubtitle: "",
+      concept: "",
+      audience: "",
+    });
   }
 
   async function runExport(format: "bundle" | "cover" | "docx" | "pdf" | "epub") {
@@ -611,6 +914,8 @@ export default function EbookStudio() {
       };
 
       setCompanionSource({ id: source.id, title: source.title, mode: source.mode });
+      setCreationMode("single");
+      setDualProject(null);
       setCreatorMode("new");
       setMode(targetMode);
       setBrief(nextBrief);
@@ -740,8 +1045,8 @@ export default function EbookStudio() {
             <div className="mode-switch" role="tablist" aria-label="Book type">
               <button
                 role="tab"
-                aria-selected={mode === "fiction"}
-                className={mode === "fiction" ? "selected" : ""}
+                aria-selected={creationMode === "single" && mode === "fiction"}
+                className={creationMode === "single" && mode === "fiction" ? "selected" : ""}
                 onClick={() => chooseMode("fiction")}
                 disabled={fieldsLocked}
               >
@@ -749,12 +1054,21 @@ export default function EbookStudio() {
               </button>
               <button
                 role="tab"
-                aria-selected={mode === "nonfiction"}
-                className={mode === "nonfiction" ? "selected" : ""}
+                aria-selected={creationMode === "single" && mode === "nonfiction"}
+                className={creationMode === "single" && mode === "nonfiction" ? "selected" : ""}
                 onClick={() => chooseMode("nonfiction")}
                 disabled={fieldsLocked}
               >
                 Non-Fiction
+              </button>
+              <button
+                role="tab"
+                aria-selected={creationMode === "dual"}
+                className={creationMode === "dual" ? "selected" : ""}
+                onClick={chooseDualMode}
+                disabled={fieldsLocked}
+              >
+                Fiction + Non-Fiction
               </button>
             </div>
 
@@ -807,13 +1121,36 @@ export default function EbookStudio() {
                 placeholder="e.g. The Lanternkeeper’s Daughter"
                 disabled={fieldsLocked}
               />
-              <Field
-                label="Book subtitle (optional)"
-                value={brief.subtitle ?? ""}
-                onChange={(value) => updateBrief("subtitle", value)}
-                placeholder="Leave blank and AI will create one"
-                disabled={fieldsLocked}
-              />
+              {creationMode === "dual" ? (
+                <div className="dual-subtitle-fields">
+                  <Field
+                    label="Fiction subtitle (optional)"
+                    value={dualInput.fictionSubtitle}
+                    onChange={(value) =>
+                      setDualInput((current) => ({ ...current, fictionSubtitle: value }))
+                    }
+                    placeholder="Leave blank and AI will create one"
+                    disabled={fieldsLocked}
+                  />
+                  <Field
+                    label="Non-Fiction subtitle (optional)"
+                    value={dualInput.nonfictionSubtitle}
+                    onChange={(value) =>
+                      setDualInput((current) => ({ ...current, nonfictionSubtitle: value }))
+                    }
+                    placeholder="Leave blank and AI will create one"
+                    disabled={fieldsLocked}
+                  />
+                </div>
+              ) : (
+                <Field
+                  label="Book subtitle (optional)"
+                  value={brief.subtitle ?? ""}
+                  onChange={(value) => updateBrief("subtitle", value)}
+                  placeholder="Leave blank and AI will create one"
+                  disabled={fieldsLocked}
+                />
+              )}
               {brief.title.trim() && !titlePromptDismissed ? (
                 <div className="title-optimizer">
                   <div className="title-optimizer-copy">
@@ -874,7 +1211,7 @@ export default function EbookStudio() {
                   ) : null}
                 </div>
               ) : null}
-              <div className="ai-brief-helper">
+              {creationMode === "single" ? <div className="ai-brief-helper">
                 <div className="ai-brief-helper-copy">
                   <span>Only have a title?</span>
                   <p>
@@ -897,7 +1234,7 @@ export default function EbookStudio() {
                     ? "Creating suggestions"
                     : `Fill ${mode === "fiction" ? "Fiction" : "Non-Fiction"} details`}
                 </button>
-              </div>
+              </div> : null}
               {autoFillMessage ? (
                 <p className="ai-brief-note" role="status">
                   <Check size={15} />
@@ -912,7 +1249,30 @@ export default function EbookStudio() {
                 disabled={fieldsLocked}
               />
 
-              {mode === "fiction" ? (
+              {creationMode === "dual" ? (
+                <>
+                  <Field
+                    textarea
+                    label="Shared central concept"
+                    value={dualInput.concept}
+                    onChange={(value) =>
+                      setDualInput((current) => ({ ...current, concept: value }))
+                    }
+                    placeholder="What central theme, problem, or transformation should connect both books?"
+                    disabled={fieldsLocked}
+                  />
+                  <Field
+                    textarea
+                    label="Shared target audience"
+                    value={dualInput.audience}
+                    onChange={(value) =>
+                      setDualInput((current) => ({ ...current, audience: value }))
+                    }
+                    placeholder="Who should connect with both the story and the practical guide?"
+                    disabled={fieldsLocked}
+                  />
+                </>
+              ) : mode === "fiction" ? (
                 <>
                   <Field
                     label="Genre"
@@ -1011,7 +1371,13 @@ export default function EbookStudio() {
               ) : (
                 <button className="generate-button" type="submit" disabled={isAutoFilling}>
                   <Sparkles size={20} />
-                  {status === "complete" ? "Generate another version" : "Generate book"}
+                  {creationMode === "dual"
+                    ? status === "complete"
+                      ? "Generate another pair"
+                      : "Generate both books"
+                    : status === "complete"
+                      ? "Generate another version"
+                      : "Generate book"}
                 </button>
               )}
             </form>
@@ -1019,7 +1385,13 @@ export default function EbookStudio() {
             )}
           </div>
 
-          <BookPreview
+          {creationMode === "dual" ? (
+            <DualBookPreview
+              project={dualProject}
+              status={status}
+              onOpen={openBook}
+            />
+          ) : <BookPreview
             manuscript={manuscript}
             status={status}
             progress={progress}
@@ -1033,7 +1405,7 @@ export default function EbookStudio() {
             onRepairSection={repairSection}
             isCreatingCompanion={isCreatingCompanion}
             onCreateCompanion={createCompanionBook}
-          />
+          />}
         </section>
       ) : (
         <LibraryView
@@ -1043,7 +1415,7 @@ export default function EbookStudio() {
           onCreate={() => setView("create")}
         />
       )}
-      <CreativeAssistant
+      {creationMode === "single" ? <CreativeAssistant
         mode={mode}
         brief={brief}
         manuscript={manuscript}
@@ -1051,8 +1423,107 @@ export default function EbookStudio() {
         provider={provider}
         onApplyTitle={applyAssistantTitle}
         onApplySection={applyAssistantSection}
-      />
+      /> : null}
     </main>
+  );
+}
+
+function DualBookPreview({
+  project,
+  status,
+  onOpen,
+}: {
+  project: DualBookProject | null;
+  status: GenerationStatus;
+  onOpen: (book: Manuscript) => void;
+}) {
+  if (!project) {
+    return (
+      <aside className="preview-panel dual-preview-panel" aria-live="polite">
+        <div className={status === "outlining" ? "generation-empty" : "empty-state"}>
+          {status === "outlining" ? (
+            <LoaderCircle className="spin" size={34} />
+          ) : (
+            <div className="dual-book-illustration" aria-hidden="true">
+              <BookOpen size={30} />
+              <BookOpen size={30} />
+            </div>
+          )}
+          <p className="preview-kicker">
+            {status === "outlining" ? "Building the shared Book DNA" : "Dual Book Project"}
+          </p>
+          <h2>
+            {status === "outlining"
+              ? "Designing two connected books"
+              : "One concept. Two complete books."}
+          </h2>
+          <p>
+            {status === "outlining"
+              ? "EB Studio Pro is creating aligned fiction and non-fiction briefs and outlines."
+              : "Fiction delivers the emotional experience. Non-fiction delivers the practical transformation."}
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
+  const books = [project.fiction, project.nonfiction];
+  const canOpen = status !== "outlining" && status !== "writing";
+
+  return (
+    <aside className="preview-panel dual-preview-panel" aria-live="polite">
+      <div className="dual-preview-heading">
+        <div>
+          <span className="preview-kicker">Dual Book Project</span>
+          <h2>{project.title}</h2>
+          <p>
+            {status === "complete"
+              ? "Both manuscripts are complete and saved as a companion pair."
+              : status === "writing"
+                ? "Both writers are working in synchronized section cycles."
+                : "Generation paused. Open either manuscript to inspect or repair it."}
+          </p>
+        </div>
+        {status === "complete" ? (
+          <span className="dual-complete-badge"><Check size={15} /> Pair complete</span>
+        ) : status === "writing" ? (
+          <span className="dual-writing-badge"><LoaderCircle className="spin" size={15} /> Writing both</span>
+        ) : null}
+      </div>
+
+      <div className="dual-lanes">
+        {books.map((book) => {
+          const completed = book.plan.filter(
+            (_, index) => Boolean(book.sections[index]?.content?.trim()),
+          ).length;
+          const percent = book.plan.length
+            ? Math.round((completed / book.plan.length) * 100)
+            : 0;
+          return (
+            <article className={`dual-lane ${book.mode}`} key={book.id}>
+              <div className="dual-lane-label">
+                <span>{book.mode === "fiction" ? "Fiction" : "Non-Fiction"}</span>
+                <strong>{completed} of {book.plan.length} sections</strong>
+              </div>
+              <h3>{book.title}</h3>
+              <p>{book.subtitle || "Subtitle will be created during outlining."}</p>
+              <div className="dual-lane-progress" aria-label={`${percent}% complete`}>
+                <span style={{ width: `${percent}%` }} />
+              </div>
+              <small>
+                {(book.providersUsed ?? []).map(providerLabel).join(" + ") || "Writer pending"}
+              </small>
+              <button onClick={() => onOpen(book)} disabled={!canOpen}>
+                {canOpen ? <BookOpen size={15} /> : <LoaderCircle className="spin" size={15} />}
+                {canOpen
+                  ? `Open ${book.mode === "fiction" ? "Fiction" : "Non-Fiction"} Book`
+                  : "Writing manuscript"}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </aside>
   );
 }
 
