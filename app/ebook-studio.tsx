@@ -36,6 +36,10 @@ import {
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
 import ExistingEbookOptimizer from "./existing-ebook-optimizer";
+import {
+  loadStoredLibrary,
+  persistStoredLibrary,
+} from "./library-storage";
 
 type View = "create" | "library";
 type GenerationStatus =
@@ -47,8 +51,6 @@ type GenerationStatus =
   | "error";
 
 const chapterPresets = [3, 5, 8, 10, 12, 15, 20];
-const LIBRARY_KEY = "eb-studio-pro-library-v1";
-const LEGACY_LIBRARY_KEY = "inkwell-library-v1";
 const blankBrief: BookBrief = {
   title: "",
   author: "Sulong",
@@ -84,21 +86,22 @@ export default function EbookStudio() {
   const cancelRef = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     const timer = window.setTimeout(() => {
-      try {
-        const saved =
-          localStorage.getItem(LIBRARY_KEY) ??
-          localStorage.getItem(LEGACY_LIBRARY_KEY);
-        if (saved) {
-          setLibrary(JSON.parse(saved));
-          localStorage.setItem(LIBRARY_KEY, saved);
-          localStorage.removeItem(LEGACY_LIBRARY_KEY);
-        }
-      } catch {
-        localStorage.removeItem(LIBRARY_KEY);
-      }
+      void loadStoredLibrary()
+        .then((savedLibrary) => {
+          if (!cancelled) setLibrary(savedLibrary);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setError("Your saved books could not be loaded from this browser.");
+          }
+        });
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   const isGenerating = status === "outlining" || status === "writing";
@@ -398,11 +401,11 @@ export default function EbookStudio() {
   function saveBook(book: Manuscript) {
     setLibrary((current) => {
       const next = [book, ...current.filter((item) => item.id !== book.id)].slice(0, 8);
-      try {
-        localStorage.setItem(LIBRARY_KEY, JSON.stringify(next));
-      } catch {
-        setError("The book is complete, but this browser could not save another local copy.");
-      }
+      void persistStoredLibrary(next).catch(() => {
+        setError(
+          "The book is open, but this browser could not permanently save its latest cover.",
+        );
+      });
       return next;
     });
   }
@@ -421,7 +424,9 @@ export default function EbookStudio() {
   function removeBook(id: string) {
     const next = library.filter((book) => book.id !== id);
     setLibrary(next);
-    localStorage.setItem(LIBRARY_KEY, JSON.stringify(next));
+    void persistStoredLibrary(next).catch(() => {
+      setError("This browser could not finish removing the saved book.");
+    });
   }
 
   function startFresh() {
