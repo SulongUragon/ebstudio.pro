@@ -38,6 +38,31 @@ export type KdpReadiness = {
   warnings: string[];
 };
 
+export function getCoverReadiness(book: Manuscript): KdpReadiness {
+  const errors: string[] = [];
+  const title = cleanText(book?.title).trim();
+  const cover = book?.cover;
+
+  if (!cover?.imageData) {
+    errors.push("Generate the final KDP cover.");
+  } else {
+    if (!/^data:image\/jpe?g;base64,/i.test(cover.imageData)) {
+      errors.push("The KDP cover must be a JPEG.");
+    }
+    if (cover.width !== 1600 || cover.height !== 2560) {
+      errors.push("Regenerate the cover at the KDP-ready 1600 × 2560 size.");
+    }
+    if (cleanText(cover.displayTitle).trim() !== title) {
+      errors.push("The cover title must exactly match the book title.");
+    }
+    if (book.subtitle && cleanText(cover.displaySubtitle).trim() !== cleanText(book.subtitle).trim()) {
+      errors.push("The cover subtitle must exactly match the book subtitle.");
+    }
+  }
+
+  return { ready: errors.length === 0, errors, warnings: [] };
+}
+
 export function getKdpReadiness(book: Manuscript): KdpReadiness {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -55,23 +80,7 @@ export function getKdpReadiness(book: Manuscript): KdpReadiness {
     errors.push("Every manuscript section must contain finished text.");
   }
 
-  const cover = book?.cover;
-  if (!cover?.imageData) {
-    errors.push("Generate the final KDP cover.");
-  } else {
-    if (!/^data:image\/jpe?g;base64,/i.test(cover.imageData)) {
-      errors.push("The KDP cover must be a JPEG.");
-    }
-    if (cover.width !== 1600 || cover.height !== 2560) {
-      errors.push("Regenerate the cover at the KDP-ready 1600 × 2560 size.");
-    }
-    if (cleanText(cover.displayTitle).trim() !== title) {
-      errors.push("The cover title must exactly match the book title.");
-    }
-    if (book.subtitle && cleanText(cover.displaySubtitle).trim() !== cleanText(book.subtitle).trim()) {
-      errors.push("The cover subtitle must exactly match the book subtitle.");
-    }
-  }
+  errors.push(...getCoverReadiness(book).errors);
 
   if (title.length > 180) warnings.push("The title is unusually long; inspect its cover fit carefully.");
   return { ready: errors.length === 0, errors, warnings };
@@ -529,7 +538,7 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
 }
 
 export async function exportCover(book: Manuscript, shouldDownload = true) {
-  const readiness = getKdpReadiness(book);
+  const readiness = getCoverReadiness(book);
   if (!readiness.ready) throw new Error(readiness.errors[0]);
   const bytes = dataUriToBytes(book.cover?.imageData ?? "");
   const blob = new Blob([bytes], { type: "image/jpeg" });
