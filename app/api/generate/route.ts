@@ -650,8 +650,7 @@ ${previousSummaries.map((summary, index) => `${index + 1}. ${summary}`).join("\n
   const lengthTarget =
     section.kind === "chapter" ? "1,000 to 1,500 words" : "700 to 1,000 words";
 
-  const generated = await generateJson(
-    {
+  const request: JsonRequest = {
       name: "ebook_section",
       schema: {
         type: "object",
@@ -689,12 +688,27 @@ ${
 
 The summary must be a compact continuity note of 2 to 4 sentences for the writer of the next section.`,
       maxOutputTokens: 7000,
-    },
-    body.provider ?? "auto",
-    body.preferredProvider,
-  );
+    };
 
-  return { ...generated.output, provider: generated.provider };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const generated = await generateJson(
+      attempt === 0
+        ? request
+        : {
+            ...request,
+            input: `${request.input}\n\nThe previous response was incomplete. Return substantial finished prose in content and a complete continuity note in summary. Neither field may be blank.`,
+          },
+      body.provider ?? "auto",
+      body.preferredProvider,
+    );
+    const content = String(generated.output.content ?? "").trim();
+    const summary = String(generated.output.summary ?? "").trim();
+    if (content && summary) {
+      return { content, summary, provider: generated.provider };
+    }
+  }
+
+  throw new Error(`The writer returned an empty response for ${section.title}.`);
 }
 
 async function generateJson(
