@@ -104,11 +104,13 @@ test("EPUB export includes EPUB3 navigation, NCX fallback, cover metadata, and r
   const mimetype = await zip.file("mimetype")?.async("string");
   const opf = await zip.file("OEBPS/content.opf")?.async("string");
   const nav = await zip.file("OEBPS/nav.xhtml")?.async("string");
+  const copyright = await zip.file("OEBPS/copyright.xhtml")?.async("string");
+  const stylesheet = await zip.file("OEBPS/style.css")?.async("string");
   const prologue = await zip.file("OEBPS/section-1.xhtml")?.async("string");
   const chapter = await zip.file("OEBPS/section-2.xhtml")?.async("string");
   const epilogue = await zip.file("OEBPS/section-3.xhtml")?.async("string");
   assert.equal(mimetype, "application/epub+zip");
-  assert.ok(opf && nav && prologue && chapter && epilogue);
+  assert.ok(opf && nav && copyright && stylesheet && prologue && chapter && epilogue);
   assert.ok(zip.file("OEBPS/cover.jpg"));
   assert.ok(zip.file("OEBPS/toc.ncx"));
   assert.equal(Boolean(zip.file("OEBPS/cover.xhtml")), false);
@@ -118,6 +120,10 @@ test("EPUB export includes EPUB3 navigation, NCX fallback, cover metadata, and r
   assert.match(nav, /epub:type="toc"/);
   assert.match(nav, /epub:type="landmarks"/);
   assert.match(nav, /Chapter 1: The Door/);
+  assert.doesNotMatch(copyright, /<h1>Copyright<\/h1>/);
+  assert.match(copyright, /class="copyright-notice"/);
+  assert.match(stylesheet, /box-sizing:border-box/);
+  assert.match(stylesheet, /overflow-x:hidden/);
   assert.match(prologue, /epub:type="prologue"/);
   assert.match(epilogue, /epub:type="epilogue"/);
   assert.match(chapter, /<strong>turned<\/strong>/);
@@ -126,4 +132,27 @@ test("EPUB export includes EPUB3 navigation, NCX fallback, cover metadata, and r
   assert.match(chapter, /<ul><li>A photograph<\/li><li>A sealed letter<\/li><\/ul>/);
   assert.match(epilogue, /<em>felt<\/em>/);
   assert.doesNotMatch(epilogue, /\*felt\*/);
+});
+
+test("EPUB normalizes repeated structural labels in section titles", async () => {
+  const book = sampleBook();
+  book.sections[0].title = "Prologue: Prologue: The Last Binding";
+  book.sections[0].content = "# Prologue: The Last Binding\n\nThe ink moved.";
+  book.sections[1].title = "Chapter 1: The Door";
+  book.sections[2].title = "Epilogue: Epilogue: Morning";
+
+  const blob = await exportEpub(book, false);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const nav = await zip.file("OEBPS/nav.xhtml")?.async("string");
+  const prologue = await zip.file("OEBPS/section-1.xhtml")?.async("string");
+  const chapter = await zip.file("OEBPS/section-2.xhtml")?.async("string");
+  const epilogue = await zip.file("OEBPS/section-3.xhtml")?.async("string");
+
+  assert.ok(nav && prologue && chapter && epilogue);
+  assert.match(prologue, /<h1 id="section-title">Prologue: The Last Binding<\/h1>/);
+  assert.match(chapter, /<h1 id="section-title">Chapter 1: The Door<\/h1>/);
+  assert.match(epilogue, /<h1 id="section-title">Epilogue: Morning<\/h1>/);
+  assert.doesNotMatch(nav, /Prologue: Prologue:/);
+  assert.doesNotMatch(nav, /Chapter 1: Chapter 1:/);
+  assert.doesNotMatch(nav, /Epilogue: Epilogue:/);
 });
