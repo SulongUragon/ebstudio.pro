@@ -8,7 +8,7 @@ import type {
 } from "../../book-types";
 
 type RequestBody = {
-  action: "title" | "brief" | "companion" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section";
+  action: "title" | "brief" | "companion" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section";
   mode: Mode;
   sourceMode?: Mode;
   brief: BookBrief;
@@ -26,6 +26,12 @@ type RequestBody = {
     sections?: Array<{ title?: string; content?: string; summary?: string }>;
   } | null;
   activeSection?: number;
+  dualPair?: {
+    concept?: string;
+    audience?: string;
+    fictionSubtitle?: string;
+    nonfictionSubtitle?: string;
+  };
   existingBook?: {
     optimizationMode?: "packaging" | "polish" | "viral" | "relaunch";
     text?: string;
@@ -105,6 +111,10 @@ export async function POST(request: Request) {
     }
     if (body.action === "companion" && body.manuscript) {
       const result = await createCompanionBrief(body);
+      return NextResponse.json(result);
+    }
+    if (body.action === "dual_brief" && body.dualPair) {
+      const result = await createDualBookBrief(body);
       return NextResponse.json(result);
     }
     if (body.action === "assistant" && body.assistantPrompt?.trim()) {
@@ -594,6 +604,66 @@ Recommend 8 to 12 main chapters. Return only the target brief fields.`,
     ),
     provider: generated.provider,
   };
+}
+
+async function createDualBookBrief(body: RequestBody) {
+  const concept = String(body.dualPair?.concept ?? "").trim();
+  const audience = String(body.dualPair?.audience ?? "").trim();
+  if (!concept || !audience) {
+    throw new Error("Add the shared concept and target audience for the dual book pair.");
+  }
+
+  const generated = await generateJson(
+    {
+      name: "dual_book_pair_brief",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          fiction: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              genre: { type: "string" },
+              characters: { type: "string" },
+              premise: { type: "string" },
+            },
+            required: ["genre", "characters", "premise"],
+          },
+          nonfiction: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              topic: { type: "string" },
+              audience: { type: "string" },
+              key_points: { type: "string" },
+            },
+            required: ["topic", "audience", "key_points"],
+          },
+        },
+        required: ["fiction", "nonfiction"],
+      },
+      instructions:
+        "You are the dual-book architect inside EB Studio Pro. Build two original, commercially coherent books from one shared concept: one fiction and one non-fiction. They must share the same central theme, emotional promise, audience connection, and premium tone while remaining standalone and non-duplicative. The fiction must dramatize rather than teach. The non-fiction must teach rather than retell the plot. Never use the em dash character. Never invent research, statistics, credentials, or clinical claims.",
+      input: `Create aligned briefs for a fiction and non-fiction companion pair.
+
+Shared main title: ${body.brief.title}
+Author: ${body.brief.author}
+Shared concept: ${concept}
+Target audience: ${audience}
+Fiction subtitle: ${String(body.dualPair?.fictionSubtitle ?? "").trim() || "To be created during outlining"}
+Non-fiction subtitle: ${String(body.dualPair?.nonfictionSubtitle ?? "").trim() || "To be created during outlining"}
+
+For fiction, return a precise genre, 2 to 4 developed main characters, and a focused plot premise with conflict, stakes, progression, and a complete story engine.
+
+For non-fiction, return a focused topic, a specific audience description, and 6 to 10 practical key points forming a logical transformation. The two books should feel intentionally paired without duplicating chapters or prose.`,
+      maxOutputTokens: 3200,
+    },
+    body.provider ?? "auto",
+    body.preferredProvider,
+  );
+
+  return { ...generated.output, provider: generated.provider };
 }
 
 async function createOutline(
