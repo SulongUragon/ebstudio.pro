@@ -269,6 +269,57 @@ export default function EbookStudio() {
     }
   }
 
+  async function autoFillDualDetails() {
+    if (!brief.title.trim()) {
+      setError("Enter a book title first, then let AI fill the pair details.");
+      return;
+    }
+
+    setIsAutoFilling(true);
+    setError("");
+    setAutoFillMessage("");
+    setActiveProvider(null);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "dual_seed",
+          mode: "fiction",
+          brief,
+          provider,
+        }),
+      });
+      const data = await readResponse(response);
+      const chapterCount = Math.min(
+        20,
+        Math.max(3, Number(data.chapter_count) || brief.chapterCount || 8),
+      );
+
+      setDualInput({
+        concept: String(data.concept ?? ""),
+        audience: String(data.audience ?? ""),
+        fictionSubtitle: String(data.fiction_subtitle ?? ""),
+        nonfictionSubtitle: String(data.nonfiction_subtitle ?? ""),
+      });
+      setBrief((current) => ({ ...current, chapterCount }));
+      setCustomChapters("");
+      setActiveProvider(data.provider as ActiveAIProvider);
+      setAutoFillMessage(
+        "Fiction and Non-Fiction pair details added. Review them before generating both books.",
+      );
+    } catch (autoFillError) {
+      setError(
+        autoFillError instanceof Error
+          ? autoFillError.message
+          : "EB Studio Pro could not create pair details for this title.",
+      );
+    } finally {
+      setIsAutoFilling(false);
+    }
+  }
+
   async function improveTitle() {
     if (!brief.title.trim()) return;
 
@@ -1218,18 +1269,19 @@ export default function EbookStudio() {
                   ) : null}
                 </div>
               ) : null}
-              {creationMode === "single" ? <div className="ai-brief-helper">
+              <div className="ai-brief-helper">
                 <div className="ai-brief-helper-copy">
                   <span>Only have a title?</span>
                   <p>
-                    Let AI draft the rest of your {mode === "fiction" ? "Fiction" : "Non-Fiction"} brief.
-                    Every suggestion stays editable.
+                    {creationMode === "dual"
+                      ? "Let AI build the shared concept, audience, two subtitles, and chapter count. Every suggestion stays editable."
+                      : `Let AI draft the rest of your ${mode === "fiction" ? "Fiction" : "Non-Fiction"} brief. Every suggestion stays editable.`}
                   </p>
                 </div>
                 <button
                   className="ai-brief-button"
                   type="button"
-                  onClick={autoFillBrief}
+                  onClick={creationMode === "dual" ? autoFillDualDetails : autoFillBrief}
                   disabled={!brief.title.trim() || fieldsLocked}
                 >
                   {isAutoFilling ? (
@@ -1239,9 +1291,11 @@ export default function EbookStudio() {
                   )}
                   {isAutoFilling
                     ? "Creating suggestions"
-                    : `Fill ${mode === "fiction" ? "Fiction" : "Non-Fiction"} details`}
+                    : creationMode === "dual"
+                      ? "Fill Fiction + Non-Fiction Details"
+                      : `Fill ${mode === "fiction" ? "Fiction" : "Non-Fiction"} details`}
                 </button>
-              </div> : null}
+              </div>
               {autoFillMessage ? (
                 <p className="ai-brief-note" role="status">
                   <Check size={15} />
