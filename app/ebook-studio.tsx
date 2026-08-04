@@ -55,6 +55,7 @@ type CompanionSource = NonNullable<Manuscript["companionOf"]>;
 const chapterPresets = [3, 5, 8, 10, 12, 15, 20];
 const blankBrief: BookBrief = {
   title: "",
+  subtitle: "",
   author: "Sulong",
   genre: "",
   characters: "",
@@ -279,7 +280,7 @@ export default function EbookStudio() {
 
   function completeOptimization(book: Manuscript, usedProvider: ActiveAIProvider) {
     setManuscript(book);
-    setBrief(book.brief);
+    setBrief(normalizeBriefSubtitle(book));
     setMode(book.mode);
     setActiveProvider(usedProvider);
     setStatus("complete");
@@ -330,6 +331,8 @@ export default function EbookStudio() {
       });
       const outlineData = await readResponse(outlineResponse);
       const plan = outlineData.plan as SectionPlan[];
+      const finalSubtitle = String(outlineData.subtitle ?? "").trim();
+      const finalBrief: BookBrief = { ...brief, subtitle: finalSubtitle };
       let workingProvider = outlineData.provider as ActiveAIProvider;
       setActiveProvider(workingProvider);
 
@@ -337,10 +340,10 @@ export default function EbookStudio() {
         id: crypto.randomUUID(),
         mode,
         title: brief.title.trim(),
-        subtitle: String(outlineData.subtitle ?? ""),
+        subtitle: finalSubtitle,
         author: brief.author.trim(),
         createdAt: new Date().toISOString(),
-        brief,
+        brief: finalBrief,
         plan,
         sections: [],
         providersUsed: [workingProvider],
@@ -430,7 +433,7 @@ export default function EbookStudio() {
 
   function openBook(book: Manuscript) {
     setManuscript(book);
-    setBrief(book.brief);
+    setBrief(normalizeBriefSubtitle(book));
     setMode(book.mode);
     setActiveProvider(book.providersUsed?.at(-1) ?? null);
     setStatus("complete");
@@ -802,6 +805,13 @@ export default function EbookStudio() {
                 value={brief.title}
                 onChange={updateTitle}
                 placeholder="e.g. The Lanternkeeper’s Daughter"
+                disabled={fieldsLocked}
+              />
+              <Field
+                label="Book subtitle (optional)"
+                value={brief.subtitle ?? ""}
+                onChange={(value) => updateBrief("subtitle", value)}
+                placeholder="Leave blank and AI will create one"
                 disabled={fieldsLocked}
               />
               {brief.title.trim() && !titlePromptDismissed ? (
@@ -1382,6 +1392,13 @@ function removeLeadingDuplicateHeading(content: string, title: string, label: st
 
 function normalizeHeading(value: string) {
   return value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function normalizeBriefSubtitle(book: Manuscript): BookBrief {
+  return {
+    ...book.brief,
+    subtitle: book.brief.subtitle?.trim() || book.subtitle || "",
+  };
 }
 
 function LibraryView({
