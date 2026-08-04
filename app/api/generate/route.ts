@@ -8,8 +8,9 @@ import type {
 } from "../../book-types";
 
 type RequestBody = {
-  action: "title" | "brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section";
+  action: "title" | "brief" | "companion" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section";
   mode: Mode;
+  sourceMode?: Mode;
   brief: BookBrief;
   provider?: AIProvider;
   preferredProvider?: ActiveAIProvider;
@@ -100,6 +101,10 @@ export async function POST(request: Request) {
         body.brief.title,
         body.provider ?? "auto",
       );
+      return NextResponse.json(result);
+    }
+    if (body.action === "companion" && body.manuscript) {
+      const result = await createCompanionBrief(body);
       return NextResponse.json(result);
     }
     if (body.action === "assistant" && body.assistantPrompt?.trim()) {
@@ -501,6 +506,84 @@ Define a focused topic, a specific target audience including their needs or leve
       maxOutputTokens: 1800,
     },
     provider,
+  );
+
+  return {
+    ...generated.output,
+    chapter_count: Math.min(
+      20,
+      Math.max(3, Number(generated.output.chapter_count) || 8),
+    ),
+    provider: generated.provider,
+  };
+}
+
+async function createCompanionBrief(body: RequestBody) {
+  const sourceMode = body.sourceMode ?? (body.mode === "fiction" ? "nonfiction" : "fiction");
+  if (sourceMode === body.mode) {
+    throw new Error("A companion book must use the opposite book type.");
+  }
+
+  const fictionProperties = {
+    genre: { type: "string" },
+    characters: { type: "string" },
+    premise: { type: "string" },
+    chapter_count: { type: "integer" },
+  };
+  const nonfictionProperties = {
+    topic: { type: "string" },
+    audience: { type: "string" },
+    key_points: { type: "string" },
+    chapter_count: { type: "integer" },
+  };
+  const sectionMap = body.manuscript?.sections
+    ?.slice(0, 40)
+    .map((section, index) => `${index + 1}. ${section.title ?? "Untitled"}: ${section.summary ?? ""}`)
+    .join("\n");
+  const sourceContext =
+    sourceMode === "fiction"
+      ? `Genre: ${body.brief.genre}\nCharacters: ${body.brief.characters}\nPlot premise: ${body.brief.premise}`
+      : `Topic: ${body.brief.topic}\nAudience: ${body.brief.audience}\nKey points: ${body.brief.keyPoints}`;
+  const targetInstruction =
+    body.mode === "fiction"
+      ? "Create an original fiction companion that dramatizes the source book's central principles through specific characters, conflict, stakes, and a complete story engine. It must stand alone as a novel and must not read like lessons disguised as dialogue."
+      : "Create a practical non-fiction companion that transforms the source story's central emotional themes and conflicts into a clear learning journey. It must stand alone as a useful guide, must not retell the plot chapter by chapter, and must not invent research, statistics, credentials, or clinical claims.";
+  const properties = body.mode === "fiction" ? fictionProperties : nonfictionProperties;
+  const required =
+    body.mode === "fiction"
+      ? ["genre", "characters", "premise", "chapter_count"]
+      : ["topic", "audience", "key_points", "chapter_count"];
+
+  const generated = await generateJson(
+    {
+      name: body.mode === "fiction" ? "fiction_companion_brief" : "nonfiction_companion_brief",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties,
+        required,
+      },
+      instructions:
+        "You are the companion-book architect inside EB Studio Pro. Build a commercially coherent companion in the opposite format while preserving the source book's core theme, emotional promise, audience connection, and premium tone. The companion must be original, standalone, and non-duplicative. Never use the em dash character. Do not return or change the supplied title.",
+      input: `Create an editable ${body.mode === "fiction" ? "fiction" : "non-fiction"} companion brief for this completed ${sourceMode === "fiction" ? "fiction" : "non-fiction"} book.
+
+Shared main title: ${body.manuscript?.title ?? body.brief.title}
+Source subtitle: ${body.manuscript?.subtitle ?? ""}
+Author: ${body.brief.author}
+
+Source brief:
+${sourceContext}
+
+Source section map:
+${sectionMap || "No section summaries available."}
+
+${targetInstruction}
+
+Recommend 8 to 12 main chapters. Return only the target brief fields.`,
+      maxOutputTokens: 2200,
+    },
+    body.provider ?? "auto",
+    body.preferredProvider,
   );
 
   return {
