@@ -56,7 +56,6 @@ test("every visual direction rotates through premium title designs", () => {
     "cinematic",
     "minimalist",
     "illustrated",
-    "photoreal-title",
     "minimal-real-title",
     "fully-loaded-title",
     "eb-signature",
@@ -94,17 +93,18 @@ test("real-person covers reject generic condensed and sans title presets", () =>
   );
   assert.equal(
     normalizeCoverTypographyPreset("photoreal-title", "quiet-editorial"),
-    "quiet-editorial",
+    "classic-gold",
   );
 });
 
-test("real-person covers use the exact EB Signature title engine", () => {
+test("real-person covers are permanently locked to Classic Gold", () => {
   for (const seed of ["cover-a", "cover-b", "cover-c", "cover-d"]) {
     assert.equal(
       selectCoverTypographyPreset("photoreal-title", seed),
-      selectCoverTypographyPreset("eb-signature", seed),
+      "classic-gold",
     );
   }
+  assert.equal(usesAutomaticTitleVariety("photoreal-title"), true);
 });
 
 test("every premium title design uses a distinct embedded font", () => {
