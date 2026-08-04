@@ -43,43 +43,23 @@ export default function CoverStudio({
     initialStyle,
     savedTypographyPreset,
   );
-  const shouldUpgradeSavedTypography =
-    initialTypographyPreset !== savedTypographyPreset;
   const [style, setStyle] = useState(initialStyle);
   const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
-  const [coverTitle, setCoverTitle] = useState(
-    manuscript.cover?.displayTitle ?? manuscript.title,
-  );
+  const coverTitle = resolveExactCoverTitle(manuscript, manuscript.title);
   const [coverSubtitle, setCoverSubtitle] = useState(
     manuscript.cover?.displaySubtitle ?? manuscript.subtitle,
-  );
-  const [showTitle, setShowTitle] = useState(
-    manuscript.cover?.showTitle ?? true,
   );
   const [autoFitText, setAutoFitText] = useState(
     manuscript.cover?.autoFitText ?? true,
   );
-  const [titleFontSize, setTitleFontSize] = useState(
-    manuscript.cover?.titleFontSize ?? 96,
-  );
   const [subtitleFontSize, setSubtitleFontSize] = useState(
     manuscript.cover?.subtitleFontSize ?? 40,
-  );
-  const [titlePosition, setTitlePosition] = useState(
-    manuscript.cover?.titlePosition ?? 7,
   );
   const [subtitlePosition, setSubtitlePosition] = useState(
     manuscript.cover?.subtitlePosition ?? 25,
   );
-  const [titleAlignment, setTitleAlignment] = useState<"left" | "center" | "right">(
-    manuscript.cover?.titleAlignment ?? "center",
-  );
   const [subtitleAlignment, setSubtitleAlignment] = useState<"left" | "center" | "right">(
     manuscript.cover?.subtitleAlignment ?? "center",
-  );
-  const [titleColor, setTitleColor] = useState(
-    manuscript.cover?.titleColor ??
-      (manuscript.cover?.style === "eb-signature" ? "#f1e3cf" : "#fffdf7"),
   );
   const [subtitleColor, setSubtitleColor] = useState(
     manuscript.cover?.subtitleColor ??
@@ -97,9 +77,7 @@ export default function CoverStudio({
   const onSaveRef = useRef(onSave);
   const manuscriptRef = useRef(manuscript);
   const coverRef = useRef(manuscript.cover);
-  const skippedInitialAutoApply = useRef(
-    shouldUpgradeSavedTypography || initialStyle === "photoreal-title",
-  );
+  const skippedInitialAutoApply = useRef(true);
   const autoApplySequence = useRef(0);
 
   useEffect(() => {
@@ -124,26 +102,18 @@ export default function CoverStudio({
         setApplying(true);
         setError("");
         try {
-          await ensureCoverFontsLoaded();
           const currentManuscript = manuscriptRef.current;
           const exactTitle = resolveExactCoverTitle(currentManuscript, coverTitle);
           const imageData = await composeCover(
             currentCover.sourceImageData ?? "",
-            exactTitle,
             coverSubtitle.trim(),
             currentManuscript.author,
             finish,
             style,
-            typographyPreset,
-            showTitle,
             autoFitText,
-            titleFontSize,
             subtitleFontSize,
-            titlePosition,
             subtitlePosition,
-            titleAlignment,
             subtitleAlignment,
-            titleColor,
             subtitleColor,
             authorColor,
           );
@@ -158,15 +128,11 @@ export default function CoverStudio({
             finish,
             displayTitle: exactTitle,
             displaySubtitle: coverSubtitle.trim(),
-            showTitle,
+            showTitle: false,
             autoFitText,
-            titleFontSize,
             subtitleFontSize,
-            titlePosition,
             subtitlePosition,
-            titleAlignment,
             subtitleAlignment,
-            titleColor,
             subtitleColor,
             authorColor,
             typographyPreset,
@@ -197,29 +163,23 @@ export default function CoverStudio({
     manuscript.author,
     manuscript.brief.title,
     manuscript.title,
-    showTitle,
     style,
     subtitleAlignment,
     subtitleColor,
     subtitleFontSize,
     subtitlePosition,
-    titleAlignment,
-    titleColor,
-    titleFontSize,
-    titlePosition,
     typographyPreset,
   ]);
 
   async function generateCover() {
     const exactTitle = resolveExactCoverTitle(manuscript, coverTitle);
     if (!exactTitle) {
-      setError("Add a complete cover title before generating.");
+      setError("Add a complete book title before generating.");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      await ensureCoverFontsLoaded();
       const response = await fetch("/api/cover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -241,59 +201,30 @@ export default function CoverStudio({
         ? selectCoverTypographyPreset(style, sourceImageData)
         : typographyPreset;
       const typography = getCoverTypographyPreset(selectedTypographyPreset);
-      const nextTitleFontSize = shouldVaryTitleDesign
-        ? typography.titleSize
-        : titleFontSize;
-      const nextTitlePosition = shouldVaryTitleDesign
-        ? typography.titlePosition
-        : titlePosition;
-      const nextTitleAlignment = shouldVaryTitleDesign
-        ? typography.titleAlignment
-        : titleAlignment;
       const nextSubtitleAlignment = shouldVaryTitleDesign
         ? typography.titleAlignment
         : subtitleAlignment;
-      const nextTitleColor = shouldVaryTitleDesign
-        ? typography.titleColor
-        : titleColor;
       const nextSubtitleColor = shouldVaryTitleDesign
         ? typography.subtitleColor
         : subtitleColor;
       const nextAuthorColor = shouldVaryTitleDesign
         ? typography.authorColor
         : authorColor;
-      // A fresh AI image is requested without typography, so always restore the
-      // deterministic exact-title layer. The visibility toggle only applies to
-      // the current artwork when an image model unexpectedly bakes in text.
-      const showGeneratedTitle = true;
       const imageData = await composeCover(
         sourceImageData,
-        exactTitle,
         coverSubtitle.trim(),
         manuscript.author,
         finish,
         style,
-        selectedTypographyPreset,
-        showGeneratedTitle,
         autoFitText,
-        nextTitleFontSize,
         subtitleFontSize,
-        nextTitlePosition,
         subtitlePosition,
-        nextTitleAlignment,
         nextSubtitleAlignment,
-        nextTitleColor,
         nextSubtitleColor,
         nextAuthorColor,
       );
-      setCoverTitle(exactTitle);
-      setShowTitle(showGeneratedTitle);
       setTypographyPreset(selectedTypographyPreset);
-      setTitleFontSize(nextTitleFontSize);
-      setTitlePosition(nextTitlePosition);
-      setTitleAlignment(nextTitleAlignment);
       setSubtitleAlignment(nextSubtitleAlignment);
-      setTitleColor(nextTitleColor);
       setSubtitleColor(nextSubtitleColor);
       setAuthorColor(nextAuthorColor);
       onSave({
@@ -305,15 +236,11 @@ export default function CoverStudio({
         finish,
         displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
-        showTitle: showGeneratedTitle,
+        showTitle: false,
         autoFitText,
-        titleFontSize: nextTitleFontSize,
         subtitleFontSize,
-        titlePosition: nextTitlePosition,
         subtitlePosition,
-        titleAlignment: nextTitleAlignment,
         subtitleAlignment: nextSubtitleAlignment,
-        titleColor: nextTitleColor,
         subtitleColor: nextSubtitleColor,
         authorColor: nextAuthorColor,
         typographyPreset: selectedTypographyPreset,
@@ -333,7 +260,7 @@ export default function CoverStudio({
   async function applyTypography() {
     const exactTitle = resolveExactCoverTitle(manuscript, coverTitle);
     if (!exactTitle) {
-      setError("Add a complete cover title before applying typography.");
+      setError("Add a complete book title before applying typography.");
       return;
     }
     const sourceImageData = manuscript.cover?.sourceImageData;
@@ -344,28 +271,20 @@ export default function CoverStudio({
     setApplying(true);
     setError("");
     try {
-      await ensureCoverFontsLoaded();
       const selectedTypographyPreset = normalizeCoverTypographyPreset(
         style,
         manuscript.cover?.typographyPreset ?? typographyPreset,
       );
       const imageData = await composeCover(
         sourceImageData,
-        exactTitle,
         coverSubtitle.trim(),
         manuscript.author,
         finish,
         style,
-        selectedTypographyPreset,
-        showTitle,
         autoFitText,
-        titleFontSize,
         subtitleFontSize,
-        titlePosition,
         subtitlePosition,
-        titleAlignment,
         subtitleAlignment,
-        titleColor,
         subtitleColor,
         authorColor,
       );
@@ -380,15 +299,11 @@ export default function CoverStudio({
         finish,
         displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
-        showTitle,
+        showTitle: false,
         autoFitText,
-        titleFontSize,
         subtitleFontSize,
-        titlePosition,
         subtitlePosition,
-        titleAlignment,
         subtitleAlignment,
-        titleColor,
         subtitleColor,
         authorColor,
         typographyPreset: selectedTypographyPreset,
@@ -411,7 +326,7 @@ export default function CoverStudio({
         <div>
           <span><Sparkles size={15} /> AI Book Cover Studio</span>
           <h3>Give your finished book a cover.</h3>
-          <p>AI creates original artwork. EB Studio Pro adds clean, editable book typography.</p>
+          <p>AI integrates your exact title into the artwork. Subtitle and author stay editable.</p>
         </div>
         {manuscript.cover ? <small><Check size={14} /> Cover selected</small> : null}
       </div>
@@ -435,29 +350,6 @@ export default function CoverStudio({
         <div className="cover-controls">
           <div className="cover-wording">
             <label>
-              <span>Cover title</span>
-              <textarea
-                value={coverTitle}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setCoverTitle(value);
-                  setShowTitle(value.trim().length > 0);
-                }}
-                disabled={loading}
-                rows={2}
-              />
-            </label>
-            <label className="cover-overlay-toggle">
-              <input
-                type="checkbox"
-                checked={showTitle}
-                onChange={(event) => setShowTitle(event.target.checked)}
-                disabled={loading}
-              />
-              <span>Show EB Studio Pro title overlay</span>
-              <small>Turn this off when the AI artwork already contains the title.</small>
-            </label>
-            <label>
               <span>Cover subtitle <small>Optional</small></span>
               <textarea
                 value={coverSubtitle}
@@ -468,8 +360,8 @@ export default function CoverStudio({
             </label>
             <details className="cover-advanced-settings">
               <summary>
-                <span>Typography & layout</span>
-                <strong>{getCoverTypographyPreset(typographyPreset).label}</strong>
+                <span>Subtitle & author</span>
+                <strong>Editable text</strong>
               </summary>
               <div className="cover-type-controls">
               <label className="cover-auto-fit">
@@ -479,24 +371,7 @@ export default function CoverStudio({
                   onChange={(event) => setAutoFitText(event.target.checked)}
                   disabled={loading}
                 />
-                <span>Auto Fit typography</span>
-              </label>
-              <div className="cover-title-design-status">
-                <span>Title design</span>
-                <strong>{getCoverTypographyPreset(typographyPreset).label}</strong>
-                <small>Every visual direction uses the exact title and rotates premium font designs automatically.</small>
-              </div>
-              <label>
-                <span>Title size <strong>{autoFitText ? "Auto" : `${titleFontSize}px`}</strong></span>
-                <input
-                  type="range"
-                  min="62"
-                  max="124"
-                  step="2"
-                  value={titleFontSize}
-                  onChange={(event) => setTitleFontSize(Number(event.target.value))}
-                  disabled={loading}
-                />
+                <span>Auto Fit subtitle</span>
               </label>
               <label>
                 <span>Subtitle size <strong>{autoFitText ? "Auto" : `${subtitleFontSize}px`}</strong></span>
@@ -510,44 +385,6 @@ export default function CoverStudio({
                   disabled={loading}
                 />
               </label>
-              <label>
-                <span>Title position <strong>{titlePosition}%</strong></span>
-                <input
-                  type="range"
-                  min="3"
-                  max="38"
-                  step="1"
-                  value={titlePosition}
-                  onChange={(event) => setTitlePosition(Number(event.target.value))}
-                  disabled={loading}
-                />
-              </label>
-              <div className="cover-layout-row">
-                <span>Title alignment</span>
-                <select
-                  className="cover-alignment-select"
-                  value={titleAlignment}
-                  onChange={(event) =>
-                    setTitleAlignment(
-                      event.target.value as "left" | "center" | "right",
-                    )
-                  }
-                  disabled={loading}
-                >
-                  <option value="left">Left</option>
-                  <option value="center">Center</option>
-                  <option value="right">Right</option>
-                </select>
-                <label className="cover-color-control">
-                  <span>Title color</span>
-                  <input
-                    type="color"
-                    value={titleColor}
-                    onChange={(event) => setTitleColor(event.target.value)}
-                    disabled={loading}
-                  />
-                </label>
-              </div>
               <label>
                 <span>Subtitle position <strong>{subtitlePosition}%</strong></span>
                 <input
@@ -611,8 +448,8 @@ export default function CoverStudio({
               {applying
                 ? "Updating the cover preview…"
                 : autoFitText
-                  ? "Title, subtitle, position, alignment, and color changes update the cover automatically."
-                  : "Manual sizing updates automatically and preserves every word."}
+                  ? "Subtitle and author changes update the cover automatically."
+                  : "Manual subtitle sizing updates automatically."}
             </p>
           </div>
           <label className="cover-select-control">
@@ -626,10 +463,8 @@ export default function CoverStudio({
                   normalizeCoverTypographyPreset(nextStyle, typographyPreset),
                 );
                 if (nextStyle === "eb-signature") {
-                  setTitleColor("#f1e3cf");
                   setSubtitleColor("#e8d5b8");
                 } else {
-                  setTitleColor("#fffdf7");
                   setSubtitleColor("#fffdf7");
                 }
               }}
@@ -644,8 +479,8 @@ export default function CoverStudio({
           </label>
           <p>
             {style === "eb-signature"
-              ? "AI connects the artwork to your book concept using EB Studio Pro’s signature palette. The exact title is added with a premium font design."
-              : "AI creates the selected artwork while EB Studio Pro adds the exact title with a varied premium font design."}
+              ? "AI integrates the exact title into EB Studio Pro’s signature artwork and palette."
+              : "AI integrates the exact title into the selected artwork as part of the cover design."}
           </p>
           <label className="cover-select-control cover-finish-label">
             <span>Cover finish</span>
@@ -686,21 +521,14 @@ export default function CoverStudio({
 
 async function composeCover(
   artworkData: string,
-  title: string,
   subtitle: string,
   author: string,
   finish: string,
   style: string,
-  typographyPreset: string,
-  showTitle: boolean,
   autoFitText: boolean,
-  titleFontSize: number,
   subtitleFontSize: number,
-  titlePosition: number,
   subtitlePosition: number,
-  titleAlignment: "left" | "center" | "right",
   subtitleAlignment: "left" | "center" | "right",
-  titleColor: string,
   subtitleColor: string,
   authorColor: string,
 ) {
@@ -749,8 +577,6 @@ async function composeCover(
   }
 
   const isEbSignature = style === "eb-signature";
-  const typography = getCoverTypographyPreset(typographyPreset);
-  const displayTitle = typography.uppercase ? title.toUpperCase() : title;
 
   context.textBaseline = "top";
   context.shadowColor = isEbSignature
@@ -760,51 +586,8 @@ async function composeCover(
   context.shadowOffsetY = 6;
 
   let y = 0;
-  let titleTop = 0;
-  let titleBottom = 0;
   let subtitleTop = 0;
   let subtitleBottom = 0;
-  let titleRenderedSize = titleFontSize;
-  if (showTitle && title.trim()) {
-    context.textAlign = titleAlignment;
-    context.fillStyle = titleColor;
-    context.letterSpacing = `${typography.letterSpacing}px`;
-    const fittedTitle = fitText(
-      context,
-      displayTitle,
-      typography.maxWidth,
-      typography.maxLines,
-      titleFontSize,
-      autoFitText ? typography.minSize : titleFontSize,
-      (size) => `${typography.fontWeight} ${size}px ${typography.fontFamily}`,
-      (value, maxWidth) =>
-        wrapCoverTitle(context, value, maxWidth, typography.id),
-    );
-    titleRenderedSize = fittedTitle.size;
-    context.font = `${typography.fontWeight} ${fittedTitle.size}px ${typography.fontFamily}`;
-    context.lineJoin = "round";
-    context.lineWidth = Math.max(3, fittedTitle.size * 0.055);
-    context.strokeStyle = contrastingTextStroke(titleColor);
-    const titleX = alignmentX(titleAlignment, canvas.width);
-    y = (canvas.height * titlePosition) / 100;
-    titleTop = y;
-    for (const line of fittedTitle.lines) {
-      context.strokeText(line, titleX, y);
-      context.fillText(line, titleX, y);
-      y += fittedTitle.size * typography.lineHeight;
-    }
-
-    if (typography.rule) {
-      drawTitleRule(
-        context,
-        titleAlignment,
-        titleX,
-        y + fittedTitle.size * 0.18,
-        titleColor,
-      );
-    }
-    titleBottom = y + (typography.rule ? fittedTitle.size * 0.35 : 0);
-  }
 
   if (subtitle) {
     context.letterSpacing = "0px";
@@ -827,8 +610,6 @@ async function composeCover(
     y = (canvas.height * subtitlePosition) / 100;
     if (subtitlePosition >= 70) {
       y -= fittedSubtitle.lines.length * subtitleLineHeight;
-    } else if (titleBottom > 0) {
-      y = Math.max(y, titleBottom + titleRenderedSize * 0.25);
     }
     subtitleTop = y;
     for (const line of fittedSubtitle.lines) {
@@ -848,40 +629,12 @@ async function composeCover(
   const authorY = resolveCoverAuthorY(
     canvas.height,
     [
-      { top: titleTop, bottom: titleBottom },
       { top: subtitleTop, bottom: subtitleBottom },
     ],
   );
   context.strokeText(author.toUpperCase(), canvas.width / 2, authorY);
   context.fillText(author.toUpperCase(), canvas.width / 2, authorY);
   return canvas.toDataURL("image/jpeg", 0.92);
-}
-
-function drawTitleRule(
-  context: CanvasRenderingContext2D,
-  alignment: "left" | "center" | "right",
-  anchorX: number,
-  y: number,
-  color: string,
-) {
-  const width = 250;
-  const startX =
-    alignment === "left"
-      ? anchorX
-      : alignment === "right"
-        ? anchorX - width
-        : anchorX - width / 2;
-  context.save();
-  context.shadowBlur = 0;
-  context.shadowOffsetY = 0;
-  context.globalAlpha = 0.82;
-  context.lineWidth = 3;
-  context.strokeStyle = color;
-  context.beginPath();
-  context.moveTo(startX, y);
-  context.lineTo(startX + width, y);
-  context.stroke();
-  context.restore();
 }
 
 function drawImageCover(
@@ -934,32 +687,6 @@ function loadImage(source: string) {
   });
 }
 
-const COVER_FONT_SPECS = [
-  { weight: 400, name: "Cinzel" },
-  { weight: 700, name: "Playfair Display" },
-  { weight: 800, name: "Montserrat" },
-  { weight: 400, name: "Bebas Neue" },
-  { weight: 400, name: "Cormorant Garamond" },
-];
-
-async function ensureCoverFontsLoaded() {
-  if (!document.fonts) return;
-  await Promise.all(
-    COVER_FONT_SPECS.map(({ weight, name }) =>
-      document.fonts.load(`${weight} 124px "${name}"`),
-    ),
-  );
-  const missing = COVER_FONT_SPECS.filter(
-    ({ weight, name }) =>
-      !document.fonts.check(`${weight} 124px "${name}"`),
-  );
-  if (missing.length > 0) {
-    throw new Error(
-      "The premium title fonts are still loading. Please try again in a moment.",
-    );
-  }
-}
-
 function fitText(
   context: CanvasRenderingContext2D,
   text: string,
@@ -978,35 +705,6 @@ function fitText(
   }
   context.font = font(minSize);
   return { lines: wrap(text, maxWidth), size: minSize };
-}
-
-function wrapCoverTitle(
-  context: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  preset: string,
-) {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (
-    preset === "classic-gold" &&
-    words.length >= 4 &&
-    words.length <= 6 &&
-    /^(the|a|an)$/i.test(words[0])
-  ) {
-    const posterLines = [
-      words[0],
-      words.slice(1, -1).join(" "),
-      words.at(-1) ?? "",
-    ];
-    if (
-      posterLines.every(
-        (line) => line && context.measureText(line).width <= maxWidth,
-      )
-    ) {
-      return posterLines;
-    }
-  }
-  return wrapText(context, text, maxWidth);
 }
 
 function wrapText(
