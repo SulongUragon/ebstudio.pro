@@ -2338,7 +2338,7 @@ p {
 .book-card-cover h2 {
   margin-bottom: 9px;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.45rem, 2vw, 2.15rem);
+  font-size: clamp(1.1rem, 1.5vw, 1.65rem);
   font-weight: 400;
   letter-spacing: -0.035em;
   line-height: 1.05;
