@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import JSZip from "jszip";
 import type { Manuscript } from "../app/book-types";
-import { exportDocx, exportEpub, getKdpReadiness } from "../app/exporters";
+import { exportCover, exportDocx, exportEpub, getCoverReadiness, getKdpReadiness } from "../app/exporters";
 
 const onePixelJpeg =
   "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=";
@@ -77,6 +77,20 @@ test("KDP readiness requires the exact cover package", () => {
   const result = getKdpReadiness(withoutCover);
   assert.equal(result.ready, false);
   assert.match(result.errors.join(" "), /cover/i);
+});
+
+test("cover export stays available when manuscript text is incomplete", async () => {
+  const book = sampleBook();
+  const incomplete = {
+    ...book,
+    sections: book.sections.map((section, index) =>
+      index === 1 ? { ...section, content: "" } : section,
+    ),
+  };
+  assert.equal(getKdpReadiness(incomplete).ready, false);
+  assert.equal(getCoverReadiness(incomplete).ready, true);
+  const cover = await exportCover(incomplete, false);
+  assert.ok(cover.size > 0);
 });
 
 test("DOCX export uses semantic headings, links, and true italics", async () => {
