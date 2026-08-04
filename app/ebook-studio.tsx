@@ -31,6 +31,7 @@ import {
   exportDocx,
   exportEpub,
   exportPdf,
+  getCoverReadiness,
   getKdpReadiness,
 } from "./exporters";
 import CreativeAssistant from "./creative-assistant";
@@ -364,10 +365,17 @@ export default function EbookStudio() {
         const sectionData = await readResponse(sectionResponse);
         workingProvider = sectionData.provider as ActiveAIProvider;
         setActiveProvider(workingProvider);
+        const finishedContent = String(sectionData.content ?? "").trim();
+        const finishedSummary = String(sectionData.summary ?? "").trim();
+        if (!finishedContent || !finishedSummary) {
+          throw new Error(
+            `The writer did not finish \"${plan[index].title}\". This section was not counted or saved. Generate the book again to retry it.`,
+          );
+        }
         const completeSection: SectionContent = {
           ...plan[index],
-          content: String(sectionData.content),
-          summary: String(sectionData.summary),
+          content: finishedContent,
+          summary: finishedSummary,
         };
 
         summaries.push(completeSection.summary);
@@ -929,6 +937,7 @@ function BookPreview({
     null;
   const isComplete = status === "complete";
   const kdpReadiness = getKdpReadiness(manuscript);
+  const coverReadiness = getCoverReadiness(manuscript);
 
   return (
     <aside className="preview-panel manuscript-panel" aria-live="polite">
@@ -973,7 +982,7 @@ function BookPreview({
             </button>
             <button
               onClick={() => onExport("cover")}
-              disabled={Boolean(exporting) || !kdpReadiness.ready}
+              disabled={Boolean(exporting) || !coverReadiness.ready}
             >
               <Download size={16} />
               {exporting === "cover" ? "Preparing" : "Cover JPG"}
