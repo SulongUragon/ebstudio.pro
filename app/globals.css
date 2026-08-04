@@ -2067,6 +2067,27 @@ p {
   font-size: .72rem;
 }
 
+.chapter-repair-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 8px 12px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #7a421f;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.chapter-repair-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 .kdp-readiness strong {
   white-space: nowrap;
   text-transform: uppercase;
@@ -2177,6 +2198,10 @@ p {
   color: var(--ink);
 }
 
+.contents-rail > button.incomplete {
+  color: #8b4b27;
+}
+
 .contents-rail > button:disabled {
   cursor: default;
   opacity: 0.53;
@@ -2284,6 +2309,41 @@ p {
 
 .section-loading p {
   color: var(--muted);
+}
+
+.section-repair-state {
+  display: grid;
+  min-height: 420px;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.section-repair-state > svg {
+  margin-bottom: 18px;
+  color: var(--rust);
+}
+
+.section-repair-state h2 {
+  max-width: 680px;
+  margin-bottom: 12px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2rem, 3.5vw, 3.5rem);
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+.section-repair-state p {
+  max-width: 540px;
+  margin-bottom: 22px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.section-repair-state .chapter-repair-button {
+  margin-left: 0;
+  background: var(--rust);
+  color: white;
 }
 
 .book-grid {
