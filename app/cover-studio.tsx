@@ -7,6 +7,7 @@ import {
   contrastingTextStroke,
   getCoverTypographyPreset,
   normalizeCoverTypographyPreset,
+  resolveCoverAuthorY,
   resolveExactCoverTitle,
   selectCoverTypographyPreset,
   usesAutomaticTitleVariety,
@@ -759,7 +760,10 @@ async function composeCover(
   context.shadowOffsetY = 6;
 
   let y = 0;
+  let titleTop = 0;
   let titleBottom = 0;
+  let subtitleTop = 0;
+  let subtitleBottom = 0;
   let titleRenderedSize = titleFontSize;
   if (showTitle && title.trim()) {
     context.textAlign = titleAlignment;
@@ -783,6 +787,7 @@ async function composeCover(
     context.strokeStyle = contrastingTextStroke(titleColor);
     const titleX = alignmentX(titleAlignment, canvas.width);
     y = (canvas.height * titlePosition) / 100;
+    titleTop = y;
     for (const line of fittedTitle.lines) {
       context.strokeText(line, titleX, y);
       context.fillText(line, titleX, y);
@@ -825,11 +830,13 @@ async function composeCover(
     } else if (titleBottom > 0) {
       y = Math.max(y, titleBottom + titleRenderedSize * 0.25);
     }
+    subtitleTop = y;
     for (const line of fittedSubtitle.lines) {
       context.strokeText(line, subtitleX, y);
       context.fillText(line, subtitleX, y);
       y += fittedSubtitle.size * 1.3;
     }
+    subtitleBottom = y;
   }
 
   context.textAlign = "center";
@@ -838,8 +845,15 @@ async function composeCover(
   context.letterSpacing = "3px";
   context.lineWidth = 3;
   context.strokeStyle = contrastingTextStroke(authorColor);
-  context.strokeText(author.toUpperCase(), canvas.width / 2, 2380);
-  context.fillText(author.toUpperCase(), canvas.width / 2, 2380);
+  const authorY = resolveCoverAuthorY(
+    canvas.height,
+    [
+      { top: titleTop, bottom: titleBottom },
+      { top: subtitleTop, bottom: subtitleBottom },
+    ],
+  );
+  context.strokeText(author.toUpperCase(), canvas.width / 2, authorY);
+  context.fillText(author.toUpperCase(), canvas.width / 2, authorY);
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 
