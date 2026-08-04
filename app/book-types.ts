@@ -4,6 +4,7 @@ export type ActiveAIProvider = Exclude<AIProvider, "auto">;
 
 export type BookBrief = {
   title: string;
+  subtitle?: string;
   author: string;
   genre: string;
   characters: string;
