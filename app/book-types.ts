@@ -63,6 +63,11 @@ export type Manuscript = {
   plan: SectionPlan[];
   sections: SectionContent[];
   providersUsed?: ActiveAIProvider[];
+  companionOf?: {
+    id: string;
+    title: string;
+    mode: Mode;
+  };
   cover?: CoverDesign;
   optimization?: {
     sourceFileName: string;
