@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import JSZip from "jszip";
 import type { Manuscript } from "../app/book-types";
-import { exportCover, exportDocx, exportEpub, getCoverReadiness, getKdpReadiness } from "../app/exporters";
+import { exportCover, exportDocx, exportEpub, exportFilenameStem, getCoverReadiness, getKdpReadiness } from "../app/exporters";
 
 const onePixelJpeg =
   "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=";
@@ -69,6 +69,19 @@ function sampleBook(): Manuscript {
     },
   };
 }
+
+test("dual-book downloads include the book type in every filename stem", () => {
+  const fiction = sampleBook();
+  const nonfiction: Manuscript = { ...fiction, mode: "nonfiction" };
+  assert.equal(
+    exportFilenameStem(fiction),
+    "The-Exact-KDP-Export-Fiction",
+  );
+  assert.equal(
+    exportFilenameStem(nonfiction),
+    "The-Exact-KDP-Export-Non-Fiction",
+  );
+});
 
 test("KDP readiness requires the exact cover package", () => {
   const book = sampleBook();

@@ -38,6 +38,11 @@ export type KdpReadiness = {
   warnings: string[];
 };
 
+export function exportFilenameStem(book: Pick<Manuscript, "title" | "mode">) {
+  const bookType = book.mode === "nonfiction" ? "Non-Fiction" : "Fiction";
+  return `${safeFilename(book.title)}-${bookType}`;
+}
+
 export function getCoverReadiness(book: Manuscript): KdpReadiness {
   const errors: string[] = [];
   const title = cleanText(book?.title).trim();
@@ -362,7 +367,7 @@ export async function exportDocx(book: Manuscript, shouldDownload = true) {
   });
 
   const blob = await Packer.toBlob(document);
-  if (shouldDownload) downloadBlob(blob, `${safeFilename(exportBook.title)}-Kindle-Create.docx`);
+  if (shouldDownload) downloadBlob(blob, `${exportFilenameStem(exportBook)}-Kindle-Create.docx`);
   return blob;
 }
 
@@ -422,7 +427,7 @@ export async function exportPdf(book: Manuscript, shouldDownload = true) {
   }
 
   const blob = pdf.output("blob");
-  if (shouldDownload) downloadBlob(blob, `${safeFilename(exportBook.title)}-Reference.pdf`);
+  if (shouldDownload) downloadBlob(blob, `${exportFilenameStem(exportBook)}-Reference.pdf`);
   return blob;
 }
 
@@ -533,7 +538,7 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
     compression: "DEFLATE",
     compressionOptions: { level: 9 },
   });
-  if (shouldDownload) downloadBlob(blob, `${safeFilename(exportBook.title)}.epub`);
+  if (shouldDownload) downloadBlob(blob, `${exportFilenameStem(exportBook)}.epub`);
   return blob;
 }
 
@@ -542,7 +547,7 @@ export async function exportCover(book: Manuscript, shouldDownload = true) {
   if (!readiness.ready) throw new Error(readiness.errors[0]);
   const bytes = dataUriToBytes(book.cover?.imageData ?? "");
   const blob = new Blob([bytes], { type: "image/jpeg" });
-  if (shouldDownload) downloadBlob(blob, `${safeFilename(book.title)}-KDP-Cover.jpg`);
+  if (shouldDownload) downloadBlob(blob, `${exportFilenameStem(book)}-KDP-Cover.jpg`);
   return blob;
 }
 
@@ -557,7 +562,7 @@ export async function exportBundle(book: Manuscript) {
     exportEpub(book, false),
     exportCover(book, false),
   ]);
-  const filename = safeFilename(exportBook.title);
+  const filename = exportFilenameStem(exportBook);
   const bundle = new JSZip();
   bundle.file(`${filename}-Kindle-Create.docx`, docxBlob);
   bundle.file(`${filename}.epub`, epubBlob);
@@ -574,21 +579,23 @@ export async function exportBundle(book: Manuscript) {
 }
 
 function kdpUploadGuide(book: NormalizedBook) {
+  const filename = exportFilenameStem(book);
   return `EB STUDIO PRO — KDP UPLOAD GUIDE
 
 BOOK: ${book.title}
+BOOK TYPE: ${book.mode === "fiction" ? "Fiction" : "Non-Fiction"}
 AUTHOR: ${book.author}
 
 RECOMMENDED KINDLE WORKFLOW
-1. Open ${safeFilename(book.title)}-Kindle-Create.docx in Amazon Kindle Create.
+1. Open ${filename}-Kindle-Create.docx in Amazon Kindle Create.
 2. Review every chapter, the linked Contents, scene breaks, lists, and formatting.
 3. Export a KPF file from Kindle Create.
 4. In KDP, upload the KPF as the ebook manuscript.
-5. Upload ${safeFilename(book.title)}-KDP-Cover.jpg separately as the marketing cover.
+5. Upload ${filename}-KDP-Cover.jpg separately as the marketing cover.
 6. Run KDP's Online Previewer before publishing.
 
 EPUB ALTERNATIVE
-You may upload ${safeFilename(book.title)}.epub instead of KPF. Do not upload KPF and EPUB together; choose one manuscript format.
+You may upload ${filename}.epub instead of KPF. Do not upload KPF and EPUB together; choose one manuscript format.
 
 PDF
 The PDF is a reference copy. It is not the recommended reflowable Kindle manuscript.
