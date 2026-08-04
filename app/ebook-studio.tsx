@@ -50,6 +50,7 @@ type GenerationStatus =
   | "complete"
   | "cancelled"
   | "error";
+type CompanionSource = NonNullable<Manuscript["companionOf"]>;
 
 const chapterPresets = [3, 5, 8, 10, 12, 15, 20];
 const blankBrief: BookBrief = {
@@ -85,6 +86,8 @@ export default function EbookStudio() {
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
   const [exporting, setExporting] = useState("");
   const [repairingSection, setRepairingSection] = useState<number | null>(null);
+  const [companionSource, setCompanionSource] = useState<CompanionSource | null>(null);
+  const [isCreatingCompanion, setIsCreatingCompanion] = useState(false);
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -107,7 +110,8 @@ export default function EbookStudio() {
   }, []);
 
   const isGenerating = status === "outlining" || status === "writing";
-  const fieldsLocked = isGenerating || isAutoFilling || isImprovingTitle;
+  const fieldsLocked =
+    isGenerating || isAutoFilling || isImprovingTitle || isCreatingCompanion;
   const completedSectionCount =
     manuscript?.sections.filter((section) => section.content?.trim()).length ?? 0;
   const progress =
@@ -140,6 +144,7 @@ export default function EbookStudio() {
     setTitleSuggestions([]);
     setTitleImproveError("");
     setActiveProvider(null);
+    setCompanionSource(null);
   }
 
   function chooseChapterCount(value: number) {
@@ -279,6 +284,7 @@ export default function EbookStudio() {
     setActiveProvider(usedProvider);
     setStatus("complete");
     setActiveSection(0);
+    setCompanionSource(null);
     saveBook(book);
   }
 
@@ -338,6 +344,7 @@ export default function EbookStudio() {
         plan,
         sections: [],
         providersUsed: [workingProvider],
+        companionOf: companionSource ?? undefined,
       };
       setManuscript(working);
       setStatus("writing");
@@ -428,6 +435,7 @@ export default function EbookStudio() {
     setActiveProvider(book.providersUsed?.at(-1) ?? null);
     setStatus("complete");
     setActiveSection(0);
+    setCompanionSource(book.companionOf ?? null);
     setView("create");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -454,6 +462,8 @@ export default function EbookStudio() {
     setTitleSuggestions([]);
     setActiveSection(0);
     setActiveProvider(null);
+    setCompanionSource(null);
+    setIsCreatingCompanion(false);
   }
 
   async function runExport(format: "bundle" | "cover" | "docx" | "pdf" | "epub") {
@@ -541,6 +551,85 @@ export default function EbookStudio() {
       );
     } finally {
       setRepairingSection(null);
+    }
+  }
+
+  async function createCompanionBook(source: Manuscript) {
+    if (isCreatingCompanion) return;
+
+    const targetMode: Mode = source.mode === "fiction" ? "nonfiction" : "fiction";
+    setIsCreatingCompanion(true);
+    setError("");
+    setAutoFillMessage("");
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "companion",
+          mode: targetMode,
+          sourceMode: source.mode,
+          brief: source.brief,
+          provider,
+          preferredProvider:
+            provider === "auto" ? source.providersUsed?.at(-1) ?? undefined : undefined,
+          manuscript: {
+            title: source.title,
+            subtitle: source.subtitle,
+            sections: source.sections.map((section) => ({
+              title: section.title,
+              summary: section.summary,
+            })),
+          },
+        }),
+      });
+      const data = await readResponse(response);
+      const chapterCount = Math.min(
+        20,
+        Math.max(3, Number(data.chapter_count) || source.brief.chapterCount || 8),
+      );
+      const nextBrief: BookBrief = {
+        ...blankBrief,
+        title: source.title,
+        author: source.author,
+        chapterCount,
+        ...(targetMode === "fiction"
+          ? {
+              genre: String(data.genre ?? ""),
+              characters: String(data.characters ?? ""),
+              premise: String(data.premise ?? ""),
+            }
+          : {
+              topic: String(data.topic ?? ""),
+              audience: String(data.audience ?? ""),
+              keyPoints: String(data.key_points ?? ""),
+            }),
+      };
+
+      setCompanionSource({ id: source.id, title: source.title, mode: source.mode });
+      setCreatorMode("new");
+      setMode(targetMode);
+      setBrief(nextBrief);
+      setCustomChapters("");
+      setManuscript(null);
+      setStatus("idle");
+      setActiveSection(0);
+      setActiveProvider(data.provider as ActiveAIProvider);
+      setTitlePromptDismissed(true);
+      setTitleSuggestions([]);
+      setAutoFillMessage(
+        `${targetMode === "fiction" ? "Fiction" : "Non-Fiction"} companion brief created. Review it, then generate the companion book.`,
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (companionError) {
+      setError(
+        companionError instanceof Error
+          ? companionError.message
+          : "EB Studio Pro could not create the companion brief.",
+      );
+    } finally {
+      setIsCreatingCompanion(false);
     }
   }
 
@@ -633,6 +722,17 @@ export default function EbookStudio() {
               Set the direction. EB Studio Pro will shape the structure and write every
               chapter.
             </p>
+
+            {companionSource ? (
+              <div className="companion-brief-banner">
+                <BookOpen size={18} />
+                <div>
+                  <span>{mode === "fiction" ? "Fiction" : "Non-Fiction"} companion</span>
+                  <strong>Related to {companionSource.title}</strong>
+                  <small>The shared concept is preserved while this book remains standalone.</small>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mode-switch" role="tablist" aria-label="Book type">
               <button
@@ -921,6 +1021,8 @@ export default function EbookStudio() {
             onSaveCover={saveCover}
             repairingSection={repairingSection}
             onRepairSection={repairSection}
+            isCreatingCompanion={isCreatingCompanion}
+            onCreateCompanion={createCompanionBook}
           />
         </section>
       ) : (
@@ -956,6 +1058,8 @@ function BookPreview({
   onSaveCover,
   repairingSection,
   onRepairSection,
+  isCreatingCompanion,
+  onCreateCompanion,
 }: {
   manuscript: Manuscript | null;
   status: GenerationStatus;
@@ -968,6 +1072,8 @@ function BookPreview({
   onSaveCover: (cover: NonNullable<Manuscript["cover"]>) => void;
   repairingSection: number | null;
   onRepairSection: (index: number) => void;
+  isCreatingCompanion: boolean;
+  onCreateCompanion: (source: Manuscript) => void;
 }) {
   if (!manuscript && status !== "outlining") {
     return (
@@ -1099,6 +1205,30 @@ function BookPreview({
                 : "Retry incomplete chapter"}
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {isComplete && incompleteSectionIndex < 0 ? (
+        <div className="companion-action-bar">
+          <div>
+            <strong>Build the companion book</strong>
+            <span>
+              Turn this {manuscript.mode === "fiction" ? "story into a practical guide" : "guide into an original story"} with the same core title and theme.
+            </span>
+          </div>
+          <button
+            onClick={() => onCreateCompanion(manuscript)}
+            disabled={isCreatingCompanion}
+          >
+            {isCreatingCompanion ? (
+              <LoaderCircle className="spin" size={15} />
+            ) : (
+              <BookOpen size={15} />
+            )}
+            {isCreatingCompanion
+              ? "Creating companion brief"
+              : `Create ${manuscript.mode === "fiction" ? "Non-Fiction" : "Fiction"} Companion`}
+          </button>
         </div>
       ) : null}
 
@@ -1283,12 +1413,16 @@ function LibraryView({
                 onClick={() => onOpen(book)}
               >
                 <span>{book.mode === "fiction" ? "Fiction" : "Non-Fiction"}</span>
+                {book.companionOf ? <b className="companion-card-label">Companion Book</b> : null}
                 <h2>{book.title}</h2>
                 {book.subtitle ? <p>{book.subtitle}</p> : null}
                 <small>{book.author}</small>
               </button>
               <div className="book-card-footer">
-                <span>{book.brief.chapterCount} chapters</span>
+                <span>
+                  {book.brief.chapterCount} chapters
+                  {book.companionOf ? ` · Related to ${book.companionOf.mode === "fiction" ? "Fiction" : "Non-Fiction"}` : ""}
+                </span>
                 <button
                   aria-label={`Delete ${book.title}`}
                   onClick={() => onRemove(book.id)}
