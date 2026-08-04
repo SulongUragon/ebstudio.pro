@@ -5,6 +5,7 @@ import {
   contrastingTextStroke,
   getCoverTypographyPreset,
   normalizeCoverTypographyPreset,
+  resolveCoverAuthorY,
   resolveExactCoverTitle,
   selectCoverTypographyPreset,
   usesAutomaticTitleVariety,
@@ -123,4 +124,21 @@ test("every premium title design uses a distinct embedded font", () => {
     "Cormorant Garamond",
   ]);
   assert.equal(new Set(fonts).size, 5);
+});
+
+test("author stays at the bottom when no text occupies its safe area", () => {
+  assert.equal(resolveCoverAuthorY(2560, []), 2380);
+});
+
+test("author moves below a low title when the bottom safe area can fit it", () => {
+  const authorY = resolveCoverAuthorY(2560, [
+    { top: 1900, bottom: 2300 },
+  ]);
+  assert.ok(authorY > 2300);
+});
+
+test("author moves above a title that reaches the bottom trim area", () => {
+  const title = { top: 2060, bottom: 2440 };
+  const authorY = resolveCoverAuthorY(2560, [title]);
+  assert.ok(authorY < title.top);
 });
