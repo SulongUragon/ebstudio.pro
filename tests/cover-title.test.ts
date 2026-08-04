@@ -6,6 +6,7 @@ import {
   getCoverTypographyPreset,
   normalizeCoverTypographyPreset,
   resolveCoverAuthorY,
+  resolveExactCoverSubtitle,
   resolveExactCoverTitle,
   selectCoverTypographyPreset,
   usesAutomaticTitleVariety,
@@ -44,6 +45,39 @@ test("cover title preserves the user's exact non-empty wording", () => {
   assert.equal(
     resolveExactCoverTitle(manuscript, "The Night I Was Left Alone"),
     "The Night I Was Left Alone",
+  );
+});
+
+test("cover subtitle uses the canonical manuscript subtitle", () => {
+  assert.equal(
+    resolveExactCoverSubtitle({
+      ...manuscript,
+      subtitle: "The subtitle the author approved",
+      brief: { ...manuscript.brief, subtitle: "An older brief subtitle" },
+      cover: {
+        imageData: "data:image/jpeg;base64,cover",
+        style: "cinematic",
+        displaySubtitle: "A stale cover subtitle",
+        createdAt: "2026-08-03T00:00:00.000Z",
+      },
+    }),
+    "The subtitle the author approved",
+  );
+});
+
+test("legacy cover subtitle is retained when the manuscript has none", () => {
+  assert.equal(
+    resolveExactCoverSubtitle({
+      ...manuscript,
+      subtitle: "",
+      cover: {
+        imageData: "data:image/jpeg;base64,cover",
+        style: "cinematic",
+        displaySubtitle: "The saved cover subtitle",
+        createdAt: "2026-08-03T00:00:00.000Z",
+      },
+    }),
+    "The saved cover subtitle",
   );
 });
 

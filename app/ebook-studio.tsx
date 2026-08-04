@@ -395,7 +395,13 @@ export default function EbookStudio() {
 
   function saveCover(cover: NonNullable<Manuscript["cover"]>) {
     if (!manuscript) return;
-    const updated: Manuscript = { ...manuscript, cover };
+    const exactSubtitle = cover.displaySubtitle?.trim() ?? manuscript.subtitle;
+    const updated: Manuscript = {
+      ...manuscript,
+      subtitle: exactSubtitle,
+      brief: { ...manuscript.brief, subtitle: exactSubtitle },
+      cover: { ...cover, displaySubtitle: exactSubtitle },
+    };
     setManuscript(updated);
     saveBook(updated);
   }

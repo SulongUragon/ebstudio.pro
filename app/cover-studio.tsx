@@ -8,6 +8,7 @@ import {
   getCoverTypographyPreset,
   normalizeCoverTypographyPreset,
   resolveCoverAuthorY,
+  resolveExactCoverSubtitle,
   resolveExactCoverTitle,
   selectCoverTypographyPreset,
   usesAutomaticTitleVariety,
@@ -47,7 +48,7 @@ export default function CoverStudio({
   const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
   const coverTitle = resolveExactCoverTitle(manuscript, manuscript.title);
   const [coverSubtitle, setCoverSubtitle] = useState(
-    manuscript.cover?.displaySubtitle ?? manuscript.subtitle,
+    resolveExactCoverSubtitle(manuscript),
   );
   const [autoFitText, setAutoFitText] = useState(
     manuscript.cover?.autoFitText ?? true,
@@ -173,6 +174,7 @@ export default function CoverStudio({
 
   async function generateCover() {
     const exactTitle = resolveExactCoverTitle(manuscript, coverTitle);
+    const exactSubtitle = coverSubtitle.trim();
     if (!exactTitle) {
       setError("Add a complete book title before generating.");
       return;
@@ -186,7 +188,7 @@ export default function CoverStudio({
         body: JSON.stringify({
           mode: manuscript.mode,
           brief: { ...manuscript.brief, title: exactTitle },
-          subtitle: coverSubtitle.trim(),
+          subtitle: exactSubtitle,
           style,
           finish,
         }),
@@ -212,7 +214,7 @@ export default function CoverStudio({
         : authorColor;
       const imageData = await composeCover(
         sourceImageData,
-        coverSubtitle.trim(),
+        exactSubtitle,
         manuscript.author,
         finish,
         style,
@@ -235,7 +237,7 @@ export default function CoverStudio({
         style,
         finish,
         displayTitle: exactTitle,
-        displaySubtitle: coverSubtitle.trim(),
+        displaySubtitle: exactSubtitle,
         showTitle: false,
         autoFitText,
         subtitleFontSize,

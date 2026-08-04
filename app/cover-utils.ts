@@ -188,6 +188,15 @@ export function resolveExactCoverTitle(manuscript: Manuscript, candidate: string
   );
 }
 
+export function resolveExactCoverSubtitle(manuscript: Manuscript) {
+  return (
+    manuscript.subtitle.trim() ||
+    manuscript.brief.subtitle?.trim() ||
+    manuscript.cover?.displaySubtitle?.trim() ||
+    ""
+  );
+}
+
 export function contrastingTextStroke(color: string) {
   const normalized = color.trim().replace(/^#/, "");
   if (!/^[0-9a-f]{6}$/i.test(normalized)) return "rgba(0,0,0,.78)";
