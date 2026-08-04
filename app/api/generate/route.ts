@@ -8,7 +8,7 @@ import type {
 } from "../../book-types";
 
 type RequestBody = {
-  action: "title" | "brief" | "companion" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section";
+  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section";
   mode: Mode;
   sourceMode?: Mode;
   brief: BookBrief;
@@ -107,6 +107,10 @@ export async function POST(request: Request) {
         body.brief.title,
         body.provider ?? "auto",
       );
+      return NextResponse.json(result);
+    }
+    if (body.action === "dual_seed") {
+      const result = await createDualBookSeed(body);
       return NextResponse.json(result);
     }
     if (body.action === "companion" && body.manuscript) {
@@ -516,6 +520,52 @@ Define a focused topic, a specific target audience including their needs or leve
       maxOutputTokens: 1800,
     },
     provider,
+  );
+
+  return {
+    ...generated.output,
+    chapter_count: Math.min(
+      20,
+      Math.max(3, Number(generated.output.chapter_count) || 8),
+    ),
+    provider: generated.provider,
+  };
+}
+
+async function createDualBookSeed(body: RequestBody) {
+  const generated = await generateJson(
+    {
+      name: "dual_book_seed",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          concept: { type: "string" },
+          audience: { type: "string" },
+          fiction_subtitle: { type: "string" },
+          nonfiction_subtitle: { type: "string" },
+          chapter_count: { type: "integer" },
+        },
+        required: [
+          "concept",
+          "audience",
+          "fiction_subtitle",
+          "nonfiction_subtitle",
+          "chapter_count",
+        ],
+      },
+      instructions:
+        "You are the dual-book strategist inside EB Studio Pro. Turn one title into a commercially coherent fiction and non-fiction companion-pair direction. Both books must share a central theme, audience connection, and transformation while remaining original and standalone. Write distinct subtitles that clearly identify the fiction experience and practical non-fiction promise. Never use the em dash character. Never invent research, statistics, credentials, or clinical claims.",
+      input: `Create editable starting details for a fiction and non-fiction companion pair.
+
+Shared main title: ${body.brief.title.trim()}
+Author: ${body.brief.author || "Sulong"}
+
+Return a specific shared central concept, a focused shared target audience, one fiction subtitle, one non-fiction subtitle, and a recommended main chapter count between 8 and 12.`,
+      maxOutputTokens: 1600,
+    },
+    body.provider ?? "auto",
+    body.preferredProvider,
   );
 
   return {
