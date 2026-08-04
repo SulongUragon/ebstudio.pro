@@ -84,6 +84,7 @@ export default function EbookStudio() {
   const [titlePromptDismissed, setTitlePromptDismissed] = useState(false);
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
   const [exporting, setExporting] = useState("");
+  const [repairingSection, setRepairingSection] = useState<number | null>(null);
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -107,9 +108,11 @@ export default function EbookStudio() {
 
   const isGenerating = status === "outlining" || status === "writing";
   const fieldsLocked = isGenerating || isAutoFilling || isImprovingTitle;
+  const completedSectionCount =
+    manuscript?.sections.filter((section) => section.content?.trim()).length ?? 0;
   const progress =
     manuscript?.plan.length && status !== "outlining"
-      ? Math.round((manuscript.sections.length / manuscript.plan.length) * 100)
+      ? Math.round((completedSectionCount / manuscript.plan.length) * 100)
       : status === "outlining"
         ? 4
         : 0;
@@ -474,6 +477,70 @@ export default function EbookStudio() {
       );
     } finally {
       setExporting("");
+    }
+  }
+
+  async function repairSection(index: number) {
+    if (!manuscript || repairingSection !== null || !manuscript.plan[index]) return;
+
+    const section = manuscript.plan[index];
+    setRepairingSection(index);
+    setActiveSection(index);
+    setError("");
+
+    try {
+      const previousSummaries = manuscript.sections
+        .slice(0, index)
+        .map((item) => item.summary?.trim())
+        .filter((summary): summary is string => Boolean(summary));
+      const preferredProvider =
+        provider === "auto"
+          ? manuscript.providersUsed?.at(-1) ?? activeProvider ?? undefined
+          : undefined;
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "section",
+          mode: manuscript.mode,
+          brief: manuscript.brief,
+          plan: manuscript.plan,
+          section,
+          sectionIndex: index,
+          previousSummaries: previousSummaries.slice(-10),
+          provider,
+          preferredProvider,
+        }),
+      });
+      const sectionData = await readResponse(response);
+      const content = String(sectionData.content ?? "").trim();
+      const summary = String(sectionData.summary ?? "").trim();
+      if (!content || !summary) {
+        throw new Error(`The writer could not finish \"${section.title}\". Try this chapter again.`);
+      }
+
+      const usedProvider = sectionData.provider as ActiveAIProvider;
+      const sections = [...manuscript.sections];
+      sections[index] = { ...section, content, summary };
+      const updated: Manuscript = {
+        ...manuscript,
+        sections,
+        providersUsed: Array.from(
+          new Set([...(manuscript.providersUsed ?? []), usedProvider]),
+        ),
+      };
+      setManuscript(updated);
+      setActiveProvider(usedProvider);
+      setStatus("complete");
+      saveBook(updated);
+    } catch (repairError) {
+      setError(
+        repairError instanceof Error
+          ? repairError.message
+          : `EB Studio Pro could not repair \"${section.title}\".`,
+      );
+    } finally {
+      setRepairingSection(null);
     }
   }
 
@@ -852,6 +919,8 @@ export default function EbookStudio() {
             onExport={runExport}
             activeProvider={activeProvider}
             onSaveCover={saveCover}
+            repairingSection={repairingSection}
+            onRepairSection={repairSection}
           />
         </section>
       ) : (
@@ -885,6 +954,8 @@ function BookPreview({
   onExport,
   activeProvider,
   onSaveCover,
+  repairingSection,
+  onRepairSection,
 }: {
   manuscript: Manuscript | null;
   status: GenerationStatus;
@@ -895,6 +966,8 @@ function BookPreview({
   onExport: (format: "bundle" | "cover" | "docx" | "pdf" | "epub") => void;
   activeProvider: ActiveAIProvider | null;
   onSaveCover: (cover: NonNullable<Manuscript["cover"]>) => void;
+  repairingSection: number | null;
+  onRepairSection: (index: number) => void;
 }) {
   if (!manuscript && status !== "outlining") {
     return (
@@ -931,11 +1004,18 @@ function BookPreview({
     );
   }
 
+  const isComplete = status === "complete";
   const selected =
     manuscript.sections[activeSection] ??
-    manuscript.sections[manuscript.sections.length - 1] ??
+    (!isComplete ? manuscript.sections[manuscript.sections.length - 1] : null) ??
     null;
-  const isComplete = status === "complete";
+  const selectedPlan = manuscript.plan[activeSection] ?? null;
+  const completedCount = manuscript.plan.filter(
+    (_, index) => Boolean(manuscript.sections[index]?.content?.trim()),
+  ).length;
+  const incompleteSectionIndex = manuscript.plan.findIndex(
+    (_, index) => !manuscript.sections[index]?.content?.trim(),
+  );
   const kdpReadiness = getKdpReadiness(manuscript);
   const coverReadiness = getCoverReadiness(manuscript);
 
@@ -944,9 +1024,13 @@ function BookPreview({
       <div className="manuscript-toolbar">
         <div>
           <span className="preview-kicker">
-            {isComplete ? "Manuscript complete" : "Writing in progress"}
+            {isComplete && incompleteSectionIndex < 0
+              ? "Manuscript complete"
+              : isComplete
+                ? "Manuscript needs repair"
+                : "Writing in progress"}
           </span>
-          <strong>{manuscript.sections.length} of {manuscript.plan.length} sections</strong>
+          <strong>{completedCount} of {manuscript.plan.length} sections</strong>
           <div className="provider-badges" aria-label="AI writers used">
             {(manuscript.providersUsed ?? (activeProvider ? [activeProvider] : [])).map(
               (usedProvider) => (
@@ -999,6 +1083,22 @@ function BookPreview({
               ? "DOCX, EPUB, and the separate 1600 × 2560 cover can now be exported."
               : kdpReadiness.errors[0]}
           </span>
+          {incompleteSectionIndex >= 0 ? (
+            <button
+              className="chapter-repair-button"
+              onClick={() => onRepairSection(incompleteSectionIndex)}
+              disabled={repairingSection !== null}
+            >
+              {repairingSection === incompleteSectionIndex ? (
+                <LoaderCircle className="spin" size={14} />
+              ) : (
+                <RotateCcw size={14} />
+              )}
+              {repairingSection === incompleteSectionIndex
+                ? "Repairing chapter"
+                : "Retry incomplete chapter"}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -1023,17 +1123,18 @@ function BookPreview({
           </div>
           <p>Contents</p>
           {manuscript.plan.map((section, index) => {
-            const finished = index < manuscript.sections.length;
+            const finished = Boolean(manuscript.sections[index]?.content?.trim());
+            const repairable = isComplete && !finished;
             const current = !isComplete && index === manuscript.sections.length;
             return (
               <button
                 key={`${section.kind}-${index}`}
-                disabled={!finished}
-                className={activeSection === index && finished ? "active" : ""}
+                disabled={!finished && !repairable}
+                className={`${activeSection === index ? "active" : ""}${repairable ? " incomplete" : ""}`}
                 onClick={() => setActiveSection(index)}
               >
                 <span>
-                  {finished ? <Check size={13} /> : current ? <LoaderCircle className="spin" size={13} /> : index + 1}
+                  {finished ? <Check size={13} /> : repairable ? <RotateCcw size={13} /> : current ? <LoaderCircle className="spin" size={13} /> : index + 1}
                 </span>
                 <em>{section.title}</em>
               </button>
@@ -1042,7 +1143,7 @@ function BookPreview({
         </nav>
 
         <article className="book-page">
-          {selected ? (
+          {selected?.content?.trim() ? (
             <>
               <div className="section-meta">{sectionLabel(selected)}</div>
               {shouldShowSectionTitle(selected) ? <h2>{selected.title}</h2> : null}
@@ -1052,6 +1153,25 @@ function BookPreview({
                 sectionLabel={sectionLabel(selected)}
               />
             </>
+          ) : isComplete && selectedPlan ? (
+            <div className="section-repair-state">
+              <RotateCcw size={30} />
+              <div className="section-meta">Incomplete chapter</div>
+              <h2>{selectedPlan.title}</h2>
+              <p>Only this section will be written again. The rest of your book stays unchanged.</p>
+              <button
+                className="chapter-repair-button"
+                onClick={() => onRepairSection(activeSection)}
+                disabled={repairingSection !== null}
+              >
+                {repairingSection === activeSection ? (
+                  <LoaderCircle className="spin" size={15} />
+                ) : (
+                  <RotateCcw size={15} />
+                )}
+                {repairingSection === activeSection ? "Repairing chapter" : "Retry this chapter"}
+              </button>
+            </div>
           ) : (
             <div className="section-loading">
               <LoaderCircle className="spin" size={28} />
