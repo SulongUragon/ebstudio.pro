@@ -138,8 +138,8 @@ const ALL_PRESETS = Object.keys(
   COVER_TYPOGRAPHY_PRESETS,
 ) as CoverTypographyPresetId[];
 
-const TYPOGRAPHY_STYLE_ALIASES: Record<string, string> = {
-  "photoreal-title": "eb-signature",
+const FIXED_STYLE_PRESETS: Record<string, CoverTypographyPresetId> = {
+  "photoreal-title": "classic-gold",
 };
 
 const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
@@ -180,10 +180,6 @@ const STYLE_PRESET_POOLS: Record<string, CoverTypographyPresetId[]> = {
   ],
 };
 
-function resolveTypographyStyle(style: string) {
-  return TYPOGRAPHY_STYLE_ALIASES[style] ?? style;
-}
-
 export function resolveExactCoverTitle(manuscript: Manuscript, candidate: string) {
   return (
     candidate.trim() ||
@@ -210,14 +206,15 @@ export function getCoverTypographyPreset(id?: string) {
 }
 
 export function selectCoverTypographyPreset(style: string, seed: string) {
-  const typographyStyle = resolveTypographyStyle(style);
-  const pool = STYLE_PRESET_POOLS[typographyStyle] ?? ALL_PRESETS;
+  const fixedPreset = FIXED_STYLE_PRESETS[style];
+  if (fixedPreset) return fixedPreset;
+  const pool = STYLE_PRESET_POOLS[style] ?? ALL_PRESETS;
   const compactSeed =
     seed.length > 1024
       ? `${seed.slice(0, 512)}:${seed.slice(-512)}:${seed.length}`
       : seed;
   let hash = 2166136261;
-  const input = `${typographyStyle}:${compactSeed}`;
+  const input = `${style}:${compactSeed}`;
   for (let index = 0; index < input.length; index += 1) {
     hash ^= input.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
@@ -226,12 +223,16 @@ export function selectCoverTypographyPreset(style: string, seed: string) {
 }
 
 export function usesAutomaticTitleVariety(style: string) {
-  return Object.hasOwn(STYLE_PRESET_POOLS, resolveTypographyStyle(style));
+  return (
+    Object.hasOwn(FIXED_STYLE_PRESETS, style) ||
+    Object.hasOwn(STYLE_PRESET_POOLS, style)
+  );
 }
 
 export function normalizeCoverTypographyPreset(style: string, id?: string) {
-  const pool =
-    STYLE_PRESET_POOLS[resolveTypographyStyle(style)] ?? ALL_PRESETS;
+  const fixedPreset = FIXED_STYLE_PRESETS[style];
+  if (fixedPreset) return fixedPreset;
+  const pool = STYLE_PRESET_POOLS[style] ?? ALL_PRESETS;
   return pool.includes(id as CoverTypographyPresetId)
     ? (id as CoverTypographyPresetId)
     : pool[0];
