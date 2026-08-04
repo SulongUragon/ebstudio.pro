@@ -79,14 +79,14 @@ export async function POST(request: Request) {
             : "";
     const prompt = `Create original front-cover artwork for a premium ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
 
-Book title for creative context only: ${body.brief.title}
+Exact book title to render once: ${body.brief.title}
 ${bookContext}
 Visual direction: ${direction}.
 Cover finish: ${finishDirection}.
 ${paletteGuard}
 ${subjectDirection}
 
-The cover finish should be expressed through lighting, tonal depth, surface character, and color treatment while keeping the artwork clean and the typography zones readable. The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Compose for a 5:8 portrait book cover, keeping all important subjects inside the central 85% safe area so the source can be cropped cleanly. Create a strong focal image with clear visual hierarchy and generous quiet space for deterministic typography in the upper and lower thirds. Edge-to-edge artwork, commercially polished, emotionally specific to the book, readable at thumbnail size. Do not render any words, letters, numbers, title, author name, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
+The cover finish should be expressed through lighting, tonal depth, surface character, and color treatment while keeping the artwork clean and readable. The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Compose for a 5:8 portrait book cover, keeping all important subjects inside the central 85% safe area so the source can be cropped cleanly. Render the exact book title once, with every word spelled exactly as supplied, using distinctive premium genre-appropriate typography that feels intentionally integrated into this specific composition rather than a generic default font. The title may use a varied artistic arrangement, but it must remain clear at thumbnail size and must stay outside the bottom 12% author-safe area. Edge-to-edge artwork, commercially polished, emotionally specific to the book, and visually balanced. Do not render a subtitle, author name, extra words, extra letters, numbers, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
