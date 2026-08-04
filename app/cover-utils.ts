@@ -237,3 +237,50 @@ export function normalizeCoverTypographyPreset(style: string, id?: string) {
     ? (id as CoverTypographyPresetId)
     : pool[0];
 }
+
+export type CoverTextBand = {
+  top: number;
+  bottom: number;
+};
+
+export function resolveCoverAuthorY(
+  canvasHeight: number,
+  textBands: CoverTextBand[],
+) {
+  const authorHeight = Math.round(canvasHeight * 0.023);
+  const gap = Math.round(canvasHeight * 0.0125);
+  const minimumY = Math.round(canvasHeight * 0.03);
+  const maximumY = canvasHeight - minimumY - authorHeight;
+  const defaultY = Math.min(
+    maximumY,
+    Math.round(canvasHeight * 0.9296875),
+  );
+  const bands = textBands.filter(
+    (band) =>
+      Number.isFinite(band.top) &&
+      Number.isFinite(band.bottom) &&
+      band.bottom > band.top,
+  );
+  const overlapsBand = (y: number, band: CoverTextBand) =>
+    y < band.bottom + gap && y + authorHeight > band.top - gap;
+  const collisionsAt = (y: number) =>
+    bands.filter((band) => overlapsBand(y, band));
+
+  const initialCollisions = collisionsAt(defaultY);
+  if (initialCollisions.length === 0) return defaultY;
+
+  const below = Math.max(...initialCollisions.map((band) => band.bottom)) + gap;
+  if (below <= maximumY && collisionsAt(below).length === 0) return below;
+
+  let above =
+    Math.min(...initialCollisions.map((band) => band.top)) -
+    gap -
+    authorHeight;
+  let collisions = collisionsAt(above);
+  while (collisions.length > 0 && above > minimumY) {
+    above =
+      Math.min(...collisions.map((band) => band.top)) - gap - authorHeight;
+    collisions = collisionsAt(above);
+  }
+  return Math.max(minimumY, Math.min(maximumY, above));
+}
