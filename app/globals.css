@@ -1328,6 +1328,72 @@ p {
   word-break: break-word;
 }
 
+.assistant-field-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.assistant-assessment {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+
+.assistant-assessment section {
+  padding: 9px 10px;
+  border-left: 3px solid var(--sage);
+  background: rgba(64, 86, 74, 0.06);
+}
+
+.assistant-assessment section.assistant-verdict {
+  border-left-color: var(--rust);
+  background: rgba(171, 87, 56, 0.07);
+}
+
+.assistant-assessment strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--sage);
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.assistant-assessment .assistant-verdict strong {
+  color: var(--rust-dark);
+}
+
+.assistant-assessment p {
+  color: #343832;
+  font-size: 0.81rem;
+  line-height: 1.45;
+}
+
+.assistant-field-card {
+  padding: 10px;
+  border: 1px solid rgba(171, 87, 56, 0.22);
+  border-radius: 8px;
+  background: rgba(171, 87, 56, 0.055);
+}
+
+.assistant-field-card strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--rust-dark);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.assistant-field-card p {
+  color: #343832;
+  font-size: 0.82rem;
+  line-height: 1.48;
+}
+
 .assistant-thinking {
   display: flex;
   align-items: center;

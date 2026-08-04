@@ -205,17 +205,38 @@ ${String(selected.content ?? "").slice(0, 14000)}`
         type: "object",
         additionalProperties: false,
         properties: {
+          comments: { type: "string" },
+          verdict: { type: "string" },
           answer: { type: "string" },
           draft: { type: "string" },
+          fieldSuggestions: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                field: { type: "string" },
+                value: { type: "string" },
+              },
+              required: ["field", "value"],
+            },
+          },
           target: {
             type: "string",
             enum: ["none", "title", "section", "article"],
           },
         },
-        required: ["answer", "draft", "target"],
+        required: [
+          "comments",
+          "verdict",
+          "answer",
+          "draft",
+          "fieldSuggestions",
+          "target",
+        ],
       },
       instructions:
-        "You are EB Creative Assistant, a senior ebook editor, fiction and non-fiction book developer, article strategist, and repurposing specialist. Give decisive, useful guidance grounded in the supplied book. When the user asks for a deliverable, provide publication-ready copy in draft. Never claim guaranteed virality, invent research, imitate a living author, or use the em dash character. Keep answer concise. Use target title only when draft is a replacement title, section only when draft is a full replacement for the selected manuscript section, article for a standalone article, and none otherwise. If target is none, draft may contain other ready-to-use copy or be empty.",
+        "You are EB Creative Assistant, a senior ebook editor, fiction and non-fiction book developer, article strategist, and repurposing specialist. Preserve this response order: first comments, then verdict, then the direct help. Comments must briefly assess what is strong, weak, missing, or unclear in the user's current idea. Verdict must be one decisive sentence stating whether the concept works and what direction to take. Answer must be a short transition or recommendation that follows the verdict. When the user asks for help creating, strengthening, filling in, or completing a book concept or brief, organize every ready-to-paste suggestion in fieldSuggestions instead of blending fields into one paragraph. For fiction use the exact field names Genre, Main Characters, and Plot Premise. For non-fiction use the exact field names Topic, Target Audience, and Key Points. Include only the fields relevant to the request; include all three when the user asks for broad concept help. Each value must stand alone and be ready to paste into its matching form field. Use Book Title only when the user asks for title help. For section editing, manuscript analysis, and article requests, return an empty fieldSuggestions array. When the user asks for a deliverable, provide publication-ready copy in draft. Never claim guaranteed virality, invent research, imitate a living author, or use the em dash character. Keep every response concise. Use target title only when draft is a replacement title, section only when draft is a full replacement for the selected manuscript section, article for a standalone article, and none otherwise. If target is none, draft may contain other ready-to-use copy or be empty.",
       input: `Current book context:
 Mode: ${mode}
 Title: ${brief.title || "Not set"}
@@ -234,15 +255,27 @@ ${history || "No earlier messages."}
 User request:
 ${assistantPrompt.trim()}
 
-Respond with a clear recommendation in answer. Put any ready-to-use rewritten title, full replacement section, or standalone article in draft. Do not put explanations inside draft.`,
+Response pattern for this ${mode === "fiction" ? "fiction" : "non-fiction"} book:
+${
+  mode === "fiction"
+    ? "Genre, Main Characters, Plot Premise"
+    : "Topic, Target Audience, Key Points"
+}
+
+Return a brief editorial assessment in comments, followed by one decisive sentence in verdict. Then respond with one concise framing sentence in answer. Put concept and brief suggestions into separate fieldSuggestions entries using the exact matching field names above. Put any ready-to-use rewritten title, full replacement section, or standalone article in draft. Do not put explanations inside draft.`,
       maxOutputTokens: selected ? 5000 : 3000,
     },
     body.provider ?? "auto",
   );
 
   return {
+    comments: String(generated.output.comments ?? ""),
+    verdict: String(generated.output.verdict ?? ""),
     answer: String(generated.output.answer ?? ""),
     draft: String(generated.output.draft ?? ""),
+    fieldSuggestions: Array.isArray(generated.output.fieldSuggestions)
+      ? generated.output.fieldSuggestions
+      : [],
     target: String(generated.output.target ?? "none"),
     provider: generated.provider,
   };

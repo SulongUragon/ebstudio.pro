@@ -22,11 +22,22 @@ import type {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  comments?: string;
+  verdict?: string;
+  fieldSuggestions?: AssistantFieldSuggestion[];
+};
+
+type AssistantFieldSuggestion = {
+  field: string;
+  value: string;
 };
 
 type AssistantResult = {
+  comments: string;
+  verdict: string;
   answer: string;
   draft: string;
+  fieldSuggestions: AssistantFieldSuggestion[];
   target: "none" | "title" | "section" | "article";
   provider?: string;
 };
@@ -66,12 +77,19 @@ export default function CreativeAssistant({
         "Turn this section into an article",
         "Suggest stronger ideas",
       ]
-    : [
-        "Strengthen my book concept",
-        "Suggest a stronger title",
-        "Create an article from this topic",
-        "Help me plan the next step",
-      ];
+    : mode === "fiction"
+      ? [
+          "Complete my fiction brief",
+          "Suggest my genre",
+          "Build my main characters",
+          "Strengthen my plot premise",
+        ]
+      : [
+          "Complete my non-fiction brief",
+          "Clarify my topic",
+          "Define my target audience",
+          "Build my key points",
+        ];
 
   async function askAssistant(
     event?: FormEvent<HTMLFormElement>,
@@ -102,7 +120,10 @@ export default function CreativeAssistant({
           brief,
           provider,
           assistantPrompt: question,
-          assistantHistory: nextMessages.slice(0, -1),
+          assistantHistory: nextMessages.slice(0, -1).map((message) => ({
+            role: message.role,
+            content: messageForHistory(message),
+          })),
           manuscript: manuscript
             ? {
                 title: manuscript.title,
@@ -122,14 +143,26 @@ export default function CreativeAssistant({
       });
       const data = await readAssistantResponse(response);
       const nextResult: AssistantResult = {
+        comments: String(data.comments ?? "").slice(0, 3000),
+        verdict: String(data.verdict ?? "").slice(0, 1500),
         answer: String(data.answer ?? "").slice(0, 6000),
         draft: String(data.draft ?? "").slice(0, 30000),
+        fieldSuggestions: normalizeFieldSuggestions(data.fieldSuggestions),
         target: normalizeTarget(data.target),
         provider: data.provider ? String(data.provider) : undefined,
       };
       setResult(nextResult);
       setMessages((current) =>
-        [...current, { role: "assistant" as const, content: nextResult.answer }].slice(-6),
+        [
+          ...current,
+          {
+            role: "assistant" as const,
+            content: nextResult.answer,
+            comments: nextResult.comments,
+            verdict: nextResult.verdict,
+            fieldSuggestions: nextResult.fieldSuggestions,
+          },
+        ].slice(-6),
       );
     } catch (assistantError) {
       setError(
@@ -213,8 +246,8 @@ export default function CreativeAssistant({
                 <MessageCircle size={25} />
                 <strong>What are you creating?</strong>
                 <p>
-                  I can develop your ebook, improve the selected section, or turn
-                  your ideas into an article.
+                  I organize book ideas by the exact fields you need to complete,
+                  then help with sections and articles.
                 </p>
               </div>
             ) : null}
@@ -238,7 +271,37 @@ export default function CreativeAssistant({
                 key={`${message.role}-${index}-${message.content.slice(0, 20)}`}
               >
                 <span>{message.role === "user" ? "You" : "EB"}</span>
+                {message.role === "assistant" &&
+                (message.comments || message.verdict) ? (
+                  <div className="assistant-assessment">
+                    {message.comments ? (
+                      <section>
+                        <strong>Comments</strong>
+                        <p>{message.comments}</p>
+                      </section>
+                    ) : null}
+                    {message.verdict ? (
+                      <section className="assistant-verdict">
+                        <strong>Verdict</strong>
+                        <p>{message.verdict}</p>
+                      </section>
+                    ) : null}
+                  </div>
+                ) : null}
                 <p>{message.content}</p>
+                {message.fieldSuggestions?.length ? (
+                  <div className="assistant-field-list">
+                    {message.fieldSuggestions.map((suggestion) => (
+                      <section
+                        className="assistant-field-card"
+                        key={`${suggestion.field}-${suggestion.value.slice(0, 24)}`}
+                      >
+                        <strong>{suggestion.field}</strong>
+                        <p>{suggestion.value}</p>
+                      </section>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
 
@@ -305,6 +368,35 @@ function normalizeTarget(value: unknown): AssistantResult["target"] {
   return value === "title" || value === "section" || value === "article"
     ? value
     : "none";
+}
+
+function normalizeFieldSuggestions(value: unknown): AssistantFieldSuggestion[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const field = String((item as { field?: unknown }).field ?? "").trim();
+      const suggestion = String(
+        (item as { value?: unknown }).value ?? "",
+      ).trim();
+      return field && suggestion ? { field, value: suggestion } : null;
+    })
+    .filter((item): item is AssistantFieldSuggestion => Boolean(item))
+    .slice(0, 6);
+}
+
+function messageForHistory(message: ChatMessage) {
+  const fields = message.fieldSuggestions
+    ?.map((suggestion) => `${suggestion.field}: ${suggestion.value}`)
+    .join("\n");
+  return [
+    message.comments ? `Comments: ${message.comments}` : "",
+    message.verdict ? `Verdict: ${message.verdict}` : "",
+    message.content,
+    fields,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 async function readAssistantResponse(response: Response) {
