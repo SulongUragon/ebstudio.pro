@@ -438,7 +438,7 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
   zip.file("OEBPS/cover.jpg", dataUriToBase64(exportBook.coverImage), { base64: true });
   zip.file(
     "OEBPS/style.css",
-    `body{font-family:serif;line-height:1.45;margin:5%;}h1{font-size:1.65em;margin:1.5em 0 1em;}h2{font-size:1.3em;margin:1.4em 0 .7em;}h3{font-size:1.12em;margin:1.3em 0 .6em;}p{margin:.35em 0;}p.fiction{text-indent:1.2em;margin:0;}p.first,p.scene-break{text-indent:0;}p.scene-break{text-align:center;margin:1.25em 0;}nav ol{padding-left:1.4em;}li{margin:.45em 0;}.title-page{text-align:center;margin-top:25%;}.title-page h1{font-size:2.2em}.copyright{text-align:center;margin-top:25%;}code{font-family:monospace;}`,
+    `html{margin:0;padding:0;max-width:100%;}body{box-sizing:border-box;width:100%;max-width:100%;margin:0;padding:5%;overflow-x:hidden;font-family:serif;line-height:1.45;}main,p,h1,h2,h3,li{max-width:100%;overflow-wrap:break-word;word-wrap:break-word;-webkit-hyphens:auto;hyphens:auto;}h1{font-size:1.55em;line-height:1.18;margin:1.25em 0 .85em;}h2{font-size:1.3em;margin:1.4em 0 .7em;}h3{font-size:1.12em;margin:1.3em 0 .6em;}p{margin:.35em 0;}p.fiction{text-indent:1.2em;margin:0;}p.first,p.scene-break{text-indent:0;}p.scene-break{text-align:center;margin:1.25em 0;}nav ol{padding-left:1.4em;}li{margin:.45em 0;}.title-page{text-align:center;margin-top:25%;}.title-page h1{font-size:2.2em}.copyright{text-align:center;margin-top:16%;}.copyright-notice{margin-bottom:.55em;}code{font-family:monospace;}`,
   );
   zip.file(
     "OEBPS/title.xhtml",
@@ -451,7 +451,7 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
     "OEBPS/copyright.xhtml",
     xhtmlPage(
       "Copyright",
-      `<main epub:type="copyright-page" class="copyright"><h1>Copyright</h1><p>Copyright © ${copyrightYear(exportBook.createdAt)} by ${escapeXml(exportBook.author)}</p><p>All rights reserved.</p></main>`,
+      `<main epub:type="copyright-page" class="copyright"><p class="copyright-notice">Copyright © ${copyrightYear(exportBook.createdAt)} by ${escapeXml(exportBook.author)}</p><p>All rights reserved.</p></main>`,
     ),
   );
 
@@ -761,9 +761,16 @@ function sectionRole(section: NormalizedSection, mode: Mode) {
 
 function sectionTocLabel(section: NormalizedSection, mode: Mode) {
   const role = sectionRole(section, mode);
-  return normalizeHeading(section.title) === normalizeHeading(role)
-    ? role
-    : `${role}: ${section.title}`;
+  if (normalizeHeading(section.title) === normalizeHeading(role)) return role;
+  const rolePrefix = new RegExp(
+    `^${escapeRegExp(role)}\\s*[:.\\-–—]\\s*`,
+    "i",
+  );
+  let descriptiveTitle = section.title.trim();
+  while (rolePrefix.test(descriptiveTitle)) {
+    descriptiveTitle = descriptiveTitle.replace(rolePrefix, "").trim();
+  }
+  return descriptiveTitle ? `${role}: ${descriptiveTitle}` : role;
 }
 
 function sectionEpubType(section: NormalizedSection, mode: Mode) {
@@ -778,6 +785,10 @@ function sectionBookmark(index: number) {
 
 function normalizeHeading(value: string) {
   return value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function escapeXml(value: unknown) {
