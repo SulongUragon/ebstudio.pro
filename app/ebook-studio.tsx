@@ -64,6 +64,10 @@ type DualBookProject = {
   fiction: Manuscript;
   nonfiction: Manuscript;
 };
+type DualSectionResult = {
+  section: SectionContent;
+  provider: ActiveAIProvider;
+};
 
 const chapterPresets = [3, 5, 8, 10, 12, 15, 20];
 const blankBrief: BookBrief = {
@@ -608,7 +612,7 @@ export default function EbookStudio() {
         index: number,
         summaries: string[],
         preferredProvider: ActiveAIProvider,
-      ) => {
+      ): Promise<DualSectionResult> => {
         const sectionResponse = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -645,7 +649,10 @@ export default function EbookStudio() {
           return;
         }
 
-        const [fictionResult, nonfictionResult] = await Promise.all([
+        const [fictionResult, nonfictionResult]: [
+          DualSectionResult,
+          DualSectionResult,
+        ] = await Promise.all([
           writeSection(
             fictionWorking,
             index,
