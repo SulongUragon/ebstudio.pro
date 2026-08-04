@@ -1920,6 +1920,40 @@ p {
   font-weight: 700;
 }
 
+.companion-brief-banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: -8px 0 24px;
+  padding: 14px 15px;
+  border: 1px solid rgba(64, 86, 74, 0.2);
+  background: rgba(64, 86, 74, 0.065);
+  color: var(--sage);
+}
+
+.companion-brief-banner div {
+  display: grid;
+  gap: 3px;
+}
+
+.companion-brief-banner span {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.companion-brief-banner strong {
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.96rem;
+}
+
+.companion-brief-banner small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .field input:disabled,
 .field textarea:disabled,
 .chapter-fieldset:disabled {
@@ -2102,6 +2136,52 @@ p {
 .kdp-readiness.blocked {
   background: #fff4e5;
   color: #7a421f;
+}
+
+.companion-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(64, 86, 74, 0.18);
+  background: rgba(64, 86, 74, 0.055);
+}
+
+.companion-action-bar > div {
+  display: grid;
+  gap: 3px;
+}
+
+.companion-action-bar strong {
+  color: #29483b;
+  font-size: 0.74rem;
+}
+
+.companion-action-bar span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.companion-action-bar button {
+  display: inline-flex;
+  min-height: 39px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border: 1px solid var(--sage);
+  background: var(--sage);
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.companion-action-bar button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .progress-track {
@@ -2395,6 +2475,17 @@ p {
   text-transform: uppercase;
 }
 
+.companion-card-label {
+  align-self: flex-start;
+  margin: 7px 0 auto;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.54rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
 .book-card-cover h2 {
   margin-bottom: 9px;
   font-family: "Playfair Display", Georgia, serif;
@@ -2537,6 +2628,15 @@ p {
   .manuscript-toolbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .companion-action-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .companion-action-bar button {
+    width: 100%;
   }
 
   .export-actions {
