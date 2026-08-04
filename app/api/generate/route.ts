@@ -602,6 +602,7 @@ async function createOutline(
   provider: AIProvider,
   preferredProvider?: ActiveAIProvider,
 ) {
+  const requestedSubtitle = String(brief.subtitle ?? "").trim();
   const modeContext =
     mode === "fiction"
       ? `Genre: ${brief.genre}
@@ -653,11 +654,12 @@ Key points: ${brief.keyPoints}`;
       input: `Create the complete structure for a ${mode === "fiction" ? "fiction" : "non-fiction"} ebook.
 
 Title: ${brief.title}
+Subtitle: ${requestedSubtitle || "Create a strong subtitle for this book."}
 Author: ${brief.author}
 Requested main chapters: exactly ${brief.chapterCount}
 ${modeContext}
 
-Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. The subtitle should make the promise or story tension sharper.`,
+Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : "Create a subtitle that makes the promise or story tension sharper."}`,
       maxOutputTokens: 5000,
     },
     provider,
@@ -697,7 +699,7 @@ Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${
     },
   ];
   return {
-    subtitle: String(output.subtitle),
+    subtitle: requestedSubtitle || String(output.subtitle).trim(),
     plan,
     provider: generated.provider,
   };
