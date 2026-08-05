@@ -107,6 +107,7 @@ export default function CreativeAssistant({
             "Suggest my genre",
             "Build my main characters",
             "Strengthen my plot premise",
+            "Check my romance structure",
             "Suggest a cover concept",
           ]
         : [
