@@ -1,5 +1,6 @@
 "use client";
 
+import { NotesMarkdown } from "./notes-markdown";
 import {
   BookMarked,
   BookOpen,
@@ -117,6 +118,7 @@ export default function EbookStudio() {
   });
   const [dualProject, setDualProject] = useState<DualBookProject | null>(null);
   const [notes, setNotes] = useState("");
+  const [notesPreview, setNotesPreview] = useState(false);
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -1504,7 +1506,7 @@ export default function EbookStudio() {
           onCreate={() => setView("create")}
         />
       ) : (
-        <NotesView notes={notes} onChange={setNotes} />
+        <NotesView notes={notes} onChange={setNotes} preview={notesPreview} onTogglePreview={setNotesPreview} />
       )}
       {creationMode === "single" ? <CreativeAssistant
         mode={mode}
@@ -2027,24 +2029,54 @@ function LibraryView({
 function NotesView({
   notes,
   onChange,
+  preview,
+  onTogglePreview,
 }: {
   notes: string;
   onChange: (value: string) => void;
+  preview: boolean;
+  onTogglePreview: (value: boolean) => void;
 }) {
   return (
     <section className="library-view">
-      <div>
-        <span className="eyebrow"><NotebookPen size={18} /> Notes</span>
-        <h1>Keep your working notes here.</h1>
-        <p>Titles, subtitles, checklists, anything you want handy. Saved automatically in this browser.</p>
+      <div className="notes-header">
+        <div>
+          <span className="eyebrow"><NotebookPen size={18} /> Notes</span>
+          <h1>Keep your working notes here.</h1>
+          <p>Titles, subtitles, checklists, anything you want handy. Saved automatically in this browser. Paste a markdown table and switch to Preview to see it rendered.</p>
+        </div>
+        <div className="notes-toggle" role="tablist" aria-label="Notes mode">
+          <button
+            role="tab"
+            aria-selected={!preview}
+            className={!preview ? "selected" : ""}
+            onClick={() => onTogglePreview(false)}
+          >
+            Edit
+          </button>
+          <button
+            role="tab"
+            aria-selected={preview}
+            className={preview ? "selected" : ""}
+            onClick={() => onTogglePreview(true)}
+          >
+            Preview
+          </button>
+        </div>
       </div>
-      <textarea
-        className="notes-textarea"
-        value={notes}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Paste your title list, KDP checklist, or anything else you want to keep close..."
-        rows={20}
-      />
+      {preview ? (
+        <div className="notes-preview-panel">
+          <NotesMarkdown text={notes} />
+        </div>
+      ) : (
+        <textarea
+          className="notes-textarea"
+          value={notes}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Paste your title list, KDP checklist, or anything else you want to keep close..."
+          rows={20}
+        />
+      )}
     </section>
   );
 }

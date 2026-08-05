@@ -1907,6 +1907,99 @@ p {
   border-color: var(--rust);
 }
 
+.notes-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.notes-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  background: #ece9e2;
+  flex-shrink: 0;
+}
+
+.notes-toggle button {
+  min-height: 38px;
+  padding: 0 18px;
+  border: 0;
+  background: transparent;
+  color: #66665f;
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.notes-toggle button.selected {
+  background: var(--sage);
+  color: white;
+  box-shadow: 0 7px 18px rgba(53, 72, 61, .14);
+}
+
+.notes-preview-panel {
+  width: 100%;
+  margin-top: 32px;
+  min-height: 480px;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  background: rgba(255, 254, 253, 0.72);
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+
+.notes-preview-empty {
+  color: var(--muted);
+}
+
+.notes-preview h2,
+.notes-preview h3,
+.notes-preview h4 {
+  margin: 22px 0 10px;
+}
+
+.notes-preview p {
+  line-height: 1.7;
+  margin: 0 0 14px;
+}
+
+.notes-preview ul {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  line-height: 1.7;
+}
+
+.notes-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 20px;
+}
+
+.notes-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .92rem;
+}
+
+.notes-table th,
+.notes-table td {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.notes-table th {
+  background: #ece9e2;
+  font-weight: 800;
+}
+
+.notes-table tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.015);
+}
+
 .library-empty button {
   margin-top: 26px;
   padding: 13px 19px;
