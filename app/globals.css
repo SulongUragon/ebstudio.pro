@@ -1907,6 +1907,44 @@ p {
   border-color: var(--rust);
 }
 
+.dual-resume-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  border: 1px solid var(--rust);
+  background: rgba(166, 84, 60, 0.06);
+}
+
+.dual-resume-bar strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: .92rem;
+}
+
+.dual-resume-bar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+.dual-resume-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: 0;
+  background: var(--rust);
+  color: white;
+  font-weight: 800;
+  font-size: .82rem;
+  flex-shrink: 0;
+}
+
 .notes-header {
   display: flex;
   align-items: flex-start;

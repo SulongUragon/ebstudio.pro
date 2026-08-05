@@ -71,8 +71,44 @@ type DualSectionResult = {
   section: SectionContent;
   provider: ActiveAIProvider;
 };
+type DualResumeState = {
+  pairId: string;
+  fiction: Manuscript;
+  nonfiction: Manuscript;
+  fictionSummaries: string[];
+  nonfictionSummaries: string[];
+  fictionProvider: ActiveAIProvider;
+  nonfictionProvider: ActiveAIProvider;
+  nextIndex: number;
+  sectionCount: number;
+};
 
 const chapterPresets = [3, 5, 8, 10, 12, 15, 20];
+
+function sleep(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function withRetry<T>(
+  task: () => Promise<T>,
+  shouldStop: () => boolean,
+  attempts = 3,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (shouldStop()) throw new Error("Generation cancelled.");
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts - 1) break;
+      await sleep(1200 * 2 ** attempt);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("The writing service did not respond.");
+}
 const blankBrief: BookBrief = {
   title: "",
   subtitle: "",
@@ -117,9 +153,14 @@ export default function EbookStudio() {
     audience: "",
   });
   const [dualProject, setDualProject] = useState<DualBookProject | null>(null);
+  const [dualResume, setDualResume] = useState<DualResumeState | null>(null);
   const [notes, setNotes] = useState("");
   const [notesPreview, setNotesPreview] = useState(false);
   const cancelRef = useRef(false);
+
+  useEffect(() => {
+    setDualResume(null);
+  }, [creationMode]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(NOTES_KEY);
@@ -557,6 +598,7 @@ export default function EbookStudio() {
     setStatus("outlining");
     setManuscript(null);
     setDualProject(null);
+    setDualResume(null);
     setActiveProvider(null);
 
     let fictionWorking: Manuscript | null = null;
@@ -674,19 +716,41 @@ export default function EbookStudio() {
       });
       setStatus("writing");
 
-      const fictionSummaries: string[] = [];
-      const nonfictionSummaries: string[] = [];
-      const sectionCount = Math.max(
-        fictionWorking.plan.length,
-        nonfictionWorking.plan.length,
+      await runDualWritingLoop({
+        pairId,
+        fiction: fictionWorking,
+        nonfiction: nonfictionWorking,
+        fictionSummaries: [],
+        nonfictionSummaries: [],
+        fictionProvider,
+        nonfictionProvider,
+        nextIndex: 0,
+        sectionCount: Math.max(
+          fictionWorking.plan.length,
+          nonfictionWorking.plan.length,
+        ),
+      });
+    } catch (dualError) {
+      setStatus("error");
+      if (fictionWorking && nonfictionWorking) {
+        saveBooks([fictionWorking, nonfictionWorking]);
+      }
+      setError(
+        dualError instanceof Error
+          ? dualError.message
+          : "EB Studio Pro could not finish the dual book pair.",
       );
+    }
+  }
 
-      const writeSection = async (
-        book: Manuscript,
-        index: number,
-        summaries: string[],
-        preferredProvider: ActiveAIProvider,
-      ): Promise<DualSectionResult> => {
+  async function writeDualSection(
+    book: Manuscript,
+    index: number,
+    summaries: string[],
+    preferredProvider: ActiveAIProvider,
+  ): Promise<DualSectionResult> {
+    return withRetry(
+      async () => {
         const sectionResponse = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -706,58 +770,104 @@ export default function EbookStudio() {
         const content = String(data.content ?? "").trim();
         const summary = String(data.summary ?? "").trim();
         if (!content || !summary) {
-          throw new Error(`The writer did not finish \"${book.plan[index].title}\".`);
+          throw new Error(`The writer did not finish "${book.plan[index].title}".`);
         }
         return {
           section: { ...book.plan[index], content, summary } as SectionContent,
           provider: data.provider as ActiveAIProvider,
         };
-      };
+      },
+      () => cancelRef.current,
+    );
+  }
 
-      let activeFictionProvider = fictionProvider;
-      let activeNonfictionProvider = nonfictionProvider;
-      for (let index = 0; index < sectionCount; index += 1) {
+  async function runDualWritingLoop(start: DualResumeState) {
+    const { pairId, sectionCount } = start;
+    let fictionWorking = start.fiction;
+    let nonfictionWorking = start.nonfiction;
+    const fictionSummaries = [...start.fictionSummaries];
+    const nonfictionSummaries = [...start.nonfictionSummaries];
+    let activeFictionProvider = start.fictionProvider;
+    let activeNonfictionProvider = start.nonfictionProvider;
+    let index = start.nextIndex;
+
+    const snapshot = (): DualResumeState => ({
+      pairId,
+      fiction: fictionWorking,
+      nonfiction: nonfictionWorking,
+      fictionSummaries: [...fictionSummaries],
+      nonfictionSummaries: [...nonfictionSummaries],
+      fictionProvider: activeFictionProvider,
+      nonfictionProvider: activeNonfictionProvider,
+      nextIndex: index,
+      sectionCount,
+    });
+
+    try {
+      for (; index < sectionCount; index += 1) {
         if (cancelRef.current) {
           setStatus("cancelled");
+          setDualResume(snapshot());
           saveBooks([fictionWorking, nonfictionWorking]);
           return;
         }
 
-        const [fictionResult, nonfictionResult]: [
-          DualSectionResult,
-          DualSectionResult,
-        ] = await Promise.all([
-          writeSection(
-            fictionWorking,
-            index,
-            fictionSummaries,
-            activeFictionProvider,
-          ),
-          writeSection(
-            nonfictionWorking,
-            index,
-            nonfictionSummaries,
-            activeNonfictionProvider,
-          ),
+        const fictionTask =
+          index < fictionWorking.plan.length
+            ? writeDualSection(
+                fictionWorking,
+                index,
+                fictionSummaries,
+                activeFictionProvider,
+              )
+            : null;
+        // Stagger the second request so both books do not hit the rate limit together.
+        await sleep(400);
+        const nonfictionTask =
+          index < nonfictionWorking.plan.length
+            ? writeDualSection(
+                nonfictionWorking,
+                index,
+                nonfictionSummaries,
+                activeNonfictionProvider,
+              )
+            : null;
+
+        const [fictionSettled, nonfictionSettled] = await Promise.allSettled([
+          fictionTask,
+          nonfictionTask,
         ]);
-        activeFictionProvider = fictionResult.provider;
-        activeNonfictionProvider = nonfictionResult.provider;
-        fictionSummaries.push(fictionResult.section.summary);
-        nonfictionSummaries.push(nonfictionResult.section.summary);
-        fictionWorking = {
-          ...fictionWorking,
-          sections: [...fictionWorking.sections, fictionResult.section],
-          providersUsed: Array.from(
-            new Set([...(fictionWorking.providersUsed ?? []), activeFictionProvider]),
-          ),
-        };
-        nonfictionWorking = {
-          ...nonfictionWorking,
-          sections: [...nonfictionWorking.sections, nonfictionResult.section],
-          providersUsed: Array.from(
-            new Set([...(nonfictionWorking.providersUsed ?? []), activeNonfictionProvider]),
-          ),
-        };
+        if (fictionSettled.status === "rejected") throw fictionSettled.reason;
+        if (nonfictionSettled.status === "rejected") throw nonfictionSettled.reason;
+        const fictionResult = fictionSettled.value;
+        const nonfictionResult = nonfictionSettled.value;
+
+        if (fictionResult) {
+          activeFictionProvider = fictionResult.provider;
+          fictionSummaries.push(fictionResult.section.summary);
+          fictionWorking = {
+            ...fictionWorking,
+            sections: [...fictionWorking.sections, fictionResult.section],
+            providersUsed: Array.from(
+              new Set([...(fictionWorking.providersUsed ?? []), activeFictionProvider]),
+            ),
+          };
+        }
+        if (nonfictionResult) {
+          activeNonfictionProvider = nonfictionResult.provider;
+          nonfictionSummaries.push(nonfictionResult.section.summary);
+          nonfictionWorking = {
+            ...nonfictionWorking,
+            sections: [...nonfictionWorking.sections, nonfictionResult.section],
+            providersUsed: Array.from(
+              new Set([
+                ...(nonfictionWorking.providersUsed ?? []),
+                activeNonfictionProvider,
+              ]),
+            ),
+          };
+        }
+
         setDualProject({
           id: pairId,
           title: brief.title.trim(),
@@ -766,19 +876,27 @@ export default function EbookStudio() {
         });
       }
 
+      setDualResume(null);
       setStatus("complete");
       saveBooks([fictionWorking, nonfictionWorking]);
-    } catch (dualError) {
+    } catch (loopError) {
       setStatus("error");
-      if (fictionWorking && nonfictionWorking) {
-        saveBooks([fictionWorking, nonfictionWorking]);
-      }
+      setDualResume(snapshot());
+      saveBooks([fictionWorking, nonfictionWorking]);
       setError(
-        dualError instanceof Error
-          ? dualError.message
+        loopError instanceof Error
+          ? `${loopError.message} Your finished chapters are saved. Select Continue generating to pick up from chapter ${index + 1}.`
           : "EB Studio Pro could not finish the dual book pair.",
       );
     }
+  }
+
+  async function continueDualBooks() {
+    if (!dualResume) return;
+    cancelRef.current = false;
+    setError("");
+    setStatus("writing");
+    await runDualWritingLoop(dualResume);
   }
 
   function cancelGeneration() {
@@ -1481,6 +1599,9 @@ export default function EbookStudio() {
               project={dualProject}
               status={status}
               onOpen={openBook}
+              resumeFrom={dualResume ? dualResume.nextIndex : null}
+              resumeTotal={dualResume ? dualResume.sectionCount : null}
+              onContinue={continueDualBooks}
             />
           ) : <BookPreview
             manuscript={manuscript}
@@ -1539,10 +1660,16 @@ function DualBookPreview({
   project,
   status,
   onOpen,
+  resumeFrom,
+  resumeTotal,
+  onContinue,
 }: {
   project: DualBookProject | null;
   status: GenerationStatus;
   onOpen: (book: Manuscript) => void;
+  resumeFrom?: number | null;
+  resumeTotal?: number | null;
+  onContinue?: () => void;
 }) {
   if (!project) {
     return (
@@ -1576,9 +1703,28 @@ function DualBookPreview({
 
   const books = [project.fiction, project.nonfiction];
   const canOpen = status !== "outlining" && status !== "writing";
+  const canResume =
+    typeof resumeFrom === "number" &&
+    typeof resumeTotal === "number" &&
+    resumeFrom < resumeTotal &&
+    status !== "writing" &&
+    status !== "outlining" &&
+    Boolean(onContinue);
 
   return (
     <aside className="preview-panel dual-preview-panel" aria-live="polite">
+      {canResume ? (
+        <div className="dual-resume-bar">
+          <div>
+            <strong>Generation stopped at chapter {(resumeFrom ?? 0) + 1} of {resumeTotal}</strong>
+            <p>Your finished chapters are saved. Continue from where it stopped instead of starting over.</p>
+          </div>
+          <button type="button" onClick={onContinue}>
+            <Sparkles size={15} />
+            Continue generating
+          </button>
+        </div>
+      ) : null}
       <div className="dual-preview-heading">
         <div>
           <span className="preview-kicker">Dual Book Project</span>
