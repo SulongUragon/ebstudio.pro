@@ -1847,8 +1847,9 @@ function BookPreview({
   }
 
   const isComplete = status === "complete";
+  const activeSectionContent = manuscript.sections[activeSection];
   const selected =
-    manuscript.sections[activeSection] ??
+    (isSectionFinished(activeSectionContent) ? activeSectionContent : undefined) ??
     (!isComplete ? manuscript.sections[manuscript.sections.length - 1] : null) ??
     null;
   const selectedPlan = manuscript.plan[activeSection] ?? null;
