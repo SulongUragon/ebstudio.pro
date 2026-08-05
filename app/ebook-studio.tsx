@@ -1508,7 +1508,7 @@ export default function EbookStudio() {
       ) : (
         <NotesView notes={notes} onChange={setNotes} preview={notesPreview} onTogglePreview={setNotesPreview} />
       )}
-      {creationMode === "single" ? <CreativeAssistant
+      <CreativeAssistant
         mode={mode}
         brief={brief}
         manuscript={manuscript}
@@ -1516,7 +1516,21 @@ export default function EbookStudio() {
         provider={provider}
         onApplyTitle={applyAssistantTitle}
         onApplySection={applyAssistantSection}
-      /> : null}
+        creationMode={creationMode}
+        dualContext={
+          creationMode === "dual"
+            ? {
+                title: brief.title,
+                concept: dualInput.concept,
+                audience: dualInput.audience,
+                fictionSubtitle: dualInput.fictionSubtitle,
+                nonfictionSubtitle: dualInput.nonfictionSubtitle,
+                fictionTitle: dualProject?.fiction.title ?? "",
+                nonfictionTitle: dualProject?.nonfiction.title ?? "",
+              }
+            : null
+        }
+      />
     </main>
   );
 }

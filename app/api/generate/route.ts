@@ -26,6 +26,16 @@ type RequestBody = {
     sections?: Array<{ title?: string; content?: string; summary?: string }>;
   } | null;
   activeSection?: number;
+  creationMode?: "single" | "dual";
+  dualContext?: {
+    title?: string;
+    concept?: string;
+    audience?: string;
+    fictionSubtitle?: string;
+    nonfictionSubtitle?: string;
+    fictionTitle?: string;
+    nonfictionTitle?: string;
+  } | null;
   dualPair?: {
     concept?: string;
     audience?: string;
@@ -193,10 +203,21 @@ async function createAssistantResponse(body: RequestBody) {
     assistantHistory = [],
     manuscript,
     activeSection = 0,
+    creationMode = "single",
+    dualContext = null,
   } = body;
+  const isDual = creationMode === "dual";
   const selected = manuscript?.sections?.[activeSection];
-  const modeContext =
-    mode === "fiction"
+  const modeContext = isDual
+    ? `This is a DUAL BOOK PROJECT: one shared concept becomes two connected books, a fiction novel and a non-fiction guide.
+Shared project title: ${dualContext?.title || brief.title || "Not set"}
+Shared concept: ${dualContext?.concept || "Not set"}
+Shared audience: ${dualContext?.audience || "Not set"}
+Fiction subtitle: ${dualContext?.fictionSubtitle || "Not set"}
+Non-fiction subtitle: ${dualContext?.nonfictionSubtitle || "Not set"}
+Generated fiction title: ${dualContext?.fictionTitle || "Not generated yet"}
+Generated non-fiction title: ${dualContext?.nonfictionTitle || "Not generated yet"}`
+    : mode === "fiction"
       ? `Genre: ${brief.genre || "Not set"}
 Characters: ${brief.characters || "Not set"}
 Premise: ${brief.premise || "Not set"}`
@@ -255,9 +276,9 @@ ${String(selected.content ?? "").slice(0, 14000)}`
         ],
       },
       instructions:
-        "You are EB Creative Assistant, a senior ebook editor, fiction and non-fiction book developer, article strategist, and repurposing specialist. Preserve this response order: first comments, then verdict, then the direct help. Comments must briefly assess what is strong, weak, missing, or unclear in the user's current idea. Verdict must be one decisive sentence stating whether the concept works and what direction to take. Answer must be a short transition or recommendation that follows the verdict. When the user asks for help creating, strengthening, filling in, or completing a book concept or brief, organize every ready-to-paste suggestion in fieldSuggestions instead of blending fields into one paragraph. For fiction use the exact field names Genre, Main Characters, and Plot Premise. For non-fiction use the exact field names Topic, Target Audience, and Key Points. Include only the fields relevant to the request; include all three when the user asks for broad concept help. Each value must stand alone and be ready to paste into its matching form field. Use Book Title only when the user asks for title help. For section editing, manuscript analysis, and article requests, return an empty fieldSuggestions array. When the user asks for a deliverable, provide publication-ready copy in draft. Never claim guaranteed virality, invent research, imitate a living author, or use the em dash character. Keep every response concise. Use target title only when draft is a replacement title, section only when draft is a full replacement for the selected manuscript section, article for a standalone article, and none otherwise. If target is none, draft may contain other ready-to-use copy or be empty.",
+        "You are EB Creative Assistant, a senior ebook editor, fiction and non-fiction book developer, article strategist, and repurposing specialist. Preserve this response order: first comments, then verdict, then the direct help. Comments must briefly assess what is strong, weak, missing, or unclear in the user's current idea. Verdict must be one decisive sentence stating whether the concept works and what direction to take. Answer must be a short transition or recommendation that follows the verdict. When the user asks for help creating, strengthening, filling in, or completing a book concept or brief, organize every ready-to-paste suggestion in fieldSuggestions instead of blending fields into one paragraph. For fiction use the exact field names Genre, Main Characters, and Plot Premise. For non-fiction use the exact field names Topic, Target Audience, and Key Points. For a dual book project use the exact field names Shared Concept, Shared Audience, Fiction Subtitle, and Non-Fiction Subtitle, and make sure the fiction and non-fiction sides express the same core theme through different framing: the novel delivers the emotional experience through story, the guide delivers the practical transformation through instruction. When advising on a dual project, always consider both books together and flag any drift between them. Include only the fields relevant to the request; include all of them when the user asks for broad concept help. Each value must stand alone and be ready to paste into its matching form field. Use Book Title only when the user asks for title help. For section editing, manuscript analysis, and article requests, return an empty fieldSuggestions array. When the user asks for a deliverable, provide publication-ready copy in draft. Never claim guaranteed virality, invent research, imitate a living author, or use the em dash character. Keep every response concise. Use target title only when draft is a replacement title, section only when draft is a full replacement for the selected manuscript section, article for a standalone article, and none otherwise. If target is none, draft may contain other ready-to-use copy or be empty.",
       input: `Current book context:
-Mode: ${mode}
+Mode: ${isDual ? "dual book project (fiction + non-fiction together)" : mode}
 Title: ${brief.title || "Not set"}
 Author: ${brief.author || "Not set"}
 ${modeContext}
@@ -274,11 +295,13 @@ ${history || "No earlier messages."}
 User request:
 ${assistantPrompt.trim()}
 
-Response pattern for this ${mode === "fiction" ? "fiction" : "non-fiction"} book:
+Response pattern for this ${isDual ? "dual book project" : mode === "fiction" ? "fiction" : "non-fiction"} book:
 ${
-  mode === "fiction"
-    ? "Genre, Main Characters, Plot Premise"
-    : "Topic, Target Audience, Key Points"
+  isDual
+    ? "Shared Concept, Shared Audience, Fiction Subtitle, Non-Fiction Subtitle"
+    : mode === "fiction"
+      ? "Genre, Main Characters, Plot Premise"
+      : "Topic, Target Audience, Key Points"
 }
 
 Return a brief editorial assessment in comments, followed by one decisive sentence in verdict. Then respond with one concise framing sentence in answer. Put concept and brief suggestions into separate fieldSuggestions entries using the exact matching field names above. Put any ready-to-use rewritten title, full replacement section, or standalone article in draft. Do not put explanations inside draft.`,

@@ -42,6 +42,16 @@ type AssistantResult = {
   provider?: string;
 };
 
+export type DualAssistantContext = {
+  title: string;
+  concept: string;
+  audience: string;
+  fictionSubtitle: string;
+  nonfictionSubtitle: string;
+  fictionTitle: string;
+  nonfictionTitle: string;
+};
+
 export default function CreativeAssistant({
   mode,
   brief,
@@ -50,6 +60,8 @@ export default function CreativeAssistant({
   provider,
   onApplyTitle,
   onApplySection,
+  creationMode = "single",
+  dualContext = null,
 }: {
   mode: Mode;
   brief: BookBrief;
@@ -58,7 +70,10 @@ export default function CreativeAssistant({
   provider: AIProvider;
   onApplyTitle: (title: string) => void;
   onApplySection: (content: string) => void;
+  creationMode?: "single" | "dual";
+  dualContext?: DualAssistantContext | null;
 }) {
+  const isDual = creationMode === "dual";
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [prompt, setPrompt] = useState("");
@@ -70,26 +85,33 @@ export default function CreativeAssistant({
   const selectedSection: SectionContent | null =
     manuscript?.sections[activeSection] ?? null;
 
-  const quickPrompts = selectedSection
+  const quickPrompts = isDual
     ? [
-        "Improve the current section",
-        "Check this book for repetition",
-        "Turn this section into an article",
-        "Suggest stronger ideas",
+        "Complete my dual book brief",
+        "Sharpen the shared concept",
+        "Write both subtitles",
+        "Check if both books align",
       ]
-    : mode === "fiction"
+    : selectedSection
       ? [
-          "Complete my fiction brief",
-          "Suggest my genre",
-          "Build my main characters",
-          "Strengthen my plot premise",
+          "Improve the current section",
+          "Check this book for repetition",
+          "Turn this section into an article",
+          "Suggest stronger ideas",
         ]
-      : [
-          "Complete my non-fiction brief",
-          "Clarify my topic",
-          "Define my target audience",
-          "Build my key points",
-        ];
+      : mode === "fiction"
+        ? [
+            "Complete my fiction brief",
+            "Suggest my genre",
+            "Build my main characters",
+            "Strengthen my plot premise",
+          ]
+        : [
+            "Complete my non-fiction brief",
+            "Clarify my topic",
+            "Define my target audience",
+            "Build my key points",
+          ];
 
   async function askAssistant(
     event?: FormEvent<HTMLFormElement>,
@@ -139,6 +161,8 @@ export default function CreativeAssistant({
               }
             : null,
           activeSection,
+          creationMode,
+          dualContext,
         }),
       });
       const data = await readAssistantResponse(response);
@@ -223,11 +247,15 @@ export default function CreativeAssistant({
             <div>
               <span><Sparkles size={15} /> EB Creative Assistant</span>
               <small>
-                {selectedSection
-                  ? `Working with “${selectedSection.title}”`
-                  : brief.title
-                    ? `Working with “${brief.title}”`
-                    : "Ebook and article specialist"}
+                {isDual
+                  ? dualContext?.title
+                    ? `Dual project: “${dualContext.title}”`
+                    : "Dual book project (fiction + non-fiction)"
+                  : selectedSection
+                    ? `Working with “${selectedSection.title}”`
+                    : brief.title
+                      ? `Working with “${brief.title}”`
+                      : "Ebook and article specialist"}
               </small>
             </div>
             <div>
