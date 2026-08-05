@@ -9,6 +9,7 @@ import {
   FileText,
   LibraryBig,
   LoaderCircle,
+  NotebookPen,
   PenLine,
   Plus,
   RotateCcw,
@@ -42,7 +43,8 @@ import {
   persistStoredLibrary,
 } from "./library-storage";
 
-type View = "create" | "library";
+type View = "create" | "library" | "notes";
+const NOTES_KEY = "eb-studio-pro-notes-v1";
 type GenerationStatus =
   | "idle"
   | "outlining"
@@ -114,7 +116,20 @@ export default function EbookStudio() {
     audience: "",
   });
   const [dualProject, setDualProject] = useState<DualBookProject | null>(null);
+  const [notes, setNotes] = useState("");
   const cancelRef = useRef(false);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(NOTES_KEY);
+    if (saved) setNotes(saved);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      window.localStorage.setItem(NOTES_KEY, notes);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [notes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1057,6 +1072,13 @@ export default function EbookStudio() {
             Library
             {library.length ? <span className="library-count">{library.length}</span> : null}
           </button>
+          <button
+            className={view === "notes" ? "nav-button active" : "nav-button"}
+            onClick={() => setView("notes")}
+          >
+            <NotebookPen size={18} />
+            Notes
+          </button>
         </nav>
       </header>
 
@@ -1474,13 +1496,15 @@ export default function EbookStudio() {
             onCreateCompanion={createCompanionBook}
           />}
         </section>
-      ) : (
+      ) : view === "library" ? (
         <LibraryView
           books={library}
           onOpen={openBook}
           onRemove={removeBook}
           onCreate={() => setView("create")}
         />
+      ) : (
+        <NotesView notes={notes} onChange={setNotes} />
       )}
       {creationMode === "single" ? <CreativeAssistant
         mode={mode}
@@ -1996,6 +2020,31 @@ function LibraryView({
           <button onClick={onCreate}>Create a book</button>
         </div>
       )}
+    </section>
+  );
+}
+
+function NotesView({
+  notes,
+  onChange,
+}: {
+  notes: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <section className="library-view">
+      <div>
+        <span className="eyebrow"><NotebookPen size={18} /> Notes</span>
+        <h1>Keep your working notes here.</h1>
+        <p>Titles, subtitles, checklists, anything you want handy. Saved automatically in this browser.</p>
+      </div>
+      <textarea
+        className="notes-textarea"
+        value={notes}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Paste your title list, KDP checklist, or anything else you want to keep close..."
+        rows={20}
+      />
     </section>
   );
 }

@@ -1887,6 +1887,26 @@ p {
   color: var(--rust);
 }
 
+.notes-textarea {
+  width: 100%;
+  margin-top: 32px;
+  min-height: 480px;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  background: rgba(255, 254, 253, 0.72);
+  box-shadow: var(--shadow);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink, inherit);
+  resize: vertical;
+}
+
+.notes-textarea:focus {
+  outline: none;
+  border-color: var(--rust);
+}
+
 .library-empty button {
   margin-top: 26px;
   padding: 13px 19px;
