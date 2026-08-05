@@ -35,6 +35,8 @@ import {
   exportPdf,
   getCoverReadiness,
   getKdpReadiness,
+  isSectionFinished,
+  MIN_SECTION_CHARACTERS,
 } from "./exporters";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
@@ -1030,7 +1032,7 @@ export default function EbookStudio() {
       const sectionData = await readResponse(response);
       const content = String(sectionData.content ?? "").trim();
       const summary = String(sectionData.summary ?? "").trim();
-      if (!content || !summary) {
+      if (!content || !summary || content.length < MIN_SECTION_CHARACTERS) {
         throw new Error(`The writer could not finish \"${section.title}\". Try this chapter again.`);
       }
 
@@ -1851,10 +1853,10 @@ function BookPreview({
     null;
   const selectedPlan = manuscript.plan[activeSection] ?? null;
   const completedCount = manuscript.plan.filter(
-    (_, index) => Boolean(manuscript.sections[index]?.content?.trim()),
+    (_, index) => isSectionFinished(manuscript.sections[index]),
   ).length;
   const incompleteSectionIndex = manuscript.plan.findIndex(
-    (_, index) => !manuscript.sections[index]?.content?.trim(),
+    (_, index) => !isSectionFinished(manuscript.sections[index]),
   );
   const kdpReadiness = getKdpReadiness(manuscript);
   const coverReadiness = getCoverReadiness(manuscript);
@@ -1987,7 +1989,7 @@ function BookPreview({
           </div>
           <p>Contents</p>
           {manuscript.plan.map((section, index) => {
-            const finished = Boolean(manuscript.sections[index]?.content?.trim());
+            const finished = isSectionFinished(manuscript.sections[index]);
             const repairable = isComplete && !finished;
             const current = !isComplete && index === manuscript.sections.length;
             return (

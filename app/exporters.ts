@@ -38,6 +38,44 @@ export type KdpReadiness = {
   warnings: string[];
 };
 
+/**
+ * A generated section is only treated as finished if it actually contains a
+ * chapter's worth of prose. A non-empty check is not enough: a failed
+ * generation can leave behind a single truncated sentence that silently passes
+ * every downstream gate and ships inside the published book.
+ */
+export const MIN_SECTION_CHARACTERS = 1200;
+
+export function sectionTextLength(section: { content?: string } | undefined) {
+  return cleanText(section?.content).trim().length;
+}
+
+export function isSectionFinished(section: { content?: string } | undefined) {
+  return sectionTextLength(section) >= MIN_SECTION_CHARACTERS;
+}
+
+/**
+ * Returns the indexes of sections that clear the absolute floor but are still
+ * dramatically shorter than the rest of the book, which usually means the
+ * writer stopped early. These are surfaced as warnings, not hard errors, so a
+ * deliberately short chapter never blocks an export.
+ */
+export function shortSectionIndexes(
+  sections: Array<{ content?: string } | undefined>,
+) {
+  const lengths = sections.map(sectionTextLength);
+  const solid = lengths.filter((length) => length >= MIN_SECTION_CHARACTERS);
+  if (solid.length < 3) return [];
+  const sorted = [...solid].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  return lengths.reduce<number[]>((found, length, index) => {
+    if (length >= MIN_SECTION_CHARACTERS && length < median * 0.35) {
+      found.push(index);
+    }
+    return found;
+  }, []);
+}
+
 export function exportFilenameStem(book: Pick<Manuscript, "title" | "mode">) {
   const bookType = book.mode === "nonfiction" ? "Non-Fiction" : "Fiction";
   return `${safeFilename(book.title)}-${bookType}`;
@@ -84,8 +122,26 @@ export function getKdpReadiness(book: Manuscript): KdpReadiness {
   if (sections.some((section) => !cleanText(section?.content).trim())) {
     errors.push("Every manuscript section must contain finished text.");
   }
+  const truncated = sections.reduce<number[]>((found, section, index) => {
+    const length = sectionTextLength(section);
+    if (length > 0 && length < MIN_SECTION_CHARACTERS) found.push(index);
+    return found;
+  }, []);
+  if (truncated.length) {
+    const labels = truncated.map((index) => index + 1).join(", ");
+    errors.push(
+      `Section ${labels} stopped early and contains only a fragment. Retry ${truncated.length > 1 ? "those chapters" : "that chapter"} before exporting.`,
+    );
+  }
 
   errors.push(...getCoverReadiness(book).errors);
+
+  const short = shortSectionIndexes(sections).map((index) => index + 1);
+  if (short.length) {
+    warnings.push(
+      `Section ${short.join(", ")} is much shorter than the rest of the book. Read it before publishing.`,
+    );
+  }
 
   if (title.length > 180) warnings.push("The title is unusually long; inspect its cover fit carefully.");
   return { ready: errors.length === 0, errors, warnings };
