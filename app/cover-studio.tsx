@@ -46,6 +46,7 @@ export default function CoverStudio({
   );
   const [style, setStyle] = useState(initialStyle);
   const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
+  const [customDirection, setCustomDirection] = useState("");
   const coverTitle = resolveExactCoverTitle(manuscript, manuscript.title);
   const [coverSubtitle, setCoverSubtitle] = useState(
     resolveExactCoverSubtitle(manuscript),
@@ -191,6 +192,7 @@ export default function CoverStudio({
           subtitle: exactSubtitle,
           style,
           finish,
+          customDirection: customDirection.trim(),
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -484,6 +486,22 @@ export default function CoverStudio({
               ? "AI integrates the exact title into EB Studio Pro’s signature artwork and palette."
               : "AI integrates the exact title into the selected artwork as part of the cover design."}
           </p>
+          <label className="cover-select-control cover-direction-label">
+            <span>Describe your cover (optional)</span>
+            <textarea
+              className="cover-direction-input"
+              value={customDirection}
+              onChange={(event) => setCustomDirection(event.target.value)}
+              placeholder="Example: window with curtains and warm golden light, empty windowsill, no rings, no hearts, no people"
+              rows={3}
+              disabled={loading}
+            />
+          </label>
+          <small className="cover-direction-note">
+            {customDirection.trim()
+              ? "Your description takes priority over the visual direction preset."
+              : "Leave blank to let AI choose the scene. Say what you want and what to avoid."}
+          </small>
           <label className="cover-select-control cover-finish-label">
             <span>Cover finish</span>
             <select

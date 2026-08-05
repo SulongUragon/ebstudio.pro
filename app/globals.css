@@ -1022,8 +1022,7 @@ p {
 
 .cover-select-control > select:focus {
   border-color: var(--rust);
-  box-shadow: 0 0 0 3px rgba(171, 87, 56, 0.08);
-}
+  box-shadow: 0 0 0 3px rgba(171, 87, 56, 0.08);}
 
 .cover-style-options {
   display: grid;
@@ -3392,4 +3391,32 @@ p {
 }
 @media (max-width: 620px) {
   .creator-workspace-tabs, .optimization-modes, .optimizer-fields, .audit-columns { grid-template-columns: 1fr; }
+}
+
+.cover-direction-input {
+  width: 100%;
+  min-height: 78px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  outline: 0;
+  background: var(--white);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.cover-direction-input:focus {
+  border-color: var(--rust);
+  box-shadow: 0 0 0 3px rgba(171, 87, 56, 0.08);
+}
+
+.cover-direction-note {
+  display: block;
+  margin: -4px 0 14px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
 }

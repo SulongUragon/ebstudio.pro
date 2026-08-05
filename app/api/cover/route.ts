@@ -9,6 +9,7 @@ type CoverRequest = {
   subtitle?: string;
   style?: string;
   finish?: string;
+  customDirection?: string;
 };
 
 const FINISH_DIRECTIONS: Record<string, string> = {
@@ -77,6 +78,14 @@ export async function POST(request: Request) {
           : style === "photoreal-title"
             ? "Feature a convincingly real human subject whose identity, emotion, wardrobe, environment, and pose are meaningfully connected to this specific book. Preserve natural skin texture, realistic eyes, anatomically correct hands, believable proportions, and cinematic editorial lighting. Avoid plastic skin, uncanny faces, extra fingers, malformed anatomy, and generic stock-photo posing."
             : "";
+    const customDirection = String(body.customDirection ?? "")
+      .trim()
+      .slice(0, 900);
+    const customBlock = customDirection
+      ? `AUTHOR SCENE REQUEST (HIGHEST PRIORITY): ${customDirection}
+
+This scene request overrides the visual direction preset wherever the two disagree. Follow it literally. Include every element the author asked for, and exclude every element the author asked to avoid. Keep the requested subject as the single clear focal point.`
+      : "";
     const prompt = `Create original front-cover artwork for a premium ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
 
 Exact book title to render once: ${body.brief.title}
@@ -85,6 +94,7 @@ Visual direction: ${direction}.
 Cover finish: ${finishDirection}.
 ${paletteGuard}
 ${subjectDirection}
+${customBlock}
 
 The cover finish should be expressed through lighting, tonal depth, surface character, and color treatment while keeping the artwork clean and readable. The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Compose for a 5:8 portrait book cover, keeping all important subjects inside the central 85% safe area so the source can be cropped cleanly. Render the exact book title once, with every word spelled exactly as supplied, using distinctive premium genre-appropriate typography that feels intentionally integrated into this specific composition rather than a generic default font.
 

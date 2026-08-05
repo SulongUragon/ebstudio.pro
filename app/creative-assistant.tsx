@@ -90,6 +90,7 @@ export default function CreativeAssistant({
         "Complete my dual book brief",
         "Sharpen the shared concept",
         "Write both subtitles",
+        "Suggest cover concepts for both",
         "Check if both books align",
       ]
     : selectedSection
@@ -97,6 +98,7 @@ export default function CreativeAssistant({
           "Improve the current section",
           "Check this book for repetition",
           "Turn this section into an article",
+          "Suggest a cover concept",
           "Suggest stronger ideas",
         ]
       : mode === "fiction"
@@ -105,12 +107,14 @@ export default function CreativeAssistant({
             "Suggest my genre",
             "Build my main characters",
             "Strengthen my plot premise",
+            "Suggest a cover concept",
           ]
         : [
             "Complete my non-fiction brief",
             "Clarify my topic",
             "Define my target audience",
             "Build my key points",
+            "Suggest a cover concept",
           ];
 
   async function askAssistant(
