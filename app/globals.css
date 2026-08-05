@@ -3420,3 +3420,34 @@ p {
   font-size: 0.72rem;
   line-height: 1.55;
 }
+
+.length-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.length-options button {
+  min-height: 46px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  font-size: .74rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.length-options button.selected {
+  border-color: var(--rust);
+  background: var(--rust);
+  color: white;
+}
+
+.length-note {
+  display: block;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.55;
+}

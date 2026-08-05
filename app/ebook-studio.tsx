@@ -47,6 +47,12 @@ import {
 } from "./library-storage";
 
 type View = "create" | "library" | "notes";
+type BookLength = "novella" | "standard" | "long";
+const bookLengths: Array<{ id: BookLength; label: string; note: string }> = [
+  { id: "novella", label: "Novella", note: "About 15,000 to 20,000 words. Fast to produce." },
+  { id: "standard", label: "Standard Novel", note: "About 55,000 to 70,000 words. What most readers expect." },
+  { id: "long", label: "Long Novel", note: "About 80,000 to 100,000 words. Longest to generate." },
+];
 const NOTES_KEY = "eb-studio-pro-notes-v1";
 type GenerationStatus =
   | "idle"
@@ -156,6 +162,7 @@ export default function EbookStudio() {
   });
   const [dualProject, setDualProject] = useState<DualBookProject | null>(null);
   const [dualResume, setDualResume] = useState<DualResumeState | null>(null);
+  const [bookLength, setBookLength] = useState<BookLength>("novella");
   const [notes, setNotes] = useState("");
   const [notesPreview, setNotesPreview] = useState(false);
   const cancelRef = useRef(false);
@@ -539,6 +546,7 @@ export default function EbookStudio() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "section",
+            bookLength,
             mode,
             brief,
             plan,
@@ -758,6 +766,7 @@ export default function EbookStudio() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "section",
+            bookLength,
             mode: book.mode,
             brief: book.brief,
             plan: book.plan,
@@ -1019,6 +1028,7 @@ export default function EbookStudio() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "section",
+          bookLength,
           mode: manuscript.mode,
           brief: manuscript.brief,
           plan: manuscript.plan,
@@ -1535,6 +1545,25 @@ export default function EbookStudio() {
                   />
                 </>
               )}
+
+              <fieldset className="chapter-fieldset" disabled={fieldsLocked}>
+                <legend>Book length</legend>
+                <div className="length-options">
+                  {bookLengths.map((option) => (
+                    <button
+                      type="button"
+                      key={option.id}
+                      className={bookLength === option.id ? "selected" : ""}
+                      onClick={() => setBookLength(option.id)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <small className="length-note">
+                  {bookLengths.find((option) => option.id === bookLength)?.note}
+                </small>
+              </fieldset>
 
               <fieldset className="chapter-fieldset" disabled={fieldsLocked}>
                 <legend>Number of chapters</legend>

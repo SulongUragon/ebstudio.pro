@@ -26,6 +26,7 @@ type RequestBody = {
     sections?: Array<{ title?: string; content?: string; summary?: string }>;
   } | null;
   activeSection?: number;
+  bookLength?: BookLength;
   creationMode?: "single" | "dual";
   dualContext?: {
     title?: string;
@@ -739,6 +740,48 @@ For non-fiction, return a focused topic, a specific audience description, and 6 
   return { ...generated.output, provider: generated.provider };
 }
 
+export type BookLength = "novella" | "standard" | "long";
+
+const BOOK_LENGTH_TARGETS: Record<
+  BookLength,
+  { chapter: string; bookend: string; tokens: number }
+> = {
+  novella: {
+    chapter: "1,000 to 1,500 words",
+    bookend: "700 to 1,000 words",
+    tokens: 7000,
+  },
+  standard: {
+    chapter: "2,200 to 3,000 words",
+    bookend: "1,200 to 1,800 words",
+    tokens: 12000,
+  },
+  long: {
+    chapter: "3,200 to 4,200 words",
+    bookend: "1,600 to 2,400 words",
+    tokens: 16000,
+  },
+};
+
+/**
+ * Romance is a promise, not a flavour. Readers of the genre expect a central
+ * love story, both leads on the page, and an emotionally satisfying ending.
+ * Breaking that promise is the fastest route to one-star reviews, so when the
+ * brief asks for romance the structure rules below are enforced everywhere.
+ */
+function isRomanceBrief(mode: Mode, brief: BookBrief) {
+  if (mode !== "fiction") return false;
+  return /romance|romantic|romantasy/i.test(String(brief.genre ?? ""));
+}
+
+const ROMANCE_STRUCTURE_RULES = `Romance genre requirements, non-negotiable:
+The central plot is the love story between the two leads. Every chapter must move their relationship, not only their circumstances.
+Both leads carry point-of-view chapters. Alternate between them so the reader lives inside both sides of the conflict.
+Give the pair a clear reason they cannot simply be together, and resolve that reason on the page rather than dissolving it offstage.
+Build toward a dark moment where the relationship looks lost, then earn the recovery through a specific choice one or both leads make.
+End with a happy or hopeful ending in which the couple is together and the emotional debt to the reader is paid in full. Never end on ambiguity about whether they stay together.
+Do not introduce infidelity that is completed on the page, and do not resolve the story by pairing either lead with someone else.`;
+
 async function createOutline(
   mode: Mode,
   brief: BookBrief,
@@ -746,6 +789,7 @@ async function createOutline(
   preferredProvider?: ActiveAIProvider,
 ) {
   const requestedSubtitle = String(brief.subtitle ?? "").trim();
+  const romance = isRomanceBrief(mode, brief);
   const modeContext =
     mode === "fiction"
       ? `Genre: ${brief.genre}
@@ -801,6 +845,7 @@ Subtitle: ${requestedSubtitle || "Create a strong subtitle for this book."}
 Author: ${brief.author}
 Requested main chapters: exactly ${brief.chapterCount}
 ${modeContext}
+${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n` : ""}
 
 Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : "Create a subtitle that makes the promise or story tension sharper."}`,
       maxOutputTokens: 5000,
@@ -856,7 +901,9 @@ async function createSection(body: RequestBody) {
     section,
     sectionIndex = 0,
     previousSummaries = [],
+    bookLength = "novella",
   } = body;
+  const romance = isRomanceBrief(mode, brief);
   if (!section) throw new Error("Missing section.");
 
   const bookContext =
@@ -875,8 +922,9 @@ Required points: ${brief.keyPoints}`;
       ? `Continuity from completed sections:
 ${previousSummaries.map((summary, index) => `${index + 1}. ${summary}`).join("\n")}`
       : "This is the first section.";
+  const lengthBand = BOOK_LENGTH_TARGETS[bookLength] ?? BOOK_LENGTH_TARGETS.novella;
   const lengthTarget =
-    section.kind === "chapter" ? "1,000 to 1,500 words" : "700 to 1,000 words";
+    section.kind === "chapter" ? lengthBand.chapter : lengthBand.bookend;
 
   const request: JsonRequest = {
       name: "ebook_section",
@@ -913,9 +961,9 @@ ${
     ? "Write in immersive scenes with specific sensory detail, emotional consequence, natural dialogue when appropriate, and forward story movement. Preserve character consistency and do not summarize scenes that should be dramatized."
     : "Teach with clarity and authority. Use concrete examples and practical steps where appropriate. Make each section useful on its own while advancing the book's central promise."
 }
-
+${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n` : ""}
 The summary must be a compact continuity note of 2 to 4 sentences for the writer of the next section.`,
-      maxOutputTokens: 7000,
+      maxOutputTokens: lengthBand.tokens,
     };
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
