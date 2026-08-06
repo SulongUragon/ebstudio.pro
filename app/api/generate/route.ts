@@ -792,6 +792,12 @@ Build toward a dark moment where the relationship looks lost, then earn the reco
 End with a happy or hopeful ending in which the couple is together and the emotional debt to the reader is paid in full. Never end on ambiguity about whether they stay together.
 Do not introduce infidelity that is completed on the page, and do not resolve the story by pairing either lead with someone else.`;
 
+const ROMANCE_POV_RULES = `Point of view assignment, required for this outline:
+Name the two point-of-view leads in pov_leads, first the lead who opens the book, then the other. Use the exact names as they appear in the character list.
+Give every chapter a pov value naming exactly one of those two leads, and alternate them chapter by chapter so the reader lives inside both sides of the conflict.
+Write each chapter purpose from inside its assigned point of view: the scene has to be one that lead is actually present for, and the turn in it has to be something that lead can see, feel, or decide.
+Never assign a chapter to a character who is not one of the two leads, and never leave a chapter pov empty.`;
+
 async function createOutline(
   mode: Mode,
   brief: BookBrief,
@@ -821,6 +827,12 @@ Key points: ${brief.keyPoints}`;
           subtitle: { type: "string" },
           introduction_title: { type: "string" },
           introduction_purpose: { type: "string" },
+          pov_leads: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "For romance, the two point-of-view lead names in the order their chapters alternate. Empty array for every other book.",
+          },
           chapters: {
             type: "array",
             items: {
@@ -830,8 +842,13 @@ Key points: ${brief.keyPoints}`;
                 number: { type: "integer" },
                 title: { type: "string" },
                 purpose: { type: "string" },
+                pov: {
+                  type: "string",
+                  description:
+                    "The single character whose point of view this chapter is written from. Empty string when the book is not romance.",
+                },
               },
-              required: ["number", "title", "purpose"],
+              required: ["number", "title", "purpose", "pov"],
             },
           },
           conclusion_title: { type: "string" },
@@ -841,6 +858,7 @@ Key points: ${brief.keyPoints}`;
           "subtitle",
           "introduction_title",
           "introduction_purpose",
+          "pov_leads",
           "chapters",
           "conclusion_title",
           "conclusion_purpose",
@@ -855,7 +873,7 @@ Subtitle: ${requestedSubtitle || "Create a strong subtitle for this book."}
 Author: ${brief.author}
 Requested main chapters: exactly ${brief.chapterCount}
 ${modeContext}
-${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n` : ""}
+${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n\n${ROMANCE_POV_RULES}\n` : "\nThis book does not use assigned chapter viewpoints. Return an empty pov_leads array and an empty pov string for every chapter.\n"}
 
 Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : "Create a subtitle that makes the promise or story tension sharper."}`,
       maxOutputTokens: 5000,
@@ -875,25 +893,40 @@ Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${
     );
   }
 
+  const leads = romance ? readPovLeads(output, chapters) : [];
+  const chapterPovs = assignAlternatingPov(
+    chapters.map((chapter) => String((chapter as { pov?: unknown }).pov ?? "").trim()),
+    leads,
+  );
+  const lastChapterPov = chapterPovs.at(-1) ?? "";
+  const closingPov =
+    leads.length === 2
+      ? leads.find((lead) => lead !== lastChapterPov) ?? leads[1]
+      : "";
+
   const plan: SectionPlan[] = [
     {
       kind: "introduction",
       title: String(output.introduction_title),
       purpose: String(output.introduction_purpose),
+      ...(leads[0] ? { pov: leads[0] } : {}),
     },
     ...chapters.map((chapter, index) => {
       const item = chapter as { title?: unknown; purpose?: unknown };
+      const pov = chapterPovs[index] ?? "";
       return {
         kind: "chapter" as const,
         number: index + 1,
         title: String(item.title),
         purpose: String(item.purpose),
+        ...(pov ? { pov } : {}),
       };
     }),
     {
       kind: "conclusion",
       title: String(output.conclusion_title),
       purpose: String(output.conclusion_purpose),
+      ...(closingPov ? { pov: closingPov } : {}),
     },
   ];
   return {
@@ -901,6 +934,65 @@ Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${
     plan,
     provider: generated.provider,
   };
+}
+
+/**
+ * The outline is the only place that knows who each chapter belongs to. The two
+ * lead names are taken from pov_leads first and from the chapter assignments
+ * second, because without two names there is nothing to alternate between.
+ */
+function readPovLeads(output: JsonObject, chapters: unknown[]): string[] {
+  const declared = Array.isArray(output.pov_leads)
+    ? output.pov_leads.map((lead) => String(lead).trim()).filter(Boolean)
+    : [];
+  const assigned = chapters
+    .map((chapter) => String((chapter as { pov?: unknown }).pov ?? "").trim())
+    .filter(Boolean);
+  const leads: string[] = [];
+  for (const name of [...declared, ...assigned]) {
+    const alreadyListed = leads.some(
+      (lead) => lead.toLocaleLowerCase() === name.toLocaleLowerCase(),
+    );
+    if (!alreadyListed) leads.push(name);
+  }
+  return leads.slice(0, 2);
+}
+
+/**
+ * A model told to alternate still drifts, usually back to whichever lead was
+ * named first in the brief. That is exactly how book one ended up entirely in
+ * one head. The returned assignments are kept when they already read as a real
+ * alternation, and rewritten into a strict A B A B pattern when they do not.
+ */
+function assignAlternatingPov(povs: string[], leads: string[]): string[] {
+  if (leads.length < 2) return povs.map(() => "");
+  const normalized = povs.map((pov) => matchLead(pov, leads));
+  const usesBothLeads = leads.every((lead) => normalized.includes(lead));
+  let longestRun = 0;
+  let currentRun = 0;
+  normalized.forEach((pov, index) => {
+    currentRun = index > 0 && pov === normalized[index - 1] ? currentRun + 1 : 1;
+    if (currentRun > longestRun) longestRun = currentRun;
+  });
+  const alreadyAlternating =
+    usesBothLeads && longestRun <= 2 && normalized.every((pov) => pov.length > 0);
+  return alreadyAlternating ? normalized : povs.map((_, index) => leads[index % 2]);
+}
+
+function matchLead(pov: string, leads: string[]): string {
+  const value = pov.trim().toLocaleLowerCase();
+  if (!value) return "";
+  const exact = leads.find((lead) => lead.toLocaleLowerCase() === value);
+  if (exact) return exact;
+  const partial = leads.find((lead) => {
+    const name = lead.toLocaleLowerCase();
+    return (
+      value.includes(name) ||
+      name.includes(value) ||
+      name.split(/\s+/)[0] === value.split(/\s+/)[0]
+    );
+  });
+  return partial ?? "";
 }
 
 async function createSection(body: RequestBody) {
@@ -925,8 +1017,12 @@ Premise: ${brief.premise}`
 Audience: ${brief.audience}
 Required points: ${brief.keyPoints}`;
   const fullOutline = plan
-    .map((item, index) => `${index + 1}. ${item.title}: ${item.purpose}`)
+    .map(
+      (item, index) =>
+        `${index + 1}. ${item.title}${item.pov ? ` [point of view: ${item.pov}]` : ""}: ${item.purpose}`,
+    )
     .join("\n");
+  const sectionPov = String(section.pov ?? "").trim();
   const continuity =
     previousSummaries.length > 0
       ? `Continuity from completed sections:
@@ -971,7 +1067,16 @@ ${
     ? "Write in immersive scenes with specific sensory detail, emotional consequence, natural dialogue when appropriate, and forward story movement. Preserve character consistency and do not summarize scenes that should be dramatized."
     : "Teach with clarity and authority. Use concrete examples and practical steps where appropriate. Make each section useful on its own while advancing the book's central promise."
 }
-${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n` : ""}
+${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n` : ""}${
+  sectionPov
+    ? `
+Point of view for this section: ${sectionPov}. This overrides any general instruction to alternate viewpoints, because the alternation happens between sections and never inside one.
+Write the whole section in close third person limited anchored to ${sectionPov}, from the first line to the last. Stay inside that character's body, senses, memory, and judgement.
+Never state another character's private thoughts or feelings as fact. Everyone else is rendered only through what ${sectionPov} can see, hear, and infer, and the reading can be wrong.
+Do not switch, share, or widen the point of view partway through, and do not open with a distant narrator before settling into the character.
+`
+    : ""
+}
 The summary must be a compact continuity note of 2 to 4 sentences for the writer of the next section.`,
       maxOutputTokens: lengthBand.tokens,
     };

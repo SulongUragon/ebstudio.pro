@@ -24,6 +24,12 @@ export type SectionPlan = {
   number?: number;
   title: string;
   purpose: string;
+  /**
+   * The character whose point of view this section is written from. Set during
+   * outlining for romance so the section writer is told who it is writing as,
+   * instead of choosing on its own and defaulting to the first named lead.
+   */
+  pov?: string;
 };
 
 export type SectionContent = SectionPlan & {

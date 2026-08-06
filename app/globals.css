@@ -2656,6 +2656,19 @@ p {
   white-space: nowrap;
 }
 
+.contents-rail > button em small {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: #8a857c;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
 .book-page {
   overflow-y: visible;
   padding: clamp(40px, 5vw, 78px) clamp(36px, 6vw, 88px) 160px;

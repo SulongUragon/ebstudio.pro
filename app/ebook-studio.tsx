@@ -2032,7 +2032,10 @@ function BookPreview({
                 <span>
                   {finished ? <Check size={13} /> : repairable ? <RotateCcw size={13} /> : current ? <LoaderCircle className="spin" size={13} /> : index + 1}
                 </span>
-                <em>{section.title}</em>
+                <em>
+                  {section.title}
+                  {section.pov ? <small>{section.pov}</small> : null}
+                </em>
               </button>
             );
           })}
