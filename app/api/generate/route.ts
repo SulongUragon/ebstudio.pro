@@ -167,10 +167,15 @@ export async function POST(request: Request) {
       error instanceof Error ? error.message : error,
     );
     if (error instanceof MultiProviderRequestError) {
+      const detail = error.failures
+        .map(
+          (failure) =>
+            `${failure.provider === "openai" ? "OpenAI" : "Anthropic"}: ${failure.code}`,
+        )
+        .join(", ");
       return NextResponse.json(
         {
-          error:
-            "Both AI writing services are unavailable. Check the OpenAI and Anthropic credits or access, then try again. Your book details are safe.",
+          error: `Both AI writing services are unavailable (${detail}). Check the OpenAI and Anthropic credits or access, then try again. Your book details are safe.`,
           code: "all_providers_unavailable",
           retryable: error.failures.some((failure) => isRetryable(failure)),
         },
@@ -810,6 +815,18 @@ Give every chapter a pov value naming exactly one of those two leads, and altern
 Write each chapter purpose from inside its assigned point of view: the scene has to be one that lead is actually present for, and the turn in it has to be something that lead can see, feel, or decide.
 Never assign a chapter to a character who is not one of the two leads, and never leave a chapter pov empty.`;
 
+/**
+ * A flat outline budget is what broke a 24 chapter book. Every chapter costs a
+ * title, a purpose, and now a point of view, and on the OpenAI path reasoning
+ * tokens are charged against the same ceiling. Run out and the JSON is cut off
+ * mid object, which surfaces as an unexplained writing service failure. The
+ * budget scales with the book and never drops below the old fixed value.
+ */
+function outlineTokenBudget(chapterCount: number) {
+  const chapters = Math.max(1, Number(chapterCount) || 8);
+  return Math.min(16000, Math.max(5000, 3000 + chapters * 320));
+}
+
 async function createOutline(
   mode: Mode,
   brief: BookBrief,
@@ -888,7 +905,7 @@ ${modeContext}
 ${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n\n${ROMANCE_POV_RULES}\n` : "\nThis book does not use assigned chapter viewpoints. Return an empty pov_leads array and an empty pov string for every chapter.\n"}
 
 Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : "Create a subtitle that makes the promise or story tension sharper."}`,
-      maxOutputTokens: 5000,
+      maxOutputTokens: outlineTokenBudget(brief.chapterCount),
     },
     provider,
     preferredProvider,
@@ -1467,8 +1484,7 @@ function mapProviderError(error: ProviderRequestError) {
     status: 502,
     code: "writing_service",
     retryable: true,
-    message:
-      "The writing service is temporarily unavailable. Your book details are safe, so please try again.",
+    message: `The writing service is temporarily unavailable (${providerName}: ${error.code}). Your book details are safe, so please try again.`,
   };
 }
 
