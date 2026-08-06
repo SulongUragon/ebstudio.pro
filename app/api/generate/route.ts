@@ -757,7 +757,8 @@ For non-fiction, return a focused topic, a specific audience description, and 6 
   return { ...generated.output, provider: generated.provider };
 }
 
-export type BookLength = "novella" | "standard" | "long";
+export type { BookLength } from "@/app/book-types";
+import type { BookLength } from "@/app/book-types";
 
 const BOOK_LENGTH_TARGETS: Record<
   BookLength,

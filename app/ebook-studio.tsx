@@ -22,6 +22,7 @@ import type {
   ActiveAIProvider,
   AIProvider,
   BookBrief,
+  BookLength,
   Manuscript,
   Mode,
   SectionContent,
@@ -47,7 +48,6 @@ import {
 } from "./library-storage";
 
 type View = "create" | "library" | "notes";
-type BookLength = "novella" | "standard" | "long";
 const bookLengths: Array<{ id: BookLength; label: string; note: string }> = [
   { id: "novella", label: "Novella", note: "About 15,000 to 20,000 words. Fast to produce." },
   { id: "standard", label: "Standard Novel", note: "About 55,000 to 70,000 words. What most readers expect." },
@@ -142,6 +142,26 @@ const blankBrief: BookBrief = {
   keyPoints: "",
   chapterCount: 8,
 };
+
+/**
+ * Older manuscripts predate the stored bookLength, and the form on the left
+ * always resets to its default, so a rewrite on a reopened book used to target
+ * novella chapters inside a standard novel. The written chapters themselves are
+ * the most reliable record of what the book actually is.
+ */
+function inferBookLength(book: Manuscript): BookLength {
+  if (book.bookLength) return book.bookLength;
+  const chapterWords = book.sections
+    .filter((section) => section.kind === "chapter")
+    .map((section) => section.content.trim().split(/\s+/).length)
+    .filter((count) => count > 0)
+    .sort((a, b) => a - b);
+  if (!chapterWords.length) return "novella";
+  const median = chapterWords[Math.floor(chapterWords.length / 2)];
+  if (median >= 3000) return "long";
+  if (median >= 1800) return "standard";
+  return "novella";
+}
 
 export default function EbookStudio() {
   const [view, setView] = useState<View>("create");
@@ -557,6 +577,7 @@ export default function EbookStudio() {
         subtitle: finalSubtitle,
         author: brief.author.trim(),
         createdAt: new Date().toISOString(),
+        bookLength,
         brief: finalBrief,
         plan,
         sections: [],
@@ -789,6 +810,7 @@ export default function EbookStudio() {
         subtitle: finalFictionBrief.subtitle ?? "",
         author: finalFictionBrief.author,
         createdAt: new Date().toISOString(),
+        bookLength,
         brief: finalFictionBrief,
         plan: fictionOutline.plan as SectionPlan[],
         sections: [],
@@ -806,6 +828,7 @@ export default function EbookStudio() {
         subtitle: finalNonfictionBrief.subtitle ?? "",
         author: finalNonfictionBrief.author,
         createdAt: new Date().toISOString(),
+        bookLength,
         brief: finalNonfictionBrief,
         plan: nonfictionOutline.plan as SectionPlan[],
         sections: [],
@@ -1126,7 +1149,7 @@ export default function EbookStudio() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "section",
-          bookLength,
+          bookLength: inferBookLength(manuscript),
           mode: manuscript.mode,
           brief: manuscript.brief,
           plan: manuscript.plan,

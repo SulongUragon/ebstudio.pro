@@ -17,6 +17,8 @@ export type BookBrief = {
   chapterCount: number;
 };
 
+export type BookLength = "novella" | "standard" | "long";
+
 export type SectionKind = "introduction" | "chapter" | "conclusion";
 
 export type SectionPlan = {
@@ -69,6 +71,12 @@ export type Manuscript = {
   subtitle: string;
   author: string;
   createdAt: string;
+  /**
+   * The length the book was actually written at. Stored on the manuscript
+   * because a rewrite months later must target the same chapter length, and the
+   * form on the left resets to its default every time a saved book is reopened.
+   */
+  bookLength?: BookLength;
   brief: BookBrief;
   plan: SectionPlan[];
   sections: SectionContent[];
