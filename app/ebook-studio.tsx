@@ -488,6 +488,23 @@ export default function EbookStudio() {
     saveBook(updated);
   }
 
+  /**
+   * The cover, the title page, and the EPUB metadata all read manuscript.author,
+   * which is frozen at generation time. Editing the brief afterwards changes
+   * nothing, so the name has to be editable on the finished book.
+   */
+  function saveAuthorName(author: string) {
+    const nextAuthor = author.trim();
+    if (!manuscript || !nextAuthor || nextAuthor === manuscript.author) return;
+    const updated: Manuscript = {
+      ...manuscript,
+      author: nextAuthor,
+      brief: { ...manuscript.brief, author: nextAuthor },
+    };
+    setManuscript(updated);
+    saveBook(updated);
+  }
+
   function applyAssistantSection(content: string) {
     if (!manuscript?.sections[activeSection] || !content.trim()) return;
     const updated: Manuscript = {
@@ -1727,6 +1744,7 @@ export default function EbookStudio() {
             onExport={runExport}
             activeProvider={activeProvider}
             onSaveCover={saveCover}
+            onSaveAuthor={saveAuthorName}
             repairingSection={repairingSection}
             onRepairSection={repairSection}
             isCreatingCompanion={isCreatingCompanion}
@@ -1907,6 +1925,7 @@ function BookPreview({
   onExport,
   activeProvider,
   onSaveCover,
+  onSaveAuthor,
   repairingSection,
   onRepairSection,
   isCreatingCompanion,
@@ -1924,6 +1943,7 @@ function BookPreview({
   onExport: (format: "bundle" | "cover" | "docx" | "pdf" | "epub") => void;
   activeProvider: ActiveAIProvider | null;
   onSaveCover: (cover: NonNullable<Manuscript["cover"]>) => void;
+  onSaveAuthor: (author: string) => void;
   repairingSection: number | null;
   onRepairSection: (index: number) => void;
   isCreatingCompanion: boolean;
@@ -2116,6 +2136,7 @@ function BookPreview({
           key={manuscript.id}
           manuscript={manuscript}
           onSave={onSaveCover}
+          onSaveAuthor={onSaveAuthor}
         />
       ) : null}
 

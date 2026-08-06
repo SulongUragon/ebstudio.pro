@@ -39,9 +39,11 @@ const finishes = [
 export default function CoverStudio({
   manuscript,
   onSave,
+  onSaveAuthor,
 }: {
   manuscript: Manuscript;
   onSave: (cover: CoverDesign) => void;
+  onSaveAuthor?: (author: string) => void;
 }) {
   const initialStyle = manuscript.cover?.style ?? "cinematic";
   const savedTypographyPreset =
@@ -60,6 +62,7 @@ export default function CoverStudio({
   const [coverSubtitle, setCoverSubtitle] = useState(
     resolveExactCoverSubtitle(manuscript),
   );
+  const [authorName, setAuthorName] = useState(manuscript.author);
   const [autoFitText, setAutoFitText] = useState(
     manuscript.cover?.autoFitText ?? true,
   );
@@ -382,6 +385,23 @@ export default function CoverStudio({
                 <strong>Editable text</strong>
               </summary>
               <div className="cover-type-controls">
+              <label>
+                <span>Author name <small>Shown on the cover, title page, and ebook file</small></span>
+                <input
+                  type="text"
+                  value={authorName}
+                  onChange={(event) => setAuthorName(event.target.value)}
+                  onBlur={() => {
+                    const next = authorName.trim();
+                    if (!next) {
+                      setAuthorName(manuscript.author);
+                      return;
+                    }
+                    if (next !== manuscript.author) onSaveAuthor?.(next);
+                  }}
+                  disabled={loading}
+                />
+              </label>
               <label className="cover-auto-fit">
                 <input
                   type="checkbox"
