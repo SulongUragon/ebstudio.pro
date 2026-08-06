@@ -17,6 +17,7 @@ import {
 const authorStyles: Array<{ id: AuthorStyle; label: string }> = [
   { id: "uppercase", label: "Uppercase" },
   { id: "signature", label: "Signature" },
+  { id: "typewriter", label: "Typewriter" },
 ];
 
 const styles = [
@@ -673,12 +674,15 @@ async function composeCover(
   context.textAlign = "center";
   context.fillStyle = authorColor;
   const signature = authorStyle === "signature";
+  const typewriter = authorStyle === "typewriter";
   const authorText = signature ? author : author.toUpperCase();
   context.font = signature
-    ? '400 108px "Great Vibes", "Brush Script MT", cursive'
-    : "700 48px Arial, sans-serif";
-  context.letterSpacing = signature ? "0px" : "3px";
-  context.lineWidth = signature ? 4 : 3;
+    ? '400 76px "Great Vibes", "Brush Script MT", cursive'
+    : typewriter
+      ? '700 44px "Courier Prime", "Courier New", Courier, monospace'
+      : "700 48px Arial, sans-serif";
+  context.letterSpacing = signature ? "0px" : typewriter ? "7px" : "3px";
+  context.lineWidth = signature ? 2 : 3;
   context.strokeStyle = contrastingTextStroke(authorColor);
   const authorY = resolveCoverAuthorY(
     canvas.height,
@@ -686,7 +690,7 @@ async function composeCover(
       { top: subtitleTop, bottom: subtitleBottom },
     ],
     signature
-      ? { heightRatio: 0.052, defaultRatio: 0.902 }
+      ? { heightRatio: 0.038, defaultRatio: 0.912 }
       : {},
   );
   context.strokeText(authorText, canvas.width / 2, authorY);

@@ -1,4 +1,4 @@
-export type AuthorStyle = "uppercase" | "signature";
+export type AuthorStyle = "uppercase" | "signature" | "typewriter";
 
 export type Mode = "fiction" | "nonfiction";
 export type AIProvider = "auto" | "openai" | "anthropic";
