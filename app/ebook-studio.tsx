@@ -91,6 +91,19 @@ type DualResumeState = {
   sectionCount: number;
 };
 
+/**
+ * A single book run used to die on the first provider hiccup and take every
+ * finished chapter with it. The snapshot below is written after each section so
+ * a failed run can be continued from the exact chapter that stopped.
+ */
+type SingleResumeState = {
+  book: Manuscript;
+  summaries: string[];
+  provider: ActiveAIProvider;
+  nextIndex: number;
+  sectionCount: number;
+};
+
 const chapterPresets = [3, 5, 8, 10, 12, 15, 20];
 
 function sleep(milliseconds: number) {
@@ -162,6 +175,7 @@ export default function EbookStudio() {
   });
   const [dualProject, setDualProject] = useState<DualBookProject | null>(null);
   const [dualResume, setDualResume] = useState<DualResumeState | null>(null);
+  const [singleResume, setSingleResume] = useState<SingleResumeState | null>(null);
   const [bookLength, setBookLength] = useState<BookLength>("novella");
   const [notes, setNotes] = useState("");
   const [notesPreview, setNotesPreview] = useState(false);
@@ -169,6 +183,7 @@ export default function EbookStudio() {
 
   useEffect(() => {
     setDualResume(null);
+    setSingleResume(null);
   }, [creationMode]);
 
   useEffect(() => {
@@ -501,6 +516,7 @@ export default function EbookStudio() {
     setError("");
     setStatus("outlining");
     setManuscript(null);
+    setSingleResume(null);
     setActiveSection(0);
     setActiveProvider(null);
 
@@ -514,10 +530,10 @@ export default function EbookStudio() {
       const plan = outlineData.plan as SectionPlan[];
       const finalSubtitle = String(outlineData.subtitle ?? "").trim();
       const finalBrief: BookBrief = { ...brief, subtitle: finalSubtitle };
-      let workingProvider = outlineData.provider as ActiveAIProvider;
+      const workingProvider = outlineData.provider as ActiveAIProvider;
       setActiveProvider(workingProvider);
 
-      let working: Manuscript = {
+      const working: Manuscript = {
         id: crypto.randomUUID(),
         mode,
         title: brief.title.trim(),
@@ -533,60 +549,13 @@ export default function EbookStudio() {
       setManuscript(working);
       setStatus("writing");
 
-      const summaries: string[] = [];
-      for (let index = 0; index < plan.length; index += 1) {
-        if (cancelRef.current) {
-          setStatus("cancelled");
-          return;
-        }
-
-        setActiveSection(index);
-        const sectionResponse = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "section",
-            bookLength,
-            mode,
-            brief,
-            plan,
-            section: plan[index],
-            sectionIndex: index,
-            previousSummaries: summaries.slice(-10),
-            provider,
-            preferredProvider: provider === "auto" ? workingProvider : undefined,
-          }),
-        });
-        const sectionData = await readResponse(sectionResponse);
-        workingProvider = sectionData.provider as ActiveAIProvider;
-        setActiveProvider(workingProvider);
-        const finishedContent = String(sectionData.content ?? "").trim();
-        const finishedSummary = String(sectionData.summary ?? "").trim();
-        if (!finishedContent || !finishedSummary) {
-          throw new Error(
-            `The writer did not finish \"${plan[index].title}\". This section was not counted or saved. Generate the book again to retry it.`,
-          );
-        }
-        const completeSection: SectionContent = {
-          ...plan[index],
-          content: finishedContent,
-          summary: finishedSummary,
-        };
-
-        summaries.push(completeSection.summary);
-        working = {
-          ...working,
-          sections: [...working.sections, completeSection],
-          providersUsed: Array.from(
-            new Set([...(working.providersUsed ?? []), workingProvider]),
-          ),
-        };
-        setManuscript(working);
-      }
-
-      setStatus("complete");
-      setActiveSection(0);
-      saveBook(working);
+      await runSingleWritingLoop({
+        book: working,
+        summaries: [],
+        provider: workingProvider,
+        nextIndex: 0,
+        sectionCount: plan.length,
+      });
     } catch (generationError) {
       setStatus("error");
       setError(
@@ -595,6 +564,118 @@ export default function EbookStudio() {
           : "EB Studio Pro could not finish this manuscript.",
       );
     }
+  }
+
+  async function writeSingleSection(
+    book: Manuscript,
+    index: number,
+    summaries: string[],
+    preferredProvider: ActiveAIProvider,
+  ): Promise<{ section: SectionContent; provider: ActiveAIProvider }> {
+    return withRetry(
+      async () => {
+        const sectionResponse = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "section",
+            bookLength,
+            mode: book.mode,
+            brief: book.brief,
+            plan: book.plan,
+            section: book.plan[index],
+            sectionIndex: index,
+            previousSummaries: summaries.slice(-10),
+            provider,
+            preferredProvider: provider === "auto" ? preferredProvider : undefined,
+          }),
+        });
+        const data = await readResponse(sectionResponse);
+        const content = String(data.content ?? "").trim();
+        const summary = String(data.summary ?? "").trim();
+        if (!content || !summary) {
+          throw new Error(`The writer did not finish "${book.plan[index].title}".`);
+        }
+        return {
+          section: { ...book.plan[index], content, summary } as SectionContent,
+          provider: data.provider as ActiveAIProvider,
+        };
+      },
+      () => cancelRef.current,
+    );
+  }
+
+  /**
+   * Every finished chapter is banked before the next one is requested, so a
+   * failure costs one chapter instead of the whole manuscript.
+   */
+  async function runSingleWritingLoop(start: SingleResumeState) {
+    let working = start.book;
+    const summaries = [...start.summaries];
+    let workingProvider = start.provider;
+    let index = start.nextIndex;
+    const sectionCount = start.sectionCount;
+
+    const snapshot = (): SingleResumeState => ({
+      book: working,
+      summaries: [...summaries],
+      provider: workingProvider,
+      nextIndex: index,
+      sectionCount,
+    });
+
+    try {
+      for (; index < sectionCount; index += 1) {
+        if (cancelRef.current) {
+          setStatus("cancelled");
+          setSingleResume(snapshot());
+          if (working.sections.length > 0) saveBook(working);
+          return;
+        }
+
+        setActiveSection(index);
+        const result = await writeSingleSection(
+          working,
+          index,
+          summaries,
+          workingProvider,
+        );
+        workingProvider = result.provider;
+        setActiveProvider(workingProvider);
+
+        summaries.push(result.section.summary);
+        working = {
+          ...working,
+          sections: [...working.sections, result.section],
+          providersUsed: Array.from(
+            new Set([...(working.providersUsed ?? []), workingProvider]),
+          ),
+        };
+        setManuscript(working);
+      }
+
+      setSingleResume(null);
+      setStatus("complete");
+      setActiveSection(0);
+      saveBook(working);
+    } catch (loopError) {
+      setStatus("error");
+      setSingleResume(snapshot());
+      if (working.sections.length > 0) saveBook(working);
+      setError(
+        loopError instanceof Error
+          ? `${loopError.message} Your finished chapters are saved. Select Continue generating to pick up from chapter ${index + 1}.`
+          : "EB Studio Pro could not finish this manuscript.",
+      );
+    }
+  }
+
+  async function continueSingleBook() {
+    if (!singleResume) return;
+    cancelRef.current = false;
+    setError("");
+    setStatus("writing");
+    await runSingleWritingLoop(singleResume);
   }
 
   async function generateDualBooks() {
@@ -1650,6 +1731,9 @@ export default function EbookStudio() {
             onRepairSection={repairSection}
             isCreatingCompanion={isCreatingCompanion}
             onCreateCompanion={createCompanionBook}
+            resumeFrom={singleResume ? singleResume.nextIndex : null}
+            resumeTotal={singleResume ? singleResume.sectionCount : null}
+            onContinue={continueSingleBook}
           />}
         </section>
       ) : view === "library" ? (
@@ -1827,6 +1911,9 @@ function BookPreview({
   onRepairSection,
   isCreatingCompanion,
   onCreateCompanion,
+  resumeFrom,
+  resumeTotal,
+  onContinue,
 }: {
   manuscript: Manuscript | null;
   status: GenerationStatus;
@@ -1841,6 +1928,9 @@ function BookPreview({
   onRepairSection: (index: number) => void;
   isCreatingCompanion: boolean;
   onCreateCompanion: (source: Manuscript) => void;
+  resumeFrom?: number | null;
+  resumeTotal?: number | null;
+  onContinue?: () => void;
 }) {
   if (!manuscript && status !== "outlining") {
     return (
@@ -1892,9 +1982,26 @@ function BookPreview({
   );
   const kdpReadiness = getKdpReadiness(manuscript);
   const coverReadiness = getCoverReadiness(manuscript);
+  const canResume =
+    typeof resumeFrom === "number" &&
+    typeof resumeTotal === "number" &&
+    resumeFrom < resumeTotal &&
+    Boolean(onContinue);
 
   return (
     <aside className="preview-panel manuscript-panel" aria-live="polite">
+      {canResume ? (
+        <div className="dual-resume-bar">
+          <div>
+            <strong>Generation stopped at chapter {(resumeFrom ?? 0) + 1} of {resumeTotal}</strong>
+            <p>Your finished chapters are saved. Continue from where it stopped instead of starting over.</p>
+          </div>
+          <button type="button" onClick={onContinue}>
+            <Sparkles size={15} />
+            Continue generating
+          </button>
+        </div>
+      ) : null}
       <div className="manuscript-toolbar">
         <div>
           <span className="preview-kicker">
