@@ -255,14 +255,15 @@ export type CoverTextBand = {
 export function resolveCoverAuthorY(
   canvasHeight: number,
   textBands: CoverTextBand[],
+  options: { heightRatio?: number; defaultRatio?: number } = {},
 ) {
-  const authorHeight = Math.round(canvasHeight * 0.023);
+  const authorHeight = Math.round(canvasHeight * (options.heightRatio ?? 0.023));
   const gap = Math.round(canvasHeight * 0.0125);
   const minimumY = Math.round(canvasHeight * 0.03);
   const maximumY = canvasHeight - minimumY - authorHeight;
   const defaultY = Math.min(
     maximumY,
-    Math.round(canvasHeight * 0.9296875),
+    Math.round(canvasHeight * (options.defaultRatio ?? 0.9296875)),
   );
   const bands = textBands.filter(
     (band) =>

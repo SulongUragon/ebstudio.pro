@@ -685,6 +685,9 @@ async function composeCover(
     [
       { top: subtitleTop, bottom: subtitleBottom },
     ],
+    signature
+      ? { heightRatio: 0.052, defaultRatio: 0.902 }
+      : {},
   );
   context.strokeText(authorText, canvas.width / 2, authorY);
   context.fillText(authorText, canvas.width / 2, authorY);
