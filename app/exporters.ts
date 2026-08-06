@@ -59,7 +59,13 @@ export function isSectionFinished(section: { content?: string } | undefined) {
  * dramatically shorter than the rest of the book, which usually means the
  * writer stopped early. These are surfaced as warnings, not hard errors, so a
  * deliberately short chapter never blocks an export.
+ *
+ * The threshold sits at half the median because a real truncation can land well
+ * above a third: a chapter that stopped mid scene at 42 percent of the median
+ * shipped inside a finished book while the old 35 percent line stayed quiet.
  */
+export const SHORT_SECTION_RATIO = 0.5;
+
 export function shortSectionIndexes(
   sections: Array<{ content?: string } | undefined>,
 ) {
@@ -69,7 +75,7 @@ export function shortSectionIndexes(
   const sorted = [...solid].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
   return lengths.reduce<number[]>((found, length, index) => {
-    if (length >= MIN_SECTION_CHARACTERS && length < median * 0.35) {
+    if (length >= MIN_SECTION_CHARACTERS && length < median * SHORT_SECTION_RATIO) {
       found.push(index);
     }
     return found;
@@ -930,8 +936,24 @@ function dataUriToBytes(dataUri: string) {
   return Uint8Array.from(Buffer.from(base64, "base64"));
 }
 
+/**
+ * The writer is told never to use an em dash and still produces them, most
+ * often to cut a speaker off mid line. Rather than trust the instruction, every
+ * export is normalised here: an interrupted line becomes an ellipsis, and any
+ * other dash becomes ordinary punctuation.
+ */
+export function normalizeDashes(value: string) {
+  return value
+    .replace(/\s*[\u2014\u2013]\s*(?=["'\u201d\u2019]|\n|$)/g, "...")
+    .replace(/(\d)\s*\u2013\s*(?=\d)/g, "$1 to ")
+    .replace(/\s+[\u2014\u2013]\s+/g, ", ")
+    .replace(/[\u2014\u2013]/g, ", ")
+    .replace(/,\s*,/g, ",")
+    .replace(/\.\.\.\s*\.\.\./g, "...");
+}
+
 function cleanText(value: unknown) {
-  const input = String(value ?? "").replace(/\r\n?/g, "\n");
+  const input = normalizeDashes(String(value ?? "")).replace(/\r\n?/g, "\n");
   let output = "";
   for (let index = 0; index < input.length; index += 1) {
     const code = input.charCodeAt(index);

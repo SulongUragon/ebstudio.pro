@@ -2752,6 +2752,25 @@ p {
   color: var(--muted);
 }
 
+.section-rewrite {
+  display: flex;
+  max-width: 760px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 46px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.section-rewrite p {
+  max-width: 420px;
+  color: #77736b;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .section-repair-state {
   display: grid;
   min-height: 420px;

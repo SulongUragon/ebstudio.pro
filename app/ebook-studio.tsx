@@ -2181,6 +2181,28 @@ function BookPreview({
                 sectionTitle={selected.title}
                 sectionLabel={sectionLabel(selected)}
               />
+              {isComplete ? (
+                <div className="section-rewrite">
+                  <p>
+                    Not right? Only this chapter is written again. The rest of your
+                    book stays unchanged.
+                  </p>
+                  <button
+                    className="chapter-repair-button"
+                    onClick={() => onRepairSection(activeSection)}
+                    disabled={repairingSection !== null}
+                  >
+                    {repairingSection === activeSection ? (
+                      <LoaderCircle className="spin" size={15} />
+                    ) : (
+                      <RotateCcw size={15} />
+                    )}
+                    {repairingSection === activeSection
+                      ? "Rewriting chapter"
+                      : "Rewrite this chapter"}
+                  </button>
+                </div>
+              ) : null}
             </>
           ) : isComplete && selectedPlan ? (
             <div className="section-repair-state">
