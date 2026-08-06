@@ -1435,7 +1435,9 @@ export default function EbookStudio() {
                   <p>
                     {creationMode === "dual"
                       ? "Let AI build the shared concept, audience, two subtitles, and chapter count. Every suggestion stays editable."
-                      : `Let AI draft the rest of your ${mode === "fiction" ? "Fiction" : "Non-Fiction"} brief. Every suggestion stays editable.`}
+                      : mode === "fiction"
+                        ? "Let AI draft the rest of your Fiction brief. Fill in Genre first and the brief is written to match it. Every suggestion stays editable."
+                        : "Let AI draft the rest of your Non-Fiction brief. Every suggestion stays editable."}
                   </p>
                 </div>
                 <button
@@ -1499,7 +1501,7 @@ export default function EbookStudio() {
                     label="Genre"
                     value={brief.genre}
                     onChange={(value) => updateBrief("genre", value)}
-                    placeholder="e.g. Literary fantasy, mystery, romance"
+                    placeholder="Fill this before auto-fill to lock the genre, e.g. Contemporary second chance romance"
                     disabled={fieldsLocked}
                   />
                   <Field

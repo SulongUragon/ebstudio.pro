@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     if (body.action === "brief") {
       const result = await createBookBrief(
         body.mode,
-        body.brief.title,
+        body.brief,
         body.provider ?? "auto",
       );
       return NextResponse.json(result);
@@ -491,9 +491,21 @@ Return exactly three concise alternatives. Preserve the core topic while making 
 
 async function createBookBrief(
   mode: Mode,
-  title: string,
+  brief: BookBrief,
   provider: AIProvider,
 ) {
+  const title = brief.title;
+  /**
+   * Guessing the genre from the title alone is how a forced proximity romance
+   * came back as literary suspense. When the author has already named the
+   * genre, that choice wins and the rest of the brief is built to serve it.
+   */
+  const requestedGenre = mode === "fiction" ? String(brief.genre ?? "").trim() : "";
+  const romance = requestedGenre.length > 0 && /romance|romantic|romantasy/i.test(requestedGenre);
+  const genreDirection = requestedGenre
+    ? `The author has already chosen the genre: ${requestedGenre}
+Return that genre, or a more precise subgenre of it if one fits the title better. Never return a different genre. Build the characters and the premise to deliver what a reader of this genre is buying, and do not drift into a neighbouring category.`
+    : "Choose a precise genre or genre blend.";
   const fictionProperties = {
     genre: { type: "string" },
     characters: { type: "string" },
@@ -531,11 +543,11 @@ async function createBookBrief(
         "You are the senior book development editor inside EB Studio Pro. Turn a title into a specific, commercially promising, original book brief. Make every field immediately useful to a long-form writer. Never use the em dash character. Do not change or repeat the supplied title.",
       input:
         mode === "fiction"
-          ? `Create an editable fiction book brief from this title only:
+          ? `Create an editable fiction book brief for this title:
 
 Title: ${title.trim()}
 
-Choose a precise genre or genre blend. Describe 2 to 4 main characters with names, motivations, conflicts, and relevant relationships. Write a focused plot premise with the central conflict, stakes, story engine, and a clear sense of progression. Recommend 8 to 12 main chapters.`
+${genreDirection} Describe 2 to 4 main characters with names, motivations, conflicts, and relevant relationships. Write a focused plot premise with the central conflict, stakes, story engine, and a clear sense of progression. Recommend 8 to 12 main chapters.${romance ? `\n\n${ROMANCE_BRIEF_RULES}` : ""}`
           : `Create an editable non-fiction book brief from this title only:
 
 Title: ${title.trim()}
