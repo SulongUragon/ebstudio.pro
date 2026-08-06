@@ -1,3 +1,5 @@
+export type AuthorStyle = "uppercase" | "signature";
+
 export type Mode = "fiction" | "nonfiction";
 export type AIProvider = "auto" | "openai" | "anthropic";
 export type ActiveAIProvider = Exclude<AIProvider, "auto">;
@@ -49,6 +51,7 @@ export type CoverDesign = {
   titleColor?: string;
   subtitleColor?: string;
   authorColor?: string;
+  authorStyle?: AuthorStyle;
   typographyPreset?: string;
   createdAt: string;
 };

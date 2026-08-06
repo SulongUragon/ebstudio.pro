@@ -2,7 +2,7 @@
 
 import { Check, ImageIcon, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { CoverDesign, Manuscript } from "./book-types";
+import type { AuthorStyle, CoverDesign, Manuscript } from "./book-types";
 import {
   contrastingTextStroke,
   getCoverTypographyPreset,
@@ -13,6 +13,11 @@ import {
   selectCoverTypographyPreset,
   usesAutomaticTitleVariety,
 } from "./cover-utils";
+
+const authorStyles: Array<{ id: AuthorStyle; label: string }> = [
+  { id: "uppercase", label: "Uppercase" },
+  { id: "signature", label: "Signature" },
+];
 
 const styles = [
   { id: "cinematic", label: "Cinematic" },
@@ -47,6 +52,9 @@ export default function CoverStudio({
   const [style, setStyle] = useState(initialStyle);
   const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
   const [customDirection, setCustomDirection] = useState("");
+  const [authorStyle, setAuthorStyle] = useState<AuthorStyle>(
+    manuscript.cover?.authorStyle ?? "uppercase",
+  );
   const coverTitle = resolveExactCoverTitle(manuscript, manuscript.title);
   const [coverSubtitle, setCoverSubtitle] = useState(
     resolveExactCoverSubtitle(manuscript),
@@ -118,6 +126,7 @@ export default function CoverStudio({
             subtitleAlignment,
             subtitleColor,
             authorColor,
+            authorStyle,
           );
           if (sequence !== autoApplySequence.current) return;
           onSaveRef.current({
@@ -137,6 +146,7 @@ export default function CoverStudio({
             subtitleAlignment,
             subtitleColor,
             authorColor,
+            authorStyle,
             typographyPreset,
             createdAt: currentCover.createdAt ?? new Date().toISOString(),
           });
@@ -157,6 +167,7 @@ export default function CoverStudio({
     };
   }, [
     authorColor,
+    authorStyle,
     autoFitText,
     coverSubtitle,
     coverTitle,
@@ -291,6 +302,7 @@ export default function CoverStudio({
         subtitleAlignment,
         subtitleColor,
         authorColor,
+        authorStyle,
       );
       setTypographyPreset(selectedTypographyPreset);
       onSave({
@@ -310,6 +322,7 @@ export default function CoverStudio({
         subtitleAlignment,
         subtitleColor,
         authorColor,
+        authorStyle,
         typographyPreset: selectedTypographyPreset,
         createdAt: manuscript.cover?.createdAt ?? new Date().toISOString(),
       });
@@ -437,6 +450,22 @@ export default function CoverStudio({
                 />
                 <strong>{authorColor.toUpperCase()}</strong>
               </label>
+              <div className="author-style-row">
+                <span>Author style</span>
+                <div className="author-style-options" role="group" aria-label="Author style">
+                  {authorStyles.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={authorStyle === option.id ? "selected" : ""}
+                      onClick={() => setAuthorStyle(option.id)}
+                      disabled={loading}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button
                 className="cover-apply-type"
                 type="button"
@@ -551,6 +580,7 @@ async function composeCover(
   subtitleAlignment: "left" | "center" | "right",
   subtitleColor: string,
   authorColor: string,
+  authorStyle: AuthorStyle = "uppercase",
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
@@ -642,9 +672,13 @@ async function composeCover(
 
   context.textAlign = "center";
   context.fillStyle = authorColor;
-  context.font = "700 48px Arial, sans-serif";
-  context.letterSpacing = "3px";
-  context.lineWidth = 3;
+  const signature = authorStyle === "signature";
+  const authorText = signature ? author : author.toUpperCase();
+  context.font = signature
+    ? '400 108px "Great Vibes", "Brush Script MT", cursive'
+    : "700 48px Arial, sans-serif";
+  context.letterSpacing = signature ? "0px" : "3px";
+  context.lineWidth = signature ? 4 : 3;
   context.strokeStyle = contrastingTextStroke(authorColor);
   const authorY = resolveCoverAuthorY(
     canvas.height,
@@ -652,8 +686,8 @@ async function composeCover(
       { top: subtitleTop, bottom: subtitleBottom },
     ],
   );
-  context.strokeText(author.toUpperCase(), canvas.width / 2, authorY);
-  context.fillText(author.toUpperCase(), canvas.width / 2, authorY);
+  context.strokeText(authorText, canvas.width / 2, authorY);
+  context.fillText(authorText, canvas.width / 2, authorY);
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 

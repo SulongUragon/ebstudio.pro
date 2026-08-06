@@ -3451,3 +3451,40 @@ p {
   font-size: .72rem;
   line-height: 1.55;
 }
+
+.author-style-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.author-style-row > span {
+  color: #555650;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.author-style-options {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  background: #ece9e2;
+}
+
+.author-style-options button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: #66665f;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.author-style-options button.selected {
+  background: var(--sage);
+  color: white;
+}
