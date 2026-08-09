@@ -1135,6 +1135,13 @@ Do not switch, share, or widen the point of view partway through, and do not ope
 `
     : ""
 }
+${
+  mode === "fiction"
+    ? `
+Narrate this section in the past tense, the same as every other section of this book, including the opening and the closing. A book that switches tense in one chapter reads as an error. Dialogue, direct thought, and anything a character remembers are not bound by this; the narration is.
+`
+    : ""
+}
 The summary must be a compact continuity note of 2 to 4 sentences for the writer of the next section.
 
 Any minor character you introduce must be named with a name that appears nowhere in the exclusion list below, and any business, street, or building you name is bound by the same list.${avoidanceRules(avoidNames)}`,

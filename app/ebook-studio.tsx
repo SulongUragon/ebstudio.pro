@@ -37,6 +37,7 @@ import {
   getCoverReadiness,
   getKdpReadiness,
   isSectionFinished,
+  manuscriptWordCount,
   MIN_SECTION_CHARACTERS,
 } from "./exporters";
 import CreativeAssistant from "./creative-assistant";
@@ -2069,6 +2070,7 @@ function BookPreview({
   const completedCount = manuscript.plan.filter(
     (_, index) => isSectionFinished(manuscript.sections[index]),
   ).length;
+  const wordCount = manuscriptWordCount(manuscript);
   const incompleteSectionIndex = manuscript.plan.findIndex(
     (_, index) => !isSectionFinished(manuscript.sections[index]),
   );
@@ -2103,11 +2105,14 @@ function BookPreview({
                 ? "Manuscript needs repair"
                 : "Writing in progress"}
           </span>
-          <strong>{completedCount} of {manuscript.plan.length} sections</strong>
+          <strong>
+            {completedCount} of {manuscript.plan.length} sections
+            {wordCount > 0 ? `, ${wordCount.toLocaleString()} words` : ""}
+          </strong>
           <div className="provider-badges" aria-label="AI writers used">
             {(manuscript.providersUsed ?? (activeProvider ? [activeProvider] : [])).map(
               (usedProvider) => (
-                <span key={usedProvider}>{providerLabel(usedProvider)}</span>
+                <span key={usedProvider}>Written by {providerLabel(usedProvider)}</span>
               ),
             )}
           </div>

@@ -149,8 +149,63 @@ export function getKdpReadiness(book: Manuscript): KdpReadiness {
     );
   }
 
+  const tense = tenseOutlierIndexes(sections).map((index) => index + 1);
+  if (tense.length) {
+    warnings.push(
+      `Section ${tense.join(", ")} is written in a different tense from the rest of the book. Rewrite ${tense.length > 1 ? "those chapters" : "that chapter"} before publishing.`,
+    );
+  }
+
   if (title.length > 180) warnings.push("The title is unusually long; inspect its cover fit carefully.");
   return { ready: errors.length === 0, errors, warnings };
+}
+
+const PAST_MARKERS =
+  /\b(?:was|were|had|said|looked|felt|thought|knew|turned|stood|walked|watched|asked)\b/gi;
+const PRESENT_MARKERS =
+  /\b(?:is|are|has|says|looks|feels|thinks|knows|turns|stands|walks|watches|asks)\b/gi;
+
+export function sectionWordCount(section: { content?: string } | undefined) {
+  const text = cleanText(section?.content).trim();
+  return text ? text.split(/\s+/).length : 0;
+}
+
+export function manuscriptWordCount(book: Manuscript | null | undefined) {
+  if (!book) return 0;
+  return (book.sections ?? []).reduce(
+    (total, section) => total + sectionWordCount(section),
+    0,
+  );
+}
+
+/**
+ * Returns the indexes of sections whose narration runs in a different tense
+ * from the rest of the book. A single present tense chapter inside a past tense
+ * novel reads as a mistake, and it slipped through three books before anyone
+ * caught it by reading the exported file.
+ */
+export function tenseOutlierIndexes(
+  sections: Array<{ content?: string } | undefined>,
+) {
+  const ratios = sections.map((section) => {
+    // Dialogue is legitimately present tense, so it is removed before measuring.
+    const narration = cleanText(section?.content).replace(/"[^"]*"/g, " ");
+    if (narration.trim().split(/\s+/).length < 200) return null;
+    const past = narration.match(PAST_MARKERS)?.length ?? 0;
+    const present = narration.match(PRESENT_MARKERS)?.length ?? 0;
+    if (past + present < 20) return null;
+    return present / (past + present);
+  });
+  const measured = ratios.filter((ratio): ratio is number => ratio !== null);
+  if (measured.length < 4) return [];
+  const sorted = [...measured].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  // Flag only a clear reversal against the book's own habit, not mild drift.
+  return ratios.reduce<number[]>((found, ratio, index) => {
+    if (ratio === null) return found;
+    if (Math.abs(ratio - median) > 0.45) found.push(index);
+    return found;
+  }, []);
 }
 
 export async function exportDocx(book: Manuscript, shouldDownload = true) {
