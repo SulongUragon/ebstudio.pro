@@ -27,6 +27,7 @@ type RequestBody = {
   } | null;
   activeSection?: number;
   bookLength?: BookLength;
+  avoidNames?: string[];
   creationMode?: "single" | "dual";
   dualContext?: {
     title?: string;
@@ -117,6 +118,7 @@ export async function POST(request: Request) {
         body.mode,
         body.brief,
         body.provider ?? "auto",
+        body.avoidNames,
       );
       return NextResponse.json(result);
     }
@@ -153,6 +155,7 @@ export async function POST(request: Request) {
         body.brief,
         body.provider ?? "auto",
         body.preferredProvider,
+        body.avoidNames,
       );
       return NextResponse.json(result);
     }
@@ -498,6 +501,7 @@ async function createBookBrief(
   mode: Mode,
   brief: BookBrief,
   provider: AIProvider,
+  avoidNames?: string[],
 ) {
   const title = brief.title;
   /**
@@ -552,7 +556,7 @@ Return that genre, or a more precise subgenre of it if one fits the title better
 
 Title: ${title.trim()}
 
-${genreDirection} Describe 2 to 4 main characters with names, motivations, conflicts, and relevant relationships. Write a focused plot premise with the central conflict, stakes, story engine, and a clear sense of progression. Recommend 8 to 12 main chapters.${romance ? `\n\n${ROMANCE_BRIEF_RULES}` : ""}`
+${genreDirection} Describe 2 to 4 main characters with names, motivations, conflicts, and relevant relationships. Write a focused plot premise with the central conflict, stakes, story engine, and a clear sense of progression. Recommend 8 to 12 main chapters.${romance ? `\n\n${ROMANCE_BRIEF_RULES}` : ""}${avoidanceRules(avoidNames)}`
           : `Create an editable non-fiction book brief from this title only:
 
 Title: ${title.trim()}
@@ -823,6 +827,28 @@ Never assign a chapter to a character who is not one of the two leads, and never
  * mid object, which surfaces as an unexplained writing service failure. The
  * budget scales with the book and never drops below the old fixed value.
  */
+/**
+ * Every book in this app is generated from a blank slate, so the model reaches
+ * for the same handful of names and settings each time. Book three brought back
+ * a character from book one and an antagonist surname from book two without
+ * either appearing in its brief. This turns the author's existing library into
+ * an explicit exclusion list.
+ */
+function avoidanceRules(avoidNames: string[] | undefined) {
+  const names = (avoidNames ?? [])
+    .map((name) => String(name).trim())
+    .filter(Boolean)
+    .slice(0, 60);
+  if (!names.length) return "";
+  return `
+This author already has other books in the same series, and readers see them side by side. Nothing below may be reused.
+
+Already used, do not use any of these as the name of any character, family, business, street, building, or town, and do not use a near variant of one either, such as a different first name with the same surname or a name that differs by one or two letters:
+${names.join(", ")}
+
+Invent fresh names that share no surname and no distinctive sound with that list. Give this book its own occupation for each lead, its own kind of workplace, and its own town. Do not repeat the situation that traps the couple together in an earlier book.`;
+}
+
 function outlineTokenBudget(chapterCount: number) {
   const chapters = Math.max(1, Number(chapterCount) || 8);
   return Math.min(16000, Math.max(5000, 3000 + chapters * 320));
@@ -833,6 +859,7 @@ async function createOutline(
   brief: BookBrief,
   provider: AIProvider,
   preferredProvider?: ActiveAIProvider,
+  avoidNames?: string[],
 ) {
   const requestedSubtitle = String(brief.subtitle ?? "").trim();
   const romance = isRomanceBrief(mode, brief);
@@ -905,7 +932,7 @@ Requested main chapters: exactly ${brief.chapterCount}
 ${modeContext}
 ${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n\n${ROMANCE_POV_RULES}\n` : "\nThis book does not use assigned chapter viewpoints. Return an empty pov_leads array and an empty pov string for every chapter.\n"}
 
-Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : "Create a subtitle that makes the promise or story tension sharper."}`,
+Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : "Create a subtitle that makes the promise or story tension sharper."}${avoidanceRules(avoidNames)}`,
       maxOutputTokens: outlineTokenBudget(brief.chapterCount),
     },
     provider,
@@ -1034,6 +1061,7 @@ async function createSection(body: RequestBody) {
     sectionIndex = 0,
     previousSummaries = [],
     bookLength = "novella",
+    avoidNames,
   } = body;
   const romance = isRomanceBrief(mode, brief);
   if (!section) throw new Error("Missing section.");
@@ -1107,7 +1135,9 @@ Do not switch, share, or widen the point of view partway through, and do not ope
 `
     : ""
 }
-The summary must be a compact continuity note of 2 to 4 sentences for the writer of the next section.`,
+The summary must be a compact continuity note of 2 to 4 sentences for the writer of the next section.
+
+Any minor character you introduce must be named with a name that appears nowhere in the exclusion list below, and any business, street, or building you name is bound by the same list.${avoidanceRules(avoidNames)}`,
       maxOutputTokens: lengthBand.tokens,
     };
 

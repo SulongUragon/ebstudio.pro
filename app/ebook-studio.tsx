@@ -149,6 +149,40 @@ const blankBrief: BookBrief = {
  * novella chapters inside a standard novel. The written chapters themselves are
  * the most reliable record of what the book actually is.
  */
+/**
+ * The brief generator and the section writer both start from nothing and keep
+ * reaching for the same names, jobs, and settings, so book three quietly reused
+ * a character and an antagonist surname from books one and two. This pulls the
+ * proper nouns out of every finished book so the prompts can rule them out.
+ */
+function collectUsedNames(books: Manuscript[]): string[] {
+  const ignore = new Set([
+    "The","A","An","And","But","Or","So","If","When","While","After","Before",
+    "He","She","They","It","His","Her","Their","I","We","You","Chapter","Prologue",
+    "Epilogue","Her","Their","One","Two","Three","Their","This","That","There",
+    "Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday",
+    "January","February","March","April","May","June","July","August","September",
+    "October","November","December","Wound","Want","Governing","Supporting",
+  ]);
+  const found = new Map<string, number>();
+  for (const book of books) {
+    const source = [
+      book.brief.characters ?? "",
+      book.brief.premise ?? "",
+      book.title ?? "",
+    ].join(" ");
+    for (const match of source.matchAll(/\b[A-Z][a-z]{2,}\b/g)) {
+      const word = match[0];
+      if (ignore.has(word)) continue;
+      found.set(word, (found.get(word) ?? 0) + 1);
+    }
+  }
+  return [...found.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([word]) => word)
+    .slice(0, 60);
+}
+
 function inferBookLength(book: Manuscript): BookLength {
   if (book.bookLength) return book.bookLength;
   const chapterWords = book.sections
@@ -330,7 +364,13 @@ export default function EbookStudio() {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "brief", mode, brief, provider }),
+        body: JSON.stringify({
+          action: "brief",
+          mode,
+          brief,
+          provider,
+          avoidNames: collectUsedNames(library),
+        }),
       });
       const data = await readResponse(response);
       const chapterCount = Math.min(
@@ -561,7 +601,13 @@ export default function EbookStudio() {
       const outlineResponse = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "outline", mode, brief, provider }),
+        body: JSON.stringify({
+          action: "outline",
+          mode,
+          brief,
+          provider,
+          avoidNames: collectUsedNames(library),
+        }),
       });
       const outlineData = await readResponse(outlineResponse);
       const plan = outlineData.plan as SectionPlan[];
@@ -618,6 +664,7 @@ export default function EbookStudio() {
           body: JSON.stringify({
             action: "section",
             bookLength,
+            avoidNames: collectUsedNames(library),
             mode: book.mode,
             brief: book.brief,
             plan: book.plan,
@@ -888,6 +935,7 @@ export default function EbookStudio() {
           body: JSON.stringify({
             action: "section",
             bookLength,
+            avoidNames: collectUsedNames(library),
             mode: book.mode,
             brief: book.brief,
             plan: book.plan,
@@ -1150,6 +1198,7 @@ export default function EbookStudio() {
         body: JSON.stringify({
           action: "section",
           bookLength: inferBookLength(manuscript),
+          avoidNames: collectUsedNames(library),
           mode: manuscript.mode,
           brief: manuscript.brief,
           plan: manuscript.plan,
