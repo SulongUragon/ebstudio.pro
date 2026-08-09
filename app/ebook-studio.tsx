@@ -39,6 +39,9 @@ import {
   isSectionFinished,
   manuscriptWordCount,
   MIN_SECTION_CHARACTERS,
+  sectionWordCount,
+  shortSectionIndexes,
+  tenseOutlierIndexes,
 } from "./exporters";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
@@ -2071,6 +2074,8 @@ function BookPreview({
     (_, index) => isSectionFinished(manuscript.sections[index]),
   ).length;
   const wordCount = manuscriptWordCount(manuscript);
+  const shortSections = shortSectionIndexes(manuscript.sections);
+  const tenseOutliers = tenseOutlierIndexes(manuscript.sections);
   const incompleteSectionIndex = manuscript.plan.findIndex(
     (_, index) => !isSectionFinished(manuscript.sections[index]),
   );
@@ -2261,6 +2266,19 @@ function BookPreview({
               {isComplete ? (
                 <div className="section-rewrite">
                   <p>
+                    <strong className="section-stat">
+                      {sectionWordCount(selected).toLocaleString()} words
+                    </strong>
+                    {shortSections.includes(activeSection) ? (
+                      <span className="section-flag">
+                        Much shorter than the rest of this book
+                      </span>
+                    ) : null}
+                    {tenseOutliers.includes(activeSection) ? (
+                      <span className="section-flag">
+                        Written in a different tense from the rest of this book
+                      </span>
+                    ) : null}
                     Not right? Only this chapter is written again. The rest of your
                     book stays unchanged.
                   </p>
