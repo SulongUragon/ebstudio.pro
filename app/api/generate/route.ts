@@ -539,8 +539,13 @@ Return that genre, or a more precise subgenre of it if one fits the title better
       ? ["genre", "characters", "premise", "chapter_count"]
       : ["topic", "audience", "key_points", "chapter_count"];
 
-  const generated = await generateJson(
-    {
+  /**
+   * The exclusion list keeps a new book from reusing names and settings from the
+   * author's earlier books, but it is a long block of prompt and it must never be
+   * the reason a book cannot be started. If the model comes back with nothing,
+   * the same request runs once more without it.
+   */
+  const briefRequest = (avoid?: string[]) => ({
       name: mode === "fiction" ? "fiction_book_brief" : "nonfiction_book_brief",
       schema: {
         type: "object",
@@ -556,16 +561,28 @@ Return that genre, or a more precise subgenre of it if one fits the title better
 
 Title: ${title.trim()}
 
-${genreDirection} Describe 2 to 4 main characters with names, motivations, conflicts, and relevant relationships. Write a focused plot premise with the central conflict, stakes, story engine, and a clear sense of progression. Recommend 8 to 12 main chapters.${romance ? `\n\n${ROMANCE_BRIEF_RULES}` : ""}${avoidanceRules(avoidNames)}`
+${genreDirection} Describe 2 to 4 main characters with names, motivations, conflicts, and relevant relationships. Write a focused plot premise with the central conflict, stakes, story engine, and a clear sense of progression. Recommend 8 to 12 main chapters.${romance ? `\n\n${ROMANCE_BRIEF_RULES}` : ""}${avoidanceRules(avoid)}`
           : `Create an editable non-fiction book brief from this title only:
 
 Title: ${title.trim()}
 
 Define a focused topic, a specific target audience including their needs or level, and a practical list of 6 to 10 key points that form a logical learning journey. Recommend 8 to 12 main chapters. Do not invent unverifiable credentials, statistics, or claims.`,
-      maxOutputTokens: 1800,
-    },
-    provider,
-  );
+      maxOutputTokens: 4000,
+  });
+
+  let generated;
+  try {
+    generated = await generateJson(briefRequest(avoidNames), provider);
+  } catch (error) {
+    const empty =
+      error instanceof ProviderRequestError && error.code === "empty_response";
+    const emptyForAll =
+      error instanceof MultiProviderRequestError &&
+      error.failures.every((failure) => failure.code === "empty_response");
+    if (!avoidNames?.length || !(empty || emptyForAll)) throw error;
+    console.warn("Brief returned empty, retrying without the exclusion list");
+    generated = await generateJson(briefRequest(), provider);
+  }
 
   return {
     ...generated.output,
