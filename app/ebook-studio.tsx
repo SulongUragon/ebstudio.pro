@@ -46,6 +46,7 @@ import {
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
 import ExistingEbookOptimizer from "./existing-ebook-optimizer";
+import VisualBookStudio from "./visual-book-studio";
 import {
   loadStoredLibrary,
   persistStoredLibrary,
@@ -203,7 +204,7 @@ function inferBookLength(book: Manuscript): BookLength {
 
 export default function EbookStudio() {
   const [view, setView] = useState<View>("create");
-  const [creatorMode, setCreatorMode] = useState<"new" | "optimize">("new");
+  const [creatorMode, setCreatorMode] = useState<"new" | "visual" | "optimize">("new");
   const [creationMode, setCreationMode] = useState<CreationMode>("single");
   const [mode, setMode] = useState<Mode>("fiction");
   const [provider, setProvider] = useState<AIProvider>("auto");
@@ -1390,10 +1391,13 @@ export default function EbookStudio() {
 
       {view === "create" ? (
         <section className="studio-grid">
-          <div className="form-column">
+          <div className={creatorMode === "visual" ? "visual-studio-span" : "form-column"}>
             <div className="creator-workspace-tabs" role="tablist" aria-label="Creator workspace">
               <button role="tab" aria-selected={creatorMode === "new"} className={creatorMode === "new" ? "selected" : ""} onClick={() => setCreatorMode("new")}>
-                <Plus size={17} /> Create New Book
+                <Plus size={17} /> Long-Form Book
+              </button>
+              <button role="tab" aria-selected={creatorMode === "visual"} className={creatorMode === "visual" ? "selected" : ""} onClick={() => setCreatorMode("visual")}>
+                <BookMarked size={17} /> Visual & Comics
               </button>
               <button role="tab" aria-selected={creatorMode === "optimize"} className={creatorMode === "optimize" ? "selected" : ""} onClick={() => setCreatorMode("optimize")}>
                 <Sparkles size={17} /> Optimize Existing Ebook
@@ -1401,6 +1405,8 @@ export default function EbookStudio() {
             </div>
             {creatorMode === "optimize" ? (
               <ExistingEbookOptimizer provider={provider} onComplete={completeOptimization} />
+            ) : creatorMode === "visual" ? (
+              <VisualBookStudio provider={provider} />
             ) : (
               <>
             <div className="form-heading-row">
@@ -1801,7 +1807,7 @@ export default function EbookStudio() {
             )}
           </div>
 
-          {creationMode === "dual" ? (
+          {creatorMode === "visual" ? null : creationMode === "dual" ? (
             <DualBookPreview
               project={dualProject}
               status={status}
@@ -1840,7 +1846,7 @@ export default function EbookStudio() {
       ) : (
         <NotesView notes={notes} onChange={setNotes} preview={notesPreview} onTogglePreview={setNotesPreview} />
       )}
-      <CreativeAssistant
+      {creatorMode !== "visual" ? <CreativeAssistant
         mode={mode}
         brief={brief}
         manuscript={manuscript}
@@ -1862,7 +1868,7 @@ export default function EbookStudio() {
               }
             : null
         }
-      />
+      /> : null}
     </main>
   );
 }

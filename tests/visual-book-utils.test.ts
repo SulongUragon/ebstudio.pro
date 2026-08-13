@@ -1,0 +1,5 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { normalizeVisualPages } from "../app/visual-book-utils";
+test("visual storyboard normalization enforces the requested page count and roles",()=>{const p=normalizeVisualPages([{title:"Cover",body:"Hook",image_prompt:"A door",layout:"full-bleed"}],5,"visual");assert.equal(p.length,5);assert.equal(p[0].role,"cover");assert.equal(p[4].role,"cta");assert.deepEqual(p.map(x=>x.pageNumber),[1,2,3,4,5]);assert.equal(p[0].panels.length,0)});
+test("comic storyboard normalization creates bounded editable panels",()=>{const p=normalizeVisualPages([{title:"Cover",panel_count:1,panels:[{scene:"Two rivals",dialogue:[]}]},{title:"Impact",panel_count:8,panels:[{scene:"A glass falls",camera:"Close-up",dialogue:[{speaker:"Mara",text:"Don't move."}],caption:"Too late.",sound_effect:"CRASH!"}]}],5,"comic");assert.equal(p[0].panels.length,1);assert.equal(p[1].panels.length,4);assert.equal(p[1].panels[0].dialogue[0].speaker,"Mara");assert.equal(p[1].panels[0].soundEffect,"CRASH!")});

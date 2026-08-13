@@ -6,9 +6,10 @@ import type {
   Mode,
   SectionPlan,
 } from "../../book-types";
+import type { VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 
 type RequestBody = {
-  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section";
+  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page";
   mode: Mode;
   sourceMode?: Mode;
   brief: BookBrief;
@@ -54,6 +55,7 @@ type RequestBody = {
     sectionIndex?: number;
     sectionCount?: number;
   };
+  visualProject?: VisualBookBrief & { pages?: VisualBookPage[]; page?: VisualBookPage };
 };
 
 type JsonObject = Record<string, unknown>;
@@ -91,6 +93,20 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+
+const visualPageSchema = {
+  type: "object", additionalProperties: false,
+  properties: {
+    page_number: { type: "integer" }, title: { type: "string" }, body: { type: "string" }, image_prompt: { type: "string" },
+    layout: { type: "string", enum: ["full-bleed", "image-top", "image-left", "image-right", "quote"] }, panel_count: { type: "integer" },
+    panels: { type: "array", items: { type: "object", additionalProperties: false, properties: {
+      scene: { type: "string" }, camera: { type: "string" },
+      dialogue: { type: "array", items: { type: "object", additionalProperties: false, properties: { speaker: { type: "string" }, text: { type: "string" } }, required: ["speaker", "text"] } },
+      caption: { type: "string" }, sound_effect: { type: "string" },
+    }, required: ["scene", "camera", "dialogue", "caption", "sound_effect"] } },
+  },
+  required: ["page_number", "title", "body", "image_prompt", "layout", "panel_count", "panels"],
+} as const;
 
 export async function POST(request: Request) {
   try {
@@ -145,6 +161,12 @@ export async function POST(request: Request) {
     if (body.action === "optimize_ebook_section" && body.existingBook?.sectionText?.trim()) {
       const result = await optimizeExistingEbookSection(body);
       return NextResponse.json(result);
+    }
+    if (body.action === "visual_storyboard" && body.visualProject) {
+      return NextResponse.json(await createVisualStoryboard(body));
+    }
+    if (body.action === "visual_page" && body.visualProject?.page) {
+      return NextResponse.json(await rewriteVisualPage(body));
     }
     if (!body.brief.author) {
       return NextResponse.json({ error: "The book brief is incomplete." }, { status: 400 });
@@ -433,6 +455,76 @@ Preserve all essential information, scenes, arguments, examples, and meaning. Re
     body.preferredProvider,
   );
   return { ...generated.output, provider: generated.provider };
+}
+
+async function createVisualStoryboard(body: RequestBody) {
+  const project = body.visualProject;
+  if (!project) throw new Error("Missing visual book details.");
+  const pageCount = [5, 7, 10].includes(Number(project.pageCount)) ? Number(project.pageCount) : 7;
+  const comic = project.mode === "comic";
+  const generated = await generateJson({
+    name: comic ? "comic_short_storyboard" : "visual_mini_ebook_storyboard",
+    schema: { type: "object", additionalProperties: false, properties: { refined_subtitle: { type: "string" }, character_bible: { type: "string" }, palette: { type: "string" }, pages: { type: "array", items: visualPageSchema } }, required: ["refined_subtitle", "character_bible", "palette", "pages"] },
+    instructions: comic
+      ? "You are the graphic-story director inside EB Studio Pro. Create concise, visually clear, original comic storyboards with consistent characters, deliberate panel rhythm, readable dialogue, and a complete emotional arc. Never imitate a living artist or copyrighted franchise. Never use the em dash character."
+      : "You are the visual publishing director inside EB Studio Pro. Create concise, premium mini ebooks where every page has one clear job, short publication-ready copy, and art direction that materially supports the text. Never invent factual claims, research, credentials, or statistics. Never use the em dash character.",
+    input: `${visualProjectContext(project)}
+
+Create exactly ${pageCount} total pages, including the cover. Page 1 is the cover. The final page must provide a satisfying resolution for a story, or a focused takeaway and call to action for a guide, teaser, lead magnet, or product book.
+
+${comic
+  ? `This is a comic. Every non-cover page must contain 1 to 4 panels. Use the selected ${project.comicFormat} format. Put all spoken words in dialogue, narration in caption, and optional short impact lettering in sound_effect. Keep every dialogue line concise enough to fit in a speech bubble. The page body may contain a one-sentence page note but must not repeat the dialogue. For the cover return one panel. Each panel scene must describe only the visible art, without speech bubbles, captions, lettering, written signs, watermarks, or logos.`
+  : `This is an image-rich mini ebook, not a chapter book. Keep cover body to one short hook. Keep every other body between 25 and 90 words, using fewer words when the image carries the moment. Return an empty panels array and panel_count 0 on every page. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks.`}
+
+Maintain a single narrative or instructional progression with no repeated page purpose. The title supplied by the author is authoritative and must not be changed. If the subtitle is blank, create one in refined_subtitle. If the author supplied one, return it exactly. Strengthen the character bible and palette only when their fields are blank. Return exactly ${pageCount} page objects numbered 1 through ${pageCount}.`,
+    maxOutputTokens: comic ? 9000 : 6500,
+  }, body.provider ?? "auto", body.preferredProvider);
+  const pages = Array.isArray(generated.output.pages) ? generated.output.pages : [];
+  if (pages.length !== pageCount) throw new ProviderRequestError(generated.provider, 502, "invalid_response", `The visual storyboard did not contain exactly ${pageCount} pages.`);
+  return { ...generated.output, provider: generated.provider };
+}
+
+async function rewriteVisualPage(body: RequestBody) {
+  const project = body.visualProject;
+  const page = project?.page;
+  if (!project || !page) throw new Error("Missing visual page details.");
+  const comic = project.mode === "comic";
+  const pageMap = (project.pages ?? []).map((item) => `${item.pageNumber}. ${item.title}: ${item.body}`).join("\n");
+  const generated = await generateJson({
+    name: comic ? "rewrite_comic_page" : "rewrite_visual_ebook_page",
+    schema: { type: "object", additionalProperties: false, properties: { page: visualPageSchema }, required: ["page"] },
+    instructions: comic
+      ? "You are the graphic-story editor inside EB Studio Pro. Rewrite one comic page while preserving continuity, character identity, reading order, and the story's ending. Keep dialogue short and natural. Never use the em dash character."
+      : "You are the visual mini-book editor inside EB Studio Pro. Rewrite one page for clarity, emotional force, and visual rhythm without changing the book's central promise. Never invent factual claims. Never use the em dash character.",
+    input: `${visualProjectContext(project)}
+
+Full page map:
+${pageMap || "Only one page is available."}
+
+Rewrite page ${page.pageNumber} only.
+Current title: ${page.title}
+Current body: ${page.body}
+Current art direction: ${page.imagePrompt}
+
+Preserve its role in the complete book and return the same page_number. ${comic
+  ? "Return 1 to 4 panels. Put spoken words only in dialogue, narration only in caption, and visible impact lettering only in sound_effect. Panel scene art directions must exclude all written words, speech bubbles, signs, logos, and watermarks."
+  : "Return no panels, panel_count 0, and 25 to 90 words of body copy unless this is the cover. The image_prompt must exclude all words, lettering, typography, logos, and watermarks."}`,
+    maxOutputTokens: comic ? 3400 : 1800,
+  }, body.provider ?? "auto", body.preferredProvider);
+  return { ...generated.output, provider: generated.provider };
+}
+
+function visualProjectContext(project: VisualBookBrief) {
+  return `Visual project mode: ${project.mode === "comic" ? "comic and graphic story" : "visual mini ebook"}
+Title: ${project.title}
+Subtitle: ${project.subtitle || "Create one if useful"}
+Author: ${project.author}
+Content type: ${project.mode === "comic" ? project.comicFormat : project.kind}
+Premise or core promise: ${project.premise}
+Target reader: ${project.audience || "General readers"}
+Visual style: ${project.visualStyle}
+Character consistency bible: ${project.characterBible || "Create a concise locked visual description for every recurring character"}
+Color and lighting palette: ${project.palette || "Create one coherent palette and lighting direction"}`;
 }
 
 async function createTitleSuggestions(
