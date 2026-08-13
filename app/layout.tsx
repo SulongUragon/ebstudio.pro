@@ -11,7 +11,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "EB Studio Pro | AI Ebook Generator",
   description:
-    "AI Ebook Creation Suite for complete fiction and non-fiction books with EPUB, PDF, and DOCX export.",
+    "AI Ebook Creation Suite for long-form books, visual mini ebooks, comics, and graphic stories with publication-ready exports.",
   manifest: "/manifest.webmanifest",
   other: {
     "codex-preview": "development",

@@ -8,6 +8,11 @@ export a KDP production package with a Kindle Create DOCX, reflowable EPUB,
 ## Features
 
 - Fiction and non-fiction creation modes
+- Visual Mini eBook mode with exact 5, 7, or 10-page storyboards
+- Comics and Graphic Story mode with 1 to 4 editable panels per page
+- Character and palette locking for recurring image consistency
+- Separate editable dialogue, captions, sound effects, and text-free AI artwork
+- Page-by-page image regeneration plus visual PDF and JPEG page ZIP exports
 - Structured introduction, chapters, and conclusion
 - OpenAI generation with optional Anthropic fallback
 - Chapter-by-chapter progress and preview
