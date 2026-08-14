@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import type { ComicPanel, VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 export const maxDuration = 300;
 type VisualImageRequest = { project: VisualBookBrief; page: VisualBookPage; panel?: ComicPanel };
+type ImageResponsePayload = { data?: Array<{ b64_json?: string }>; error?: { message?: string; code?: string } };
+const IMAGE_RETRY_DELAYS_MS = [15_000, 30_000, 60_000];
+const QUOTA_ERROR_CODES = new Set(["billing_hard_limit_reached", "insufficient_quota"]);
 const VISUAL_STYLE_DIRECTIONS: Record<string, string> = {
   "cinematic-editorial": "cinematic editorial illustration, premium dramatic lighting, sophisticated depth, restrained filmic color grading",
   "warm-storybook": "warm contemporary storybook illustration, tactile brush texture, expressive faces, gentle dimensional lighting",
@@ -20,6 +23,47 @@ const COMIC_STYLE_DIRECTIONS: Record<string, string> = {
   webtoon: "premium vertical webtoon illustration, clean digital linework, expressive character acting, luminous color and depth",
   "comic-strip": "clean modern comic-strip illustration, strong silhouettes, concise visual storytelling, readable character acting",
 };
+
+async function requestImageWithRetry(prompt: string, size: string) {
+  const attempts = IMAGE_RETRY_DELAYS_MS.length + 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1",
+        prompt,
+        n: 1,
+        size,
+        quality: "low",
+        output_format: "jpeg",
+        output_compression: 82,
+      }),
+    });
+    const data = (await response.json().catch(() => ({}))) as ImageResponsePayload;
+    const errorCode = data.error?.code ?? "";
+    const quotaFailure = QUOTA_ERROR_CODES.has(errorCode) || /quota|credit|billing/i.test(data.error?.message ?? "");
+    const retryable = response.status === 429 && !quotaFailure;
+
+    if (!retryable || attempt === attempts - 1) return { response, data };
+
+    const retryAfterSeconds = Number(response.headers.get("retry-after"));
+    const fallbackDelay = IMAGE_RETRY_DELAYS_MS[attempt];
+    const delayMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? Math.min(60_000, retryAfterSeconds * 1_000)
+      : fallbackDelay;
+    console.warn("EB Studio Pro image generation rate-limited; retrying", {
+      attempt: attempt + 1,
+      delayMs,
+      errorCode: errorCode || "unknown",
+    });
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  throw new Error("Image retry loop ended unexpectedly.");
+}
 
 export async function POST(request: Request) {
   try {
@@ -46,11 +90,21 @@ Locked palette and lighting: ${project.palette || "Use a coherent premium palett
 The character description is authoritative. Preserve the same apparent age, facial structure, hair, skin tone, body type, wardrobe identifiers, and distinguishing features in every recurring appearance. Show only what can be visibly present in this scene. Keep the composition readable at page size.
 
 ABSOLUTELY NO TEXT: no words, letters, numbers, speech bubbles, thought bubbles, captions, sound effects, signs, labels, logos, watermarks, borders, page numbers, book mockups, or typography. Do not imitate a living artist, named franchise, protected character, or recognizable copyrighted visual world.`;
-    const response = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1", prompt, n: 1, size, quality: "low", output_format: "jpeg", output_compression: 82 }) });
-    const data = (await response.json().catch(() => ({}))) as { data?: Array<{ b64_json?: string }>; error?: { message?: string; code?: string } };
+    const { response, data } = await requestImageWithRetry(prompt, size);
     if (!response.ok || !data.data?.[0]?.b64_json) {
-      console.error("EB Studio Pro visual image generation failed", response.status, data.error?.code);
-      return NextResponse.json({ code: data.error?.code ?? "image_request_failed", error: data.error?.code === "billing_hard_limit_reached" ? "OpenAI image credits are unavailable or the spending limit has been reached." : response.status === 429 ? "The image generator is busy or has reached its usage limit. Try again shortly." : "This page image could not be generated. Your storyboard is safe." }, { status: response.status >= 400 ? response.status : 502 });
+      const code = data.error?.code ?? "image_request_failed";
+      const quotaFailure = QUOTA_ERROR_CODES.has(code) || /quota|credit|billing/i.test(data.error?.message ?? "");
+      const error = quotaFailure
+        ? "OpenAI image credits are unavailable or the project spending limit has been reached."
+        : response.status === 429
+          ? "The image generator remained rate-limited after automatic retries. Finished images were saved; resume again later."
+          : response.status === 401
+            ? "The OpenAI image API key is invalid or no longer active."
+            : response.status === 403 || code === "model_not_found"
+              ? "This OpenAI project or API key does not have access to the configured image model."
+              : "This page image could not be generated. Your storyboard is safe.";
+      console.error("EB Studio Pro visual image generation failed", response.status, code);
+      return NextResponse.json({ code, error }, { status: response.status >= 400 ? response.status : 502 });
     }
     return NextResponse.json({ imageData: `data:image/jpeg;base64,${data.data[0].b64_json}` });
   } catch (error) {
