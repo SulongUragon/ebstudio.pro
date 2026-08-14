@@ -71,6 +71,7 @@ export type Manuscript = {
   subtitle: string;
   author: string;
   createdAt: string;
+  updatedAt?: string;
   /**
    * The length the book was actually written at. Stored on the manuscript
    * because a rewrite months later must target the same chapter length, and the

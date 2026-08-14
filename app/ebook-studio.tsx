@@ -51,6 +51,12 @@ import {
   loadStoredLibrary,
   persistStoredLibrary,
 } from "./library-storage";
+import {
+  deleteCloudProject,
+  saveCloudProject,
+  syncCloudProjects,
+  type SyncState,
+} from "./cloud-library-client";
 
 type View = "create" | "library" | "notes";
 const bookLengths: Array<{ id: BookLength; label: string; note: string }> = [
@@ -238,6 +244,7 @@ export default function EbookStudio() {
   const [bookLength, setBookLength] = useState<BookLength>("novella");
   const [notes, setNotes] = useState("");
   const [notesPreview, setNotesPreview] = useState(false);
+  const [librarySyncState, setLibrarySyncState] = useState<SyncState>("syncing");
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -261,8 +268,13 @@ export default function EbookStudio() {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void loadStoredLibrary()
-        .then((savedLibrary) => {
-          if (!cancelled) setLibrary(savedLibrary);
+        .then(async (savedLibrary) => {
+          const synced = await syncCloudProjects("manuscript", savedLibrary);
+          if (!cancelled) {
+            setLibrary(synced.projects);
+            setLibrarySyncState(synced.state);
+            await persistStoredLibrary(synced.projects);
+          }
         })
         .catch(() => {
           if (!cancelled) {
@@ -1093,17 +1105,25 @@ export default function EbookStudio() {
   }
 
   function saveBooks(books: Manuscript[]) {
+    const updatedAt = new Date().toISOString();
+    const stampedBooks = books.map((book) => ({ ...book, updatedAt }));
     setLibrary((current) => {
-      const savedIds = new Set(books.map((book) => book.id));
+      const savedIds = new Set(stampedBooks.map((book) => book.id));
       const next = [
-        ...books,
+        ...stampedBooks,
         ...current.filter((item) => !savedIds.has(item.id)),
-      ].slice(0, 8);
+      ];
       void persistStoredLibrary(next).catch(() => {
         setError(
           "The book is open, but this browser could not permanently save its latest cover.",
         );
       });
+      void Promise.all(
+        stampedBooks.map((book) => saveCloudProject("manuscript", book)),
+      ).then(
+        () => setLibrarySyncState("synced"),
+        () => setLibrarySyncState("local-only"),
+      );
       return next;
     });
   }
@@ -1127,6 +1147,9 @@ export default function EbookStudio() {
     setLibrary(next);
     void persistStoredLibrary(next).catch(() => {
       setError("This browser could not finish removing the saved book.");
+    });
+    void deleteCloudProject("manuscript", id).catch(() => {
+      setLibrarySyncState("local-only");
     });
   }
 
@@ -1839,6 +1862,7 @@ export default function EbookStudio() {
       ) : view === "library" ? (
         <LibraryView
           books={library}
+          syncState={librarySyncState}
           onOpen={openBook}
           onRemove={removeBook}
           onCreate={() => setView("create")}
@@ -2415,11 +2439,13 @@ function normalizeBriefSubtitle(book: Manuscript): BookBrief {
 
 function LibraryView({
   books,
+  syncState,
   onOpen,
   onRemove,
   onCreate,
 }: {
   books: Manuscript[];
+  syncState: SyncState;
   onOpen: (book: Manuscript) => void;
   onRemove: (id: string) => void;
   onCreate: () => void;
@@ -2429,7 +2455,7 @@ function LibraryView({
       <div>
         <span className="eyebrow"><LibraryBig size={18} /> Your library</span>
         <h1>Every manuscript, in one place.</h1>
-        <p>Completed books are saved privately on this device for quick preview and export.</p>
+        <p>{syncState === "synced" ? "Cloud synced across your signed-in devices, with an offline copy kept here." : syncState === "syncing" ? "Syncing this device with your private cloud library..." : "Saved on this device. Cloud sync will resume when account storage is available."}</p>
       </div>
 
       {books.length ? (
