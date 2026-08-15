@@ -217,7 +217,7 @@ export default function VisualCreativeAssistant({
 
 function assistantBrief(brief: VisualBookBrief) {
   return {
-    title: brief.title,
+    title: brief.title.trim() || "Untitled visual project",
     subtitle: brief.subtitle,
     author: brief.author,
     genre: brief.mode === "comic" ? "Comics & Graphic Story" : "Visual Mini eBook",
