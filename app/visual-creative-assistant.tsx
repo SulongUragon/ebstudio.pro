@@ -67,7 +67,8 @@ export default function VisualCreativeAssistant({
     const question = (quickPrompt ?? prompt).trim();
     if (!question || loading) return;
 
-    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: question }].slice(-6);
+    const userMessage: ChatMessage = { role: "user", content: question };
+    const nextMessages: ChatMessage[] = [...messages, userMessage].slice(-6);
     setMessages(nextMessages);
     setPrompt("");
     setResult(null);
