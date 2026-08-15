@@ -67,7 +67,7 @@ export default function VisualCreativeAssistant({
     const question = (quickPrompt ?? prompt).trim();
     if (!question || loading) return;
 
-    const nextMessages = [...messages, { role: "user" as const, content: question }].slice(-6);
+    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: question }].slice(-6);
     setMessages(nextMessages);
     setPrompt("");
     setResult(null);
@@ -101,7 +101,10 @@ export default function VisualCreativeAssistant({
         fieldSuggestions: normalizeSuggestions(data.fieldSuggestions),
       };
       setResult(next);
-      setMessages(current => [...current, { role: "assistant", content: next.answer }].slice(-6));
+      setMessages(current => {
+        const assistantMessage: ChatMessage = { role: "assistant", content: next.answer };
+        return [...current, assistantMessage].slice(-6);
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Ask EB could not respond.");
     } finally {
