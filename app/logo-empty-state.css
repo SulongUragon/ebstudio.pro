@@ -1,0 +1,19 @@
+.book-illustration {
+  width: min(360px, 58vw) !important;
+  height: auto !important;
+  aspect-ratio: 3 / 2;
+  margin: 0 auto 24px !important;
+  background: url('/eb-open-book-logo.svg') center / contain no-repeat !important;
+  filter: drop-shadow(0 14px 28px rgba(14,14,14,.12));
+}
+
+.book-illustration > span {
+  display: none !important;
+}
+
+@media (max-width: 700px) {
+  .book-illustration {
+    width: min(280px, 72vw) !important;
+    margin-bottom: 18px !important;
+  }
+}
