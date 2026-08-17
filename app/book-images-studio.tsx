@@ -4,6 +4,8 @@ import { Check, ImageIcon, LoaderCircle, RefreshCw, Sparkles } from "lucide-reac
 import { useMemo, useState } from "react";
 import type { BookImage, Manuscript } from "./book-types";
 
+const IMAGE_REQUEST_TIMEOUT_MS = 180_000;
+
 export default function BookImagesStudio({ manuscript, onSave }: { manuscript: Manuscript; onSave: (images: BookImage[]) => void }) {
   const [open, setOpen] = useState(false);
   const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
@@ -18,10 +20,13 @@ export default function BookImagesStudio({ manuscript, onSave }: { manuscript: M
     if (!section || !plan) return;
     setLoadingIndex(sectionIndex);
     setError("");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), IMAGE_REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch("/api/book-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           manuscript: {
             mode: manuscript.mode,
@@ -44,10 +49,15 @@ export default function BookImagesStudio({ manuscript, onSave }: { manuscript: M
         prompt: String(data.prompt ?? ""),
         createdAt: new Date().toISOString(),
       };
-      onSave([...images.filter((image) => image.sectionIndex !== sectionIndex), next].sort((a, b) => a.sectionIndex - b.sectionIndex));
+      await Promise.resolve(onSave([...images.filter((image) => image.sectionIndex !== sectionIndex), next].sort((a, b) => a.sectionIndex - b.sectionIndex)));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Book image could not be generated.");
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        setError(`Image ${sectionIndex + 1} timed out after 3 minutes. Your existing images are safe. Retry this section when ready.`);
+      } else {
+        setError(caught instanceof Error ? caught.message : "Book image could not be generated.");
+      }
     } finally {
+      window.clearTimeout(timeout);
       setLoadingIndex(null);
     }
   }
