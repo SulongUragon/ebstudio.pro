@@ -18,7 +18,6 @@ export type BookBrief = {
 };
 
 export type BookLength = "novella" | "standard" | "long";
-
 export type SectionKind = "introduction" | "chapter" | "conclusion";
 
 export type SectionPlan = {
@@ -26,17 +25,21 @@ export type SectionPlan = {
   number?: number;
   title: string;
   purpose: string;
-  /**
-   * The character whose point of view this section is written from. Set during
-   * outlining for romance so the section writer is told who it is writing as,
-   * instead of choosing on its own and defaulting to the first named lead.
-   */
   pov?: string;
 };
 
 export type SectionContent = SectionPlan & {
   content: string;
   summary: string;
+};
+
+export type BookImage = {
+  id: string;
+  sectionIndex: number;
+  sectionTitle: string;
+  imageData: string;
+  prompt?: string;
+  createdAt: string;
 };
 
 export type CoverDesign = {
@@ -72,22 +75,14 @@ export type Manuscript = {
   author: string;
   createdAt: string;
   updatedAt?: string;
-  /**
-   * The length the book was actually written at. Stored on the manuscript
-   * because a rewrite months later must target the same chapter length, and the
-   * form on the left resets to its default every time a saved book is reopened.
-   */
   bookLength?: BookLength;
   brief: BookBrief;
   plan: SectionPlan[];
   sections: SectionContent[];
   providersUsed?: ActiveAIProvider[];
-  companionOf?: {
-    id: string;
-    title: string;
-    mode: Mode;
-  };
+  companionOf?: { id: string; title: string; mode: Mode };
   cover?: CoverDesign;
+  images?: BookImage[];
   optimization?: {
     sourceFileName: string;
     mode: "packaging" | "polish" | "viral" | "relaunch";
