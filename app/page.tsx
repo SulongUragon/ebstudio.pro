@@ -1,5 +1,6 @@
 import Link from "next/link";
 import EbookStudio from "./ebook-studio";
+import "./logo-empty-state.css";
 
 export default function Home() {
   return (
