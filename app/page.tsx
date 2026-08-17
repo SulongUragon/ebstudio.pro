@@ -9,8 +9,8 @@ export default function Home() {
         style={{
           position: "fixed",
           right: 18,
-          bottom: 18,
-          zIndex: 50,
+          bottom: 104,
+          zIndex: 49,
           padding: "12px 16px",
           borderRadius: 999,
           background: "#191a18",
