@@ -2,15 +2,18 @@ import type { Manuscript } from "../book-types";
 
 export async function exportIllustratedPdf(book: Manuscript) {
   const { jsPDF } = await import("jspdf");
-  const pdf = new jsPDF({ unit: "pt", format: "letter" });
+  const pdf = new jsPDF({ unit: "pt", format: "letter", compress: true });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 64;
   const usableWidth = pageWidth - margin * 2;
-  const imageBySection = new Map((book.images ?? []).map((image) => [image.sectionIndex, image]));
+  const expectedImages = (book.images ?? []).filter((image) => Boolean(image?.imageData)).length;
+  const imageBySection = new Map((book.images ?? []).map((image) => [Number(image.sectionIndex), image]));
+  let embeddedImages = 0;
 
   if (book.cover?.imageData) {
-    pdf.addImage(book.cover.imageData, "JPEG", 0, 0, pageWidth, pageHeight);
+    const cover = decodeImageData(book.cover.imageData);
+    pdf.addImage(cover.bytes, cover.format, 0, 0, pageWidth, pageHeight);
   } else {
     pdf.setFont("times", "bold");
     pdf.setFontSize(30);
@@ -39,33 +42,38 @@ export async function exportIllustratedPdf(book: Manuscript) {
   for (let index = 0; index < book.sections.length; index += 1) {
     const section = book.sections[index];
     const illustration = imageBySection.get(index);
+
+    // Put every illustration on its own page. This avoids layout clipping and
+    // makes failed/missing image embedding impossible to hide inside text flow.
+    if (illustration?.imageData) {
+      pdf.addPage();
+      const decoded = decodeImageData(illustration.imageData);
+      const props = pdf.getImageProperties(decoded.bytes);
+      const maxWidth = pageWidth - 72;
+      const maxHeight = pageHeight - 100;
+      const ratio = props.width / props.height;
+      let width = maxWidth;
+      let height = width / ratio;
+      if (height > maxHeight) {
+        height = maxHeight;
+        width = height * ratio;
+      }
+      const x = (pageWidth - width) / 2;
+      const y = (pageHeight - height) / 2;
+      pdf.addImage(decoded.bytes, decoded.format, x, y, width, height);
+      embeddedImages += 1;
+    }
+
     pdf.addPage();
     let y = 76;
-
     pdf.setFont("times", "bold");
     pdf.setFontSize(22);
     const headingLines = pdf.splitTextToSize(sectionLabel(book, section, index), usableWidth);
     pdf.text(headingLines, margin, y);
     y += headingLines.length * 27 + 20;
-
-    if (illustration?.imageData) {
-      const props = pdf.getImageProperties(illustration.imageData);
-      const maxImageWidth = usableWidth;
-      const maxImageHeight = Math.min(440, pageHeight - y - 80);
-      const ratio = props.width / props.height;
-      let imageWidth = maxImageWidth;
-      let imageHeight = imageWidth / ratio;
-      if (imageHeight > maxImageHeight) {
-        imageHeight = maxImageHeight;
-        imageWidth = imageHeight * ratio;
-      }
-      const imageX = (pageWidth - imageWidth) / 2;
-      pdf.addImage(illustration.imageData, "JPEG", imageX, y, imageWidth, imageHeight, undefined, "FAST");
-      y += imageHeight + 28;
-    }
-
     pdf.setFont("times", "normal");
     pdf.setFontSize(11.5);
+
     const paragraphs = cleanBody(section.content).split(/\n\s*\n/).map((value) => value.trim()).filter(Boolean);
     for (const paragraph of paragraphs) {
       const lines = pdf.splitTextToSize(paragraph, usableWidth);
@@ -83,7 +91,12 @@ export async function exportIllustratedPdf(book: Manuscript) {
     }
   }
 
+  if (expectedImages > 0 && embeddedImages !== expectedImages) {
+    throw new Error(`Illustrated PDF stopped because only ${embeddedImages} of ${expectedImages} saved images were embedded. No incomplete PDF was downloaded.`);
+  }
+
   const blob = pdf.output("blob");
+  if (!(blob instanceof Blob) || blob.size === 0) throw new Error("The illustrated PDF was empty.");
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -93,6 +106,17 @@ export async function exportIllustratedPdf(book: Manuscript) {
   anchor.click();
   anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+function decodeImageData(dataUri: string): { bytes: Uint8Array; format: "JPEG" | "PNG" | "WEBP" } {
+  const match = String(dataUri).match(/^data:image\/(jpeg|jpg|png|webp);base64,(.+)$/is);
+  if (!match) throw new Error("A saved book image has an unsupported format. Expected JPEG, PNG, or WebP data.");
+  const mime = match[1].toLowerCase();
+  const binary = atob(match[2].replace(/\s/g, ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const format = mime === "png" ? "PNG" : mime === "webp" ? "WEBP" : "JPEG";
+  return { bytes, format };
 }
 
 function sectionLabel(book: Manuscript, section: Manuscript["sections"][number], index: number) {
