@@ -6,6 +6,7 @@ import type { BookImage, Manuscript } from "../book-types";
 import BookImagesStudio from "../book-images-studio";
 import { loadStoredLibrary, persistStoredLibrary } from "../library-storage";
 import { saveCloudProject, syncCloudProjects, type SyncState } from "../cloud-library-client";
+import { exportIllustratedPdf } from "./illustrated-pdf";
 import styles from "./workspace.module.css";
 
 export default function BookImagesWorkspace() {
@@ -13,6 +14,7 @@ export default function BookImagesWorkspace() {
   const [selectedId, setSelectedId] = useState("");
   const [syncState, setSyncState] = useState<SyncState>("syncing");
   const [error, setError] = useState("");
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +56,19 @@ export default function BookImagesWorkspace() {
     }
   }
 
+  async function downloadIllustratedPdf() {
+    if (!selected || exportingPdf) return;
+    setExportingPdf(true);
+    setError("");
+    try {
+      await exportIllustratedPdf(selected);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The illustrated PDF could not be created.");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>
@@ -77,6 +92,14 @@ export default function BookImagesWorkspace() {
         <div className={styles.syncState}>
           {syncState === "synced" ? "☁️ Cloud synced" : syncState === "syncing" ? "↻ Syncing" : "💾 Saved on this device"}
         </div>
+        <button
+          type="button"
+          className={styles.back}
+          onClick={downloadIllustratedPdf}
+          disabled={!selected || exportingPdf}
+        >
+          {exportingPdf ? "Building PDF…" : `Download Illustrated PDF${selected?.images?.length ? ` (${selected.images.length})` : ""}`}
+        </button>
       </section>
 
       {error ? <p className={styles.error}>{error}</p> : null}
