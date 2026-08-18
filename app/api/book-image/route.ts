@@ -11,22 +11,16 @@ type RequestBody = {
   section?: { title?: string; purpose?: string; summary?: string; content?: string };
 };
 
-type OpenAIImageResponse = {
-  data?: Array<{ b64_json?: string }>;
-  error?: { message?: string; code?: string; type?: string };
-};
+type OpenAIImageResponse = { data?: Array<{ b64_json?: string }>; error?: { message?: string; code?: string; type?: string } };
 
 function sleep(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
-
 function looksLikeSafetyRejection(data: OpenAIImageResponse, status: number) {
   const text = `${data.error?.code ?? ""} ${data.error?.type ?? ""} ${data.error?.message ?? ""}`.toLowerCase();
   return status === 400 && /(safety|policy|moderation|content|violation|rejected|self[- ]?harm|image_generation_user_error)/.test(text);
 }
 
 async function requestImage(prompt: string, attempts = 3) {
-  let lastStatus = 502;
-  let lastData: OpenAIImageResponse = {};
-  let lastRequestId = "";
+  let lastStatus = 502, lastData: OpenAIImageResponse = {}, lastRequestId = "";
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
@@ -61,6 +55,7 @@ export async function POST(request: Request) {
     const context = body.manuscript.mode === "fiction"
       ? `Genre: ${body.manuscript.genre || "fiction"}. Premise: ${body.manuscript.premise || ""}. Characters: ${body.manuscript.characters || ""}.`
       : `Topic: ${body.manuscript.topic || body.manuscript.title}.`;
+    const visualBible = `VISUAL CONTINUITY BIBLE: cinematic editorial realism; dark, restrained, moody atmosphere; deep charcoal, midnight blue, muted forest green and weathered brown palette; low-key directional lighting with subtle cool highlights; natural skin tones; realistic photographic texture; shallow controlled depth of field; understated film grain; emotionally intimate rather than theatrical; premium literary-fiction publishing aesthetic. Avoid bright golden-hour warmth, cheerful sunrise imagery, pastel colors, high-key interiors, generic inspirational stock imagery, painterly storybook rendering, or sudden stylistic shifts.`;
 
     const prompt = `Create one premium interior illustration for the long-form book "${body.manuscript.title}".
 ${context}
@@ -69,18 +64,20 @@ Section purpose: ${body.section.purpose || ""}
 Section summary: ${body.section.summary || ""}
 Scene context: ${(body.section.content || "").slice(0, 5000)}
 
-Choose the single strongest visually specific moment from this section. Preserve character identity, age, wardrobe logic, setting, mood, and story continuity implied by the supplied book context. Cinematic editorial realism, sophisticated composition, believable anatomy, controlled depth, premium publishing quality, emotionally specific rather than generic. Compose as a portrait interior-book illustration with a clear focal subject and enough negative space to reproduce cleanly on a page. No title, captions, speech bubbles, letters, logos, watermark, border, mockup, or unrelated decorative text.`;
+${visualBible}
+Choose the single strongest visually specific moment from this section. Preserve character identity, age, wardrobe logic, setting, mood, and story continuity implied by the supplied book context. Sophisticated composition, believable anatomy, controlled depth, premium publishing quality, emotionally specific rather than generic. Portrait interior-book illustration with a clear focal subject and clean negative space. No title, captions, speech bubbles, letters, logos, watermark, border, mockup, or unrelated decorative text.`;
 
     let result = await requestImage(prompt);
     let usedPrompt = prompt;
     let usedFallback = false;
 
     if (!result.ok && looksLikeSafetyRejection(result.data, result.status)) {
-      // Deliberately omit manuscript prose from the retry. A rejected passage can contain
-      // self-harm or other sensitive wording that would simply trigger moderation again.
       const safePrompt = `Create a premium interior-book illustration for a chapter titled "${body.section.title}" in the book "${body.manuscript.title}".
 
-Create an emotionally reflective but hopeful, completely safe scene. Show only an ordinary peaceful environment such as a softly lit room, window, empty chair, closed journal, pathway, sunrise, calm landscape, or another neutral publishing-appropriate setting. No person in distress. No injury, death, self-harm, suicide, medical emergency, weapons, blood, violence, drugs, explicit intimacy, or dangerous action. Do not visualize or imply any harmful act. Use atmosphere, light, distance, architecture, and benign everyday objects to convey reflection and transition. Cinematic editorial realism, sophisticated portrait composition, premium publishing quality, clean negative space. No text, captions, letters, logos, watermark, border, or mockup.`;
+${visualBible}
+This is a safety-adapted scene: preserve the SAME visual world, palette, photographic treatment, lighting language, period/setting feel, and emotional gravity as the rest of the book, while replacing any unsafe action with an ordinary non-harmful moment of solitude, contemplation, departure, aftermath, or transition. A calm character may be present doing an everyday safe action such as sitting fully clothed, standing by a doorway, walking away, holding a closed envelope, looking through a window, packing a bag, or pausing in a dim familiar room. If no person is useful, choose a specific environment/object composition that belongs naturally to this story world.
+
+No person in distress. No injury, death, self-harm, suicide, medical emergency, weapons, blood, violence, drugs, explicit intimacy, or dangerous action. Do not depict or imply a harmful act. IMPORTANT: do not default to a bright sunrise, empty wooden chair, generic window, glowing pathway, or inspirational golden-room scene. Keep the established dark cinematic theme and make this chapter visually distinct from adjacent fallback images. Premium portrait composition, realistic photographic texture, no text, captions, letters, logos, watermark, border, or mockup.`;
       result = await requestImage(safePrompt, 2);
       usedPrompt = safePrompt;
       usedFallback = true;
@@ -89,9 +86,7 @@ Create an emotionally reflective but hopeful, completely safe scene. Show only a
     if (!result.ok || !result.data.data?.[0]?.b64_json) {
       const upstreamMessage = result.data.error?.message || "Book image could not be generated.";
       console.error("Book image upstream failure", { section: body.section.title, status: result.status, requestId: result.requestId, code: result.data.error?.code, type: result.data.error?.type, message: upstreamMessage });
-      const userMessage = looksLikeSafetyRejection(result.data, result.status)
-        ? "This chapter could not be illustrated safely even with the neutral-scene fallback. Try another section or revise the chapter illustration context."
-        : upstreamMessage;
+      const userMessage = looksLikeSafetyRejection(result.data, result.status) ? "This chapter could not be illustrated safely even with the theme-preserving fallback. Try another section or revise the chapter illustration context." : upstreamMessage;
       return NextResponse.json({ error: userMessage, status: result.status, code: result.data.error?.code ?? result.data.error?.type ?? "image_generation_failed", requestId: result.requestId || undefined }, { status: result.status >= 400 ? result.status : 502 });
     }
 
