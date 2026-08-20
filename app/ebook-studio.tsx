@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { NotesMarkdown } from "./notes-markdown";
 import {
   BookMarked,
@@ -1354,17 +1355,16 @@ export default function EbookStudio() {
     <main className="app-shell">
       <header className="topbar">
         <button className="brand" onClick={() => setView("create")} aria-label="Go to creator">
-          <span className="brand-lockup" aria-hidden="true">
-            <span className="brand-mark">
-              <i className="brand-book brand-book-green" />
-              <i className="brand-book brand-book-copper" />
-              <span className="brand-monogram">
-                <b className="brand-e">E</b>
-                <b className="brand-b">B</b>
-                <i className="brand-leaf" />
-              </span>
-            </span>
-            <span className="brand-word-group">
+          <span className="brand-lockup">
+            <Image
+              className="brand-logo brand-emblem"
+              src="/brand/eb-open-book-logo.webp"
+              alt="EB Studio Pro"
+              width="720"
+              height="458"
+              priority
+            />
+            <span className="brand-word-group" aria-hidden="true">
               <span className="brand-wordmark">
                 <b className="brand-e">E</b>
                 <b className="brand-b">B</b>
@@ -1377,13 +1377,6 @@ export default function EbookStudio() {
               </small>
             </span>
           </span>
-          <img
-            className="brand-logo brand-logo-mobile"
-            src="/brand/ebstudio-pro-app-icon-192.png"
-            alt="EB Studio Pro"
-            width="192"
-            height="192"
-          />
         </button>
 
         <nav className="topnav" aria-label="Primary navigation">
