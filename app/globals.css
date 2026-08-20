@@ -59,10 +59,10 @@ button {
   top: 0;
   z-index: 20;
   display: flex;
-  min-height: 92px;
+  min-height: 112px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 3.4vw 0 12px;
+  padding: 6px 3.4vw 8px 12px;
   border-top: 4px solid var(--ink);
   border-bottom: 1px solid rgba(91, 83, 73, 0.13);
   background: linear-gradient(180deg, #eee2d5 0%, #e8d8c8 100%);
@@ -218,6 +218,15 @@ button {
   background: transparent;
   color: #4b4b47;
   font-weight: 600;
+  text-decoration: none;
+}
+
+.book-images-page-shell {
+  padding: 0 !important;
+}
+
+.book-images-page-content {
+  padding: 32px;
 }
 
 .nav-button:hover,
@@ -2894,9 +2903,13 @@ p {
 }
 
 @media (max-width: 620px) {
+  .book-images-page-content {
+    padding: 18px 12px;
+  }
+
   .topbar {
-    min-height: 74px;
-    padding: 0 16px;
+    min-height: 82px;
+    padding: 4px 16px 6px;
   }
 
   .brand {

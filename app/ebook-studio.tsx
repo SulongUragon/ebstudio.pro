@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { NotesMarkdown } from "./notes-markdown";
+import SiteHeader from "./site-header";
 import {
   BookMarked,
   BookOpen,
@@ -1353,20 +1353,7 @@ export default function EbookStudio() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <button className="brand" onClick={() => setView("create")} aria-label="Go to creator">
-          <span className="brand-lockup">
-            <Image
-              className="brand-logo brand-logo-header"
-              src="/brand/ebstudio-pro-metallic-wordmark.png"
-              alt="EBStudioPro — Innovate, Create, Elevate"
-              width="2048"
-              height="682"
-              priority
-            />
-          </span>
-        </button>
-
+      <SiteHeader onBrandClick={() => setView("create")}>
         <nav className="topnav" aria-label="Primary navigation">
           <button
             className={view === "create" ? "nav-button active" : "nav-button"}
@@ -1391,7 +1378,7 @@ export default function EbookStudio() {
             Notes
           </button>
         </nav>
-      </header>
+      </SiteHeader>
 
       {view === "create" ? (
         <section className="studio-grid">

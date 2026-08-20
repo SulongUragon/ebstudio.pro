@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { ImageIcon, PenLine } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { BookImage, Manuscript } from "../book-types";
 import BookImagesStudio from "../book-images-studio";
 import { loadStoredLibrary, persistStoredLibrary } from "../library-storage";
 import { saveCloudProject, syncCloudProjects, type SyncState } from "../cloud-library-client";
 import { exportIllustratedPdf } from "./illustrated-pdf";
+import SiteHeader from "../site-header";
 import styles from "./workspace.module.css";
 
 export default function BookImagesWorkspace() {
@@ -70,17 +72,29 @@ export default function BookImagesWorkspace() {
   }
 
   return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <span className={styles.eyebrow}>EB Studio Pro</span>
-          <h1>Book Images</h1>
-          <p>Generate and keep long-form interior illustrations attached to the same saved manuscript.</p>
-        </div>
-        <Link href="/" className={styles.back}>Back to Studio</Link>
-      </header>
+    <main className={`${styles.page} book-images-page-shell`}>
+      <SiteHeader brandHref="/">
+        <nav className="topnav" aria-label="Primary navigation">
+          <Link className="nav-button" href="/">
+            <PenLine size={18} />
+            Studio
+          </Link>
+          <Link className="nav-button active" href="/book-images" aria-current="page">
+            <ImageIcon size={18} />
+            Book Images
+          </Link>
+        </nav>
+      </SiteHeader>
 
-      <section className={styles.libraryBar}>
+      <div className="book-images-page-content">
+        <header className={styles.header}>
+          <div>
+            <h1>Book Images</h1>
+            <p>Generate and keep long-form interior illustrations attached to the same saved manuscript.</p>
+          </div>
+        </header>
+
+        <section className={styles.libraryBar}>
         <label>
           <span>Choose saved book</span>
           <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
@@ -100,18 +114,19 @@ export default function BookImagesWorkspace() {
         >
           {exportingPdf ? "Building PDF…" : `Download Illustrated PDF${selected?.images?.length ? ` (${selected.images.length})` : ""}`}
         </button>
-      </section>
-
-      {error ? <p className={styles.error}>{error}</p> : null}
-      {!error && !library.length ? (
-        <section className={styles.empty}>
-          <h2>No saved long-form books found</h2>
-          <p>Create or open a long-form manuscript first, then return here.</p>
-          <Link href="/">Open Long-Form Studio</Link>
         </section>
-      ) : selected ? (
-        <BookImagesStudio manuscript={selected} onSave={saveImages} />
-      ) : null}
+
+        {error ? <p className={styles.error}>{error}</p> : null}
+        {!error && !library.length ? (
+          <section className={styles.empty}>
+            <h2>No saved long-form books found</h2>
+            <p>Create or open a long-form manuscript first, then return here.</p>
+            <Link href="/">Open Long-Form Studio</Link>
+          </section>
+        ) : selected ? (
+          <BookImagesStudio manuscript={selected} onSave={saveImages} />
+        ) : null}
+      </div>
     </main>
   );
 }
