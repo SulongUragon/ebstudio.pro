@@ -3,7 +3,7 @@
   height: auto !important;
   aspect-ratio: 3 / 2;
   margin: 0 auto 24px !important;
-  background: url('/eb-open-book-logo.svg') center / contain no-repeat !important;
+  background: url('/brand/eb-open-book-logo.webp') center / contain no-repeat !important;
   filter: drop-shadow(0 14px 28px rgba(14,14,14,.12));
 }
 

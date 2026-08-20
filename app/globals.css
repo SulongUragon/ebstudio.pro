@@ -85,16 +85,14 @@ button {
 
 .brand-lockup {
   display: inline-flex;
-  height: 80px;
+  height: 72px;
   align-items: center;
-  gap: 12px;
 }
 
-.brand-emblem {
-  width: auto;
-  height: 78px;
-  flex: 0 0 auto;
-  filter: drop-shadow(0 5px 8px rgba(44, 22, 10, 0.18));
+.brand-logo-header {
+  width: clamp(300px, 32vw, 430px);
+  height: auto;
+  filter: drop-shadow(0 5px 7px rgba(44, 22, 10, 0.18));
 }
 
 .brand-word-group {
@@ -2910,13 +2908,9 @@ p {
     height: 62px;
   }
 
-  .brand-emblem {
-    width: auto;
-    height: 60px;
-  }
-
-  .brand-word-group {
-    display: none;
+  .brand-logo-header {
+    width: clamp(142px, 42vw, 180px);
+    max-height: 54px;
   }
 
   .brand-copy strong {
