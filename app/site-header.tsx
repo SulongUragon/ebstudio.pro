@@ -15,7 +15,7 @@ export default function SiteHeader({ children, brandHref, onBrandClick }: SiteHe
     <span className="brand-lockup">
       <Image
         className="brand-logo brand-logo-header"
-        src="/brand/ebstudio-pro-metallic-wordmark.png"
+        src="/brand/ebstudio-pro-metallic-wordmark-v2.png"
         alt="EBStudioPro — Innovate, Create, Elevate"
         width="2048"
         height="682"
