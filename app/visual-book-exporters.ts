@@ -4,6 +4,18 @@ import { visualProjectFilename } from "./visual-book-utils";
 const W = 1200;
 const H = 1800;
 
+type EditorialLayout = VisualBookPage["layout"];
+
+const EDITORIAL_LAYOUTS: EditorialLayout[] = [
+  "full-bleed",
+  "image-top",
+  "image-left",
+  "image-right",
+  "quote",
+];
+
+const EDITORIAL_DEFAULTS: EditorialLayout[] = ["image-top", "image-left", "image-right"];
+
 const THEME = {
   paper: "#f7f1e7",
   paperWarm: "#efe5d6",
@@ -68,7 +80,7 @@ export async function renderVisualPage(project: VisualBookProject, page: VisualB
 
   drawPaper(c);
 
-  if (project.mode === "comic") {
+  if (isComicProject(project)) {
     await drawComic(c, project, page);
   } else {
     await drawEditorialVisual(c, project, page);
@@ -77,8 +89,33 @@ export async function renderVisualPage(project: VisualBookProject, page: VisualB
   return canvas.toDataURL("image/jpeg", 0.94);
 }
 
+/**
+ * The persisted project mode is the routing contract. Panel data is deliberately
+ * ignored here because stale or partially rewritten panels must never turn a
+ * Visual Mini eBook into a comic export.
+ */
+export function isComicProject(project: Pick<VisualBookProject, "mode">) {
+  return project.mode === "comic";
+}
+
+export function isEditorialVisualProject(project: Pick<VisualBookProject, "mode">) {
+  return !isComicProject(project);
+}
+
+export function resolveEditorialLayout(
+  page: Partial<Pick<VisualBookPage, "layout" | "pageNumber" | "role">>,
+): EditorialLayout {
+  if (page.role === "cover") return "full-bleed";
+  if (page.layout && EDITORIAL_LAYOUTS.includes(page.layout)) return page.layout;
+  if (page.role === "cta") return "quote";
+
+  const pageNumber = Number.isFinite(page.pageNumber) ? Number(page.pageNumber) : 2;
+  return EDITORIAL_DEFAULTS[Math.max(0, pageNumber - 2) % EDITORIAL_DEFAULTS.length];
+}
+
 async function drawEditorialVisual(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
   const pageIndex = Math.max(0, page.pageNumber - 1);
+  const layout = resolveEditorialLayout(page);
 
   if (page.role === "cover") {
     await drawCover(c, project, page);
@@ -87,22 +124,32 @@ async function drawEditorialVisual(c: CanvasRenderingContext2D, project: VisualB
 
   drawRunningHeader(c, project, page);
 
-  if (page.layout === "full-bleed") {
+  if (page.role === "cta") {
+    await drawClosingEditorial(c, page);
+    return;
+  }
+
+  if (page.pageNumber === 2) {
+    await drawOpeningEditorial(c, page);
+    return;
+  }
+
+  if (layout === "full-bleed") {
     await drawCinematicFullBleed(c, project, page);
     return;
   }
 
-  if (page.layout === "image-left") {
+  if (layout === "image-left") {
     await drawSplitEditorial(c, page, "left");
     return;
   }
 
-  if (page.layout === "image-right") {
+  if (layout === "image-right") {
     await drawSplitEditorial(c, page, "right");
     return;
   }
 
-  if (page.layout === "quote") {
+  if (layout === "quote") {
     await drawQuoteEditorial(c, page);
     return;
   }
@@ -141,8 +188,30 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
   drawSmallMark(c, W - 150, 94, THEME.gold);
 }
 
+async function drawOpeningEditorial(c: CanvasRenderingContext2D, page: VisualBookPage) {
+  const copy = editorialCopy(page.body);
+
+  c.fillStyle = THEME.ink;
+  c.font = "700 82px Georgia";
+  const afterTitle = wrap(c, page.title, 76, 225, 1030, 88, 3);
+  drawAccentLine(c, 78, afterTitle + 22, 300);
+
+  const imageY = afterTitle + 82;
+  const imageH = Math.min(650, 1050 - imageY);
+  await imageCover(c, page.imageData, 76, imageY, 1048, imageH, THEME.paperWarm);
+  drawImageFrame(c, 76, imageY, 1048, imageH);
+
+  c.fillStyle = "#312d2b";
+  c.font = "30px Arial";
+  const afterBody = wrap(c, copy.body, 78, imageY + imageH + 88, 1010, 48, 7);
+
+  drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 44, 1430), 1500), 1044, 210, copy.highlights);
+  drawFooter(c, page);
+}
+
 async function drawImageTopEditorial(c: CanvasRenderingContext2D, page: VisualBookPage, pageIndex: number) {
-  const imageH = pageIndex % 3 === 0 ? 760 : 690;
+  const imageH = pageIndex % 3 === 0 ? 680 : 630;
+  const copy = editorialCopy(page.body);
 
   await imageCover(c, page.imageData, 76, 150, 1048, imageH, THEME.paperWarm);
   drawImageFrame(c, 76, 150, 1048, imageH);
@@ -156,9 +225,9 @@ async function drawImageTopEditorial(c: CanvasRenderingContext2D, page: VisualBo
 
   c.fillStyle = "#312d2b";
   c.font = "31px Arial";
-  const afterBody = wrap(c, page.body, 78, afterTitle + 92, 1010, 49, 9);
+  const afterBody = wrap(c, copy.body, 78, afterTitle + 92, 1010, 49, 8);
 
-  drawTakeawayBox(c, 78, Math.min(afterBody + 62, 1390), 1044, 250, page.body);
+  drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 54, 1400), 1490), 1044, 220, copy.highlights);
   drawFooter(c, page);
 }
 
@@ -167,6 +236,7 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
   const textX = imageSide === "left" ? 650 : 78;
   const imageW = 470;
   const imageH = 1320;
+  const copy = editorialCopy(page.body);
 
   await imageCover(c, page.imageData, imageX, 178, imageW, imageH, THEME.paperWarm);
   drawImageFrame(c, imageX, 178, imageW, imageH);
@@ -179,11 +249,30 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
 
   c.fillStyle = "#302d2a";
   c.font = "31px Arial";
-  const afterBody = wrap(c, page.body, textX, afterTitle + 92, 480, 50, 13);
+  const afterBody = wrap(c, copy.body, textX, afterTitle + 92, 480, 50, 13);
 
   const boxY = Math.min(Math.max(afterBody + 56, 1130), 1280);
-  drawCompactBox(c, textX, boxY, 480, 260, page.body);
+  drawCompactBox(c, textX, boxY, 480, 260, copy.highlights);
 
+  drawFooter(c, page);
+}
+
+async function drawClosingEditorial(c: CanvasRenderingContext2D, page: VisualBookPage) {
+  const copy = editorialCopy(page.body);
+
+  await imageCover(c, page.imageData, 76, 150, 1048, 610, THEME.paperWarm);
+  drawImageFrame(c, 76, 150, 1048, 610);
+
+  c.fillStyle = THEME.ink;
+  c.font = "700 84px Georgia";
+  const afterTitle = wrap(c, page.title, 84, 900, 1010, 90, 3);
+  drawAccentLine(c, 86, afterTitle + 24, 300);
+
+  c.fillStyle = "#302d2a";
+  c.font = "31px Arial";
+  const afterBody = wrap(c, copy.body, 86, afterTitle + 88, 990, 50, 8);
+
+  drawTakeawayBox(c, 86, Math.min(Math.max(afterBody + 48, 1430), 1490), 1028, 220, copy.highlights);
   drawFooter(c, page);
 }
 
@@ -279,18 +368,30 @@ function drawAccentLine(c: CanvasRenderingContext2D, x: number, y: number, w: nu
   drawSmallMark(c, x + w + 24, y - 8, THEME.gold);
 }
 
-function drawTakeawayBox(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, source: string) {
+function drawTakeawayBox(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  highlights: string[],
+) {
+  if (!highlights.length) return;
+
   c.strokeStyle = "rgba(169,130,74,.78)";
   c.lineWidth = 2.4;
   c.strokeRect(x, y, w, h);
 
   drawSmallMark(c, x + w / 2 - 10, y - 13, THEME.wine);
 
-  const bullets = extractBullets(source, 3);
+  c.fillStyle = THEME.wine;
+  c.font = "700 18px Arial";
+  c.fillText("KEY TAKEAWAY", x + 42, y + 40);
+
   c.font = "28px Arial";
 
-  bullets.forEach((item, index) => {
-    const by = y + 66 + index * 58;
+  highlights.slice(0, 2).forEach((item, index) => {
+    const by = y + 88 + index * 64;
     c.fillStyle = THEME.gold;
     c.beginPath();
     c.arc(x + 52, by - 9, 5, 0, Math.PI * 2);
@@ -301,16 +402,28 @@ function drawTakeawayBox(c: CanvasRenderingContext2D, x: number, y: number, w: n
   });
 }
 
-function drawCompactBox(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, source: string) {
+function drawCompactBox(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  highlights: string[],
+) {
+  if (!highlights.length) return;
+
   c.strokeStyle = "rgba(169,130,74,.70)";
   c.lineWidth = 2;
   c.strokeRect(x, y, w, h);
 
-  const bullets = extractBullets(source, 3);
+  c.fillStyle = THEME.wine;
+  c.font = "700 17px Arial";
+  c.fillText("TAKEAWAY", x + 28, y + 35);
+
   c.font = "25px Arial";
 
-  bullets.forEach((item, index) => {
-    const by = y + 58 + index * 62;
+  highlights.slice(0, 2).forEach((item, index) => {
+    const by = y + 82 + index * 76;
     c.fillStyle = THEME.gold;
     c.beginPath();
     c.arc(x + 34, by - 9, 5, 0, Math.PI * 2);
@@ -467,29 +580,53 @@ async function imageCover(
   h: number,
   fallback: string,
 ) {
+  drawImagePlaceholder(c, x, y, w, h, fallback);
+
+  if (!data) return;
+
+  try {
+    const im = await loadImage(data);
+    const scale = Math.max(w / im.width, h / im.height);
+    const sw = w / scale;
+    const sh = h / scale;
+
+    c.drawImage(im, (im.width - sw) / 2, (im.height - sh) / 2, sw, sh, x, y, w, h);
+  } catch {
+    // The designed placeholder keeps the export usable when stored image data is incomplete.
+  }
+}
+
+function drawImagePlaceholder(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  fallback: string,
+) {
   c.fillStyle = fallback;
   c.fillRect(x, y, w, h);
 
-  if (!data) {
-    c.fillStyle = "rgba(255,255,255,.42)";
-    c.font = "700 24px Arial";
-    c.textAlign = "center";
-    c.fillText("IMAGE PENDING", x + w / 2, y + h / 2);
-    c.textAlign = "left";
-    return;
-  }
+  const wash = c.createLinearGradient(x, y, x + w, y + h);
+  wash.addColorStop(0, "rgba(255,248,235,.18)");
+  wash.addColorStop(0.52, "rgba(169,130,74,.10)");
+  wash.addColorStop(1, "rgba(122,20,40,.12)");
+  c.fillStyle = wash;
+  c.fillRect(x, y, w, h);
 
-  const im = await loadImage(data);
-  const scale = Math.max(w / im.width, h / im.height);
-  const sw = w / scale;
-  const sh = h / scale;
-
-  c.drawImage(im, (im.width - sw) / 2, (im.height - sh) / 2, sw, sh, x, y, w, h);
+  c.strokeStyle = "rgba(255,248,235,.16)";
+  c.lineWidth = Math.max(2, Math.min(w, h) * 0.008);
+  c.beginPath();
+  c.moveTo(x + w * 0.12, y + h * 0.84);
+  c.lineTo(x + w * 0.46, y + h * 0.48);
+  c.lineTo(x + w * 0.63, y + h * 0.66);
+  c.lineTo(x + w * 0.88, y + h * 0.30);
+  c.stroke();
 }
 
 function wrap(
   c: CanvasRenderingContext2D,
-  text: string,
+  text: unknown,
   x: number,
   y: number,
   max: number,
@@ -499,14 +636,19 @@ function wrap(
   const words = String(text).replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
   const lines: string[] = [];
   let line = "";
+  let consumed = 0;
 
-  for (const word of words) {
+  for (; consumed < words.length; consumed += 1) {
+    const word = words[consumed];
     const test = line ? `${line} ${word}` : word;
 
     if (c.measureText(test).width > max && line) {
       lines.push(line);
       line = word;
-      if (lines.length === limit) break;
+      if (lines.length === limit) {
+        line = "";
+        break;
+      }
     } else {
       line = test;
     }
@@ -514,30 +656,36 @@ function wrap(
 
   if (line && lines.length < limit) lines.push(line);
 
+  if (consumed < words.length && lines.length) {
+    let last = lines[lines.length - 1].replace(/[.,;:!?]+$/, "");
+    while (last && c.measureText(`${last}…`).width > max) {
+      last = last.replace(/\s*\S+$/, "");
+    }
+    lines[lines.length - 1] = `${last || lines[lines.length - 1]}…`;
+  }
+
   lines.forEach((s, i) => c.fillText(s, x, y + i * lh));
   return y + lines.length * lh;
 }
 
-function extractBullets(source: string, count: number) {
+function editorialCopy(source: unknown) {
   const clean = String(source).replace(/\s+/g, " ").trim();
   const sentences = clean
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.replace(/^[-•]\s*/, "").trim())
-    .filter((s) => s.length > 18);
+    .filter(Boolean);
 
-  const picked = sentences.slice(0, count);
+  if (sentences.length < 2) return { body: clean, highlights: [] as string[] };
 
-  while (picked.length < count) {
-    picked.push(
-      [
-        "A sharper promise inside the page.",
-        "A visual moment with emotional weight.",
-        "A clean takeaway for the reader.",
-      ][picked.length],
-    );
-  }
+  const highlightCount = sentences.length >= 4 ? 2 : 1;
+  const highlights = sentences.slice(-highlightCount).map((sentence) =>
+    sentence.length > 112 ? `${sentence.slice(0, 109).trim()}…` : sentence,
+  );
 
-  return picked.map((s) => (s.length > 92 ? `${s.slice(0, 89).trim()}...` : s));
+  return {
+    body: sentences.slice(0, -highlightCount).join(" "),
+    highlights,
+  };
 }
 
 function roundedRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
