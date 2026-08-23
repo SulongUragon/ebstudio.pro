@@ -207,20 +207,47 @@ async function drawNotebookReflectionPage(
   drawHandwrittenNoteLabel(c, page.role === "cta" ? "CLOSING NOTE" : "FIELD NOTE", 76, 78, NOTEBOOK.green);
 
   c.fillStyle = NOTEBOOK.ink;
-  c.font = "700 72px Georgia";
-  const afterTitle = wrap(c, page.title, titleX, 205, titleWidth, 78, 5);
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: titleX,
+    y: 205,
+    maxWidth: titleWidth,
+    maxLines: 5,
+    fontSize: 72,
+    minFontSize: 44,
+    lineHeight: 78,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
   drawScribbleUnderline(c, titleX, afterTitle + 20, Math.min(350, titleWidth - 30), page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
 
   c.fillStyle = NOTEBOOK.muted;
-  c.font = "italic 25px Georgia";
-  wrap(c, copy.note, titleX, afterTitle + 68, titleWidth - 12, 36, 3);
+  fitTextWithoutEllipsis(c, copy.note, {
+    x: titleX,
+    y: afterTitle + 68,
+    maxWidth: titleWidth - 12,
+    maxLines: 3,
+    fontSize: 25,
+    minFontSize: 21,
+    lineHeight: 36,
+    fontFamily: "Georgia",
+    fontStyle: "italic",
+  });
 
   await drawPinnedPhoto(c, page.imageData, photoX, 172, 450, 570, page.pageNumber % 2 ? -0.025 : 0.022);
 
   c.fillStyle = NOTEBOOK.ink;
   const notebookType = visualBodyTypography(copy.body);
-  c.font = `${notebookType.fontSize}px Georgia`;
-  const afterBody = wrap(c, copy.body, 78, 850, 1042, notebookType.lineHeight, Math.max(10, notebookType.maxLines));
+  const afterBody = fitTextWithoutEllipsis(c, copy.body, {
+    x: 78,
+    y: 850,
+    maxWidth: 1042,
+    maxLines: Math.max(10, notebookType.maxLines),
+    fontSize: notebookType.fontSize,
+    minFontSize: Math.max(22, notebookType.fontSize - 5),
+    lineHeight: notebookType.lineHeight,
+    fontFamily: "Georgia",
+  }).endY;
 
   const boxY = Math.min(Math.max(afterBody + 50, 1335), 1440);
   drawPartialBorderBox(c, 78, boxY, 1044, 245, page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
@@ -238,14 +265,34 @@ async function drawNotebookReflectionCover(
   await drawPinnedPhoto(c, page.imageData, 126, 170, 948, 770, -0.014);
 
   c.fillStyle = NOTEBOOK.ink;
-  c.font = "700 90px Georgia";
-  const afterTitle = wrap(c, project.title || page.title, 86, 1090, 1020, 98, 4);
+  const afterTitle = fitTextWithoutEllipsis(c, project.title || page.title, {
+    x: 86,
+    y: 1090,
+    maxWidth: 1020,
+    maxLines: 4,
+    fontSize: 90,
+    minFontSize: 54,
+    lineHeight: 98,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
   drawScribbleUnderline(c, 88, afterTitle + 24, 390, NOTEBOOK.green);
 
   if (project.subtitle) {
     c.fillStyle = NOTEBOOK.muted;
-    c.font = "italic 30px Georgia";
-    wrap(c, project.subtitle, 90, afterTitle + 78, 930, 45, 3);
+    fitTextWithoutEllipsis(c, project.subtitle, {
+      x: 90,
+      y: afterTitle + 78,
+      maxWidth: 930,
+      maxLines: 3,
+      fontSize: 30,
+      minFontSize: 23,
+      lineHeight: 45,
+      fontFamily: "Georgia",
+      fontStyle: "italic",
+      preserveAll: true,
+    });
   }
 
   c.fillStyle = NOTEBOOK.navy;
@@ -360,8 +407,18 @@ export function drawPartialBorderBox(
 
 function drawNotebookFooter(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
   c.fillStyle = NOTEBOOK.muted;
-  c.font = "italic 20px Georgia";
-  c.fillText(project.title, 76, H - 60);
+  fitTextWithoutEllipsis(c, project.title, {
+    x: 76,
+    y: H - 60,
+    maxWidth: 880,
+    maxLines: 1,
+    fontSize: 20,
+    minFontSize: 13,
+    lineHeight: 24,
+    fontFamily: "Georgia",
+    fontStyle: "italic",
+    preserveAll: true,
+  });
 
   c.fillStyle = NOTEBOOK.navy;
   c.font = "700 21px Arial";
@@ -394,7 +451,6 @@ function drawScribbleUnderline(c: CanvasRenderingContext2D, x: number, y: number
 }
 
 function drawNotebookHighlights(c: CanvasRenderingContext2D, highlights: string[], x: number, y: number, w: number) {
-  c.font = "26px Georgia";
   highlights.slice(0, 2).forEach((item, index) => {
     const itemY = y + index * 64;
     c.fillStyle = index % 2 ? NOTEBOOK.navy : NOTEBOOK.green;
@@ -402,7 +458,17 @@ function drawNotebookHighlights(c: CanvasRenderingContext2D, highlights: string[
     c.arc(x + 8, itemY - 9, 5, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = NOTEBOOK.ink;
-    wrap(c, item, x + 32, itemY, w - 32, 34, 2);
+    fitTextWithoutEllipsis(c, shortenToCompletePhrase(item, 118), {
+      x: x + 32,
+      y: itemY,
+      maxWidth: w - 32,
+      maxLines: 2,
+      fontSize: 26,
+      minFontSize: 22,
+      lineHeight: 34,
+      fontFamily: "Georgia",
+      preserveAll: true,
+    });
   });
 }
 
@@ -427,14 +493,33 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
   c.fillRect(74, H - 560, 6, 380);
 
   c.fillStyle = THEME.ivory;
-  c.font = "700 96px Georgia";
   const titleY = H - (project.subtitle ? 440 : 350);
-  const afterTitle = wrap(c, project.title, 104, titleY, 980, 104, 4);
+  const afterTitle = fitTextWithoutEllipsis(c, project.title, {
+    x: 104,
+    y: titleY,
+    maxWidth: 980,
+    maxLines: 4,
+    fontSize: 96,
+    minFontSize: 54,
+    lineHeight: 104,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
 
   if (project.subtitle) {
     c.fillStyle = "rgba(255,248,235,.90)";
-    c.font = "30px Arial";
-    wrap(c, project.subtitle, 108, Math.max(afterTitle + 26, titleY + 245), 900, 44, 3);
+    fitTextWithoutEllipsis(c, project.subtitle, {
+      x: 108,
+      y: Math.max(afterTitle + 26, titleY + 245),
+      maxWidth: 900,
+      maxLines: 3,
+      fontSize: 30,
+      minFontSize: 23,
+      lineHeight: 44,
+      fontFamily: "Arial",
+      preserveAll: true,
+    });
   }
 
   c.fillStyle = "rgba(255,248,235,.92)";
@@ -448,8 +533,18 @@ async function drawOpeningEditorial(c: CanvasRenderingContext2D, page: VisualBoo
   const copy = buildVisualPageSections(page.body, page.title);
 
   c.fillStyle = THEME.ink;
-  c.font = "700 82px Georgia";
-  const afterTitle = wrap(c, page.title, 76, 225, 1030, 88, 3);
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: 76,
+    y: 225,
+    maxWidth: 1030,
+    maxLines: 3,
+    fontSize: 82,
+    minFontSize: 50,
+    lineHeight: 88,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
   drawAccentLine(c, 78, afterTitle + 22, 300);
 
   const imageY = afterTitle + 82;
@@ -460,8 +555,18 @@ async function drawOpeningEditorial(c: CanvasRenderingContext2D, page: VisualBoo
 
   c.fillStyle = "#312d2b";
   const bodyType = visualBodyTypography(copy.body);
-  c.font = `${bodyType.fontSize}px Arial`;
-  const afterBody = wrap(c, copy.body, 78, imageY + imageH + 82, 1010, bodyType.lineHeight, bodyType.maxLines);
+  const bodyY = imageY + imageH + 82;
+  const minimumBodySize = Math.max(21, bodyType.fontSize - 5);
+  const afterBody = fitTextWithoutEllipsis(c, copy.body, {
+    x: 78,
+    y: bodyY,
+    maxWidth: 1010,
+    maxLines: lineBudgetBefore(bodyY, 1456, bodyType, minimumBodySize),
+    fontSize: bodyType.fontSize,
+    minFontSize: minimumBodySize,
+    lineHeight: bodyType.lineHeight,
+    fontFamily: "Arial",
+  }).endY;
 
   drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 44, 1430), 1500), 1044, 210, copy.highlights);
   drawFooter(c, page);
@@ -477,15 +582,35 @@ async function drawImageTopEditorial(c: CanvasRenderingContext2D, page: VisualBo
 
   const titleY = imageH + 250;
   c.fillStyle = THEME.ink;
-  c.font = "700 78px Georgia";
-  const afterTitle = wrap(c, page.title, 76, titleY, 1010, 84, 3);
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: 76,
+    y: titleY,
+    maxWidth: 1010,
+    maxLines: 3,
+    fontSize: 78,
+    minFontSize: 48,
+    lineHeight: 84,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
 
   drawAccentLine(c, 78, afterTitle + 28, 320);
 
   c.fillStyle = "#312d2b";
   const bodyType = visualBodyTypography(copy.body);
-  c.font = `${bodyType.fontSize}px Arial`;
-  const afterBody = wrap(c, copy.body, 78, afterTitle + 88, 1010, bodyType.lineHeight, bodyType.maxLines);
+  const bodyY = afterTitle + 88;
+  const minimumBodySize = Math.max(21, bodyType.fontSize - 5);
+  const afterBody = fitTextWithoutEllipsis(c, copy.body, {
+    x: 78,
+    y: bodyY,
+    maxWidth: 1010,
+    maxLines: lineBudgetBefore(bodyY, 1436, bodyType, minimumBodySize),
+    fontSize: bodyType.fontSize,
+    minFontSize: minimumBodySize,
+    lineHeight: bodyType.lineHeight,
+    fontFamily: "Arial",
+  }).endY;
 
   drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 54, 1400), 1490), 1044, 220, copy.highlights);
   drawFooter(c, page);
@@ -502,15 +627,35 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
   drawImageFrame(c, imageX, 178, imageW, imageH);
 
   c.fillStyle = THEME.ink;
-  c.font = "700 76px Georgia";
-  const afterTitle = wrap(c, page.title, textX, 235, 480, 82, 5);
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: textX,
+    y: 235,
+    maxWidth: 480,
+    maxLines: 5,
+    fontSize: 76,
+    minFontSize: 42,
+    lineHeight: 82,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
 
   drawAccentLine(c, textX, afterTitle + 28, 210);
 
   c.fillStyle = "#302d2a";
   const bodyType = visualBodyTypography(copy.body, true);
-  c.font = `${bodyType.fontSize}px Arial`;
-  const afterBody = wrap(c, copy.body, textX, afterTitle + 88, 480, bodyType.lineHeight, bodyType.maxLines);
+  const bodyY = afterTitle + 88;
+  const minimumBodySize = Math.max(20, bodyType.fontSize - 5);
+  const afterBody = fitTextWithoutEllipsis(c, copy.body, {
+    x: textX,
+    y: bodyY,
+    maxWidth: 480,
+    maxLines: lineBudgetBefore(bodyY, 1224, bodyType, minimumBodySize),
+    fontSize: bodyType.fontSize,
+    minFontSize: minimumBodySize,
+    lineHeight: bodyType.lineHeight,
+    fontFamily: "Arial",
+  }).endY;
 
   const boxY = Math.min(Math.max(afterBody + 56, 1130), 1280);
   drawCompactBox(c, textX, boxY, 480, 260, copy.highlights);
@@ -526,14 +671,34 @@ async function drawClosingEditorial(c: CanvasRenderingContext2D, page: VisualBoo
   drawImageFrame(c, 76, 150, 1048, imageH);
 
   c.fillStyle = THEME.ink;
-  c.font = "700 84px Georgia";
-  const afterTitle = wrap(c, page.title, 84, imageH + 290, 1010, 90, 3);
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: 84,
+    y: imageH + 290,
+    maxWidth: 1010,
+    maxLines: 3,
+    fontSize: 84,
+    minFontSize: 50,
+    lineHeight: 90,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
   drawAccentLine(c, 86, afterTitle + 24, 300);
 
   c.fillStyle = "#302d2a";
   const bodyType = visualBodyTypography(copy.body);
-  c.font = `${bodyType.fontSize}px Arial`;
-  const afterBody = wrap(c, copy.body, 86, afterTitle + 84, 990, bodyType.lineHeight, bodyType.maxLines);
+  const bodyY = afterTitle + 84;
+  const minimumBodySize = Math.max(21, bodyType.fontSize - 5);
+  const afterBody = fitTextWithoutEllipsis(c, copy.body, {
+    x: 86,
+    y: bodyY,
+    maxWidth: 990,
+    maxLines: lineBudgetBefore(bodyY, 1442, bodyType, minimumBodySize),
+    fontSize: bodyType.fontSize,
+    minFontSize: minimumBodySize,
+    lineHeight: bodyType.lineHeight,
+    fontFamily: "Arial",
+  }).endY;
 
   drawTakeawayBox(c, 86, Math.min(Math.max(afterBody + 48, 1430), 1490), 1028, 220, copy.highlights);
   drawFooter(c, page);
@@ -550,18 +715,48 @@ async function drawCinematicFullBleed(c: CanvasRenderingContext2D, project: Visu
   c.fillRect(0, 0, W, H);
 
   c.fillStyle = THEME.ivory;
-  c.font = "700 86px Georgia";
-  const afterTitle = wrap(c, page.title, 86, 1195, 990, 94, 4);
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: 86,
+    y: 1195,
+    maxWidth: 990,
+    maxLines: 4,
+    fontSize: 86,
+    minFontSize: 48,
+    lineHeight: 94,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
 
   c.fillStyle = "rgba(255,248,235,.88)";
   const copy = buildVisualPageSections(page.body, page.title);
   const bodyType = visualBodyTypography(copy.body);
-  c.font = `${bodyType.fontSize}px Arial`;
-  wrap(c, copy.body, 90, afterTitle + 50, 930, bodyType.lineHeight, Math.min(7, bodyType.maxLines));
+  const bodyY = afterTitle + 50;
+  const minimumBodySize = 21;
+  fitTextWithoutEllipsis(c, copy.body, {
+    x: 90,
+    y: bodyY,
+    maxWidth: 930,
+    maxLines: lineBudgetBefore(bodyY, 1650, bodyType, minimumBodySize, 7),
+    fontSize: bodyType.fontSize,
+    minFontSize: minimumBodySize,
+    lineHeight: bodyType.lineHeight,
+    fontFamily: "Arial",
+  });
 
   c.fillStyle = "rgba(255,248,235,.78)";
-  c.font = "700 22px Arial";
-  c.fillText(project.title, 86, 96);
+  fitTextWithoutEllipsis(c, project.title, {
+    x: 86,
+    y: 96,
+    maxWidth: 850,
+    maxLines: 1,
+    fontSize: 22,
+    minFontSize: 14,
+    lineHeight: 24,
+    fontFamily: "Arial",
+    fontWeight: "700",
+    preserveAll: true,
+  });
   c.fillText(String(page.pageNumber).padStart(2, "0"), 1040, 1708);
 }
 
@@ -576,15 +771,35 @@ async function drawQuoteEditorial(c: CanvasRenderingContext2D, page: VisualBookP
   c.fillText("“", 94, imageH + 335);
 
   c.fillStyle = THEME.ink;
-  c.font = "700 72px Georgia";
-  const afterTitle = wrap(c, page.title, 154, imageH + 320, 880, 82, 4);
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: 154,
+    y: imageH + 320,
+    maxWidth: 880,
+    maxLines: 4,
+    fontSize: 72,
+    minFontSize: 44,
+    lineHeight: 82,
+    fontFamily: "Georgia",
+    fontWeight: "700",
+    preserveAll: true,
+  }).endY;
 
   drawAccentLine(c, 156, afterTitle + 26, 260);
 
   c.fillStyle = "#302d2a";
   const bodyType = visualBodyTypography(copy.body);
-  c.font = `${bodyType.fontSize}px Arial`;
-  const afterBody = wrap(c, copy.body, 156, afterTitle + 84, 870, bodyType.lineHeight, Math.min(8, bodyType.maxLines));
+  const bodyY = afterTitle + 84;
+  const minimumBodySize = Math.max(21, bodyType.fontSize - 5);
+  const afterBody = fitTextWithoutEllipsis(c, copy.body, {
+    x: 156,
+    y: bodyY,
+    maxWidth: 870,
+    maxLines: lineBudgetBefore(bodyY, 1448, bodyType, minimumBodySize, 8),
+    fontSize: bodyType.fontSize,
+    minFontSize: minimumBodySize,
+    lineHeight: bodyType.lineHeight,
+    fontFamily: "Arial",
+  }).endY;
 
   drawTakeawayBox(c, 80, Math.min(Math.max(afterBody + 42, 1440), 1490), 1040, 210, copy.highlights);
 
@@ -593,8 +808,17 @@ async function drawQuoteEditorial(c: CanvasRenderingContext2D, page: VisualBookP
 
 function drawRunningHeader(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
   c.fillStyle = THEME.ink;
-  c.font = "25px Georgia";
-  c.fillText(project.title, 74, 78);
+  fitTextWithoutEllipsis(c, project.title, {
+    x: 74,
+    y: 78,
+    maxWidth: 850,
+    maxLines: 1,
+    fontSize: 25,
+    minFontSize: 15,
+    lineHeight: 28,
+    fontFamily: "Georgia",
+    preserveAll: true,
+  });
 
   c.fillStyle = THEME.ink;
   c.font = "24px Georgia";
@@ -658,8 +882,6 @@ function drawTakeawayBox(
   c.font = "700 18px Arial";
   c.fillText("KEY TAKEAWAY", x + 42, y + 40);
 
-  c.font = "28px Arial";
-
   highlights.slice(0, 2).forEach((item, index) => {
     const by = y + 88 + index * 64;
     c.fillStyle = THEME.gold;
@@ -668,7 +890,17 @@ function drawTakeawayBox(
     c.fill();
 
     c.fillStyle = "#3a342f";
-    wrap(c, item, x + 78, by, w - 125, 35, 2);
+    fitTextWithoutEllipsis(c, shortenToCompletePhrase(item, 118), {
+      x: x + 78,
+      y: by,
+      maxWidth: w - 125,
+      maxLines: 2,
+      fontSize: 28,
+      minFontSize: 23,
+      lineHeight: 35,
+      fontFamily: "Arial",
+      preserveAll: true,
+    });
   });
 }
 
@@ -690,8 +922,6 @@ function drawCompactBox(
   c.font = "700 17px Arial";
   c.fillText("TAKEAWAY", x + 28, y + 35);
 
-  c.font = "25px Arial";
-
   highlights.slice(0, 2).forEach((item, index) => {
     const by = y + 82 + index * 76;
     c.fillStyle = THEME.gold;
@@ -700,7 +930,17 @@ function drawCompactBox(
     c.fill();
 
     c.fillStyle = "#3a342f";
-    wrap(c, item, x + 58, by, w - 86, 32, 2);
+    fitTextWithoutEllipsis(c, shortenToCompletePhrase(item, 72), {
+      x: x + 58,
+      y: by,
+      maxWidth: w - 86,
+      maxLines: 2,
+      fontSize: 25,
+      minFontSize: 20,
+      lineHeight: 32,
+      fontFamily: "Arial",
+      preserveAll: true,
+    });
   });
 }
 
@@ -894,6 +1134,205 @@ function drawImagePlaceholder(
   c.stroke();
 }
 
+type TextFitOptions = {
+  x: number;
+  y: number;
+  maxWidth: number;
+  maxLines: number;
+  fontSize: number;
+  minFontSize?: number;
+  lineHeight: number;
+  fontFamily: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  preserveAll?: boolean;
+};
+
+type TextFitResult = {
+  endY: number;
+  fontSize: number;
+  lineHeight: number;
+  lines: string[];
+  text: string;
+};
+
+export function cleanTruncatedText(source: unknown) {
+  return String(source ?? "")
+    .replace(/\s*(?:\.{3,}|…+)\s*(?=\S)/g, "; ")
+    .replace(/\s*(?:\.{3,}|…+)\s*$/g, ".")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([.!?])(?:\s*[.!?])+/g, "$1")
+    .trim();
+}
+
+export function shortenToCompletePhrase(source: unknown, maxCharacters = 118) {
+  const clean = cleanTruncatedText(source);
+  const limit = Math.max(18, maxCharacters);
+  if (!clean || clean.length <= limit) return clean;
+
+  const sentences = sentenceParts(clean);
+  const completeSentence = sentences.find((sentence) => sentence.length <= limit && /[.!?]$/.test(sentence));
+  if (completeSentence) return completeSentence;
+
+  const prefix = clean.slice(0, limit);
+  const punctuationBreak = Math.max(
+    prefix.lastIndexOf(";"),
+    prefix.lastIndexOf(":"),
+    prefix.lastIndexOf(","),
+    prefix.lastIndexOf(" — "),
+    prefix.lastIndexOf(" – "),
+  );
+  let phrase = punctuationBreak >= limit * 0.25 ? prefix.slice(0, punctuationBreak) : prefix.replace(/\s+\S*$/, "");
+
+  const danglingEnding = /\b(?:a|an|and|as|at|because|but|by|for|from|if|in|of|on|or|that|the|their|these|this|those|to|when|while|with|without|your)$/i;
+  while (danglingEnding.test(phrase) && phrase.includes(" ")) {
+    phrase = phrase.replace(/\s+\S+$/, "").trim();
+  }
+
+  phrase = phrase.replace(/[,:;\-–—\s]+$/, "").trim();
+  if (!phrase) phrase = clean.slice(0, limit - 1).replace(/\s+\S*$/, "").trim();
+  return /[.!?]$/.test(phrase) ? phrase : `${phrase}.`;
+}
+
+export function extractCleanBullets(source: unknown, maxBullets = 4, maxCharacters = 118) {
+  const clean = cleanTruncatedText(source);
+  if (!clean) return [];
+
+  const sentences = sentenceParts(clean);
+  let candidates = sentences.length > 1 ? sentences.slice(-maxBullets) : sentences;
+
+  if (candidates.length < 2 && candidates[0]) {
+    const clauses = candidates[0]
+      .replace(/[.!?]+$/, "")
+      .split(/\s*(?:;|:|,\s+(?:and|but|so|yet)\s+|\s+(?:and|but|so|yet)\s+)\s*/i)
+      .map((clause) => clause.trim())
+      .filter((clause) => clause.split(/\s+/).length >= 4);
+    if (clauses.length > 1) candidates = clauses;
+  }
+
+  const seen = new Set<string>();
+  return candidates
+    .map((candidate) => shortenToCompletePhrase(candidate, maxCharacters))
+    .filter((candidate) => {
+      const key = candidate.toLowerCase();
+      if (!candidate || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, Math.max(1, maxBullets));
+}
+
+export function fitTextWithoutEllipsis(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  options: TextFitOptions,
+): TextFitResult {
+  const clean = cleanTruncatedText(source);
+  const startSize = Math.max(1, options.fontSize);
+  const requestedMinimum = Math.min(startSize, Math.max(1, options.minFontSize ?? startSize));
+  const minimum = options.preserveAll ? Math.min(requestedMinimum, 16) : requestedMinimum;
+  const maximumLines = Math.max(1, options.maxLines);
+  let fontSize = startSize;
+  let lineHeight = options.lineHeight;
+  let lines: string[] = [];
+  let fittedText = clean;
+
+  for (let size = startSize; size >= minimum; size -= 1) {
+    setCanvasFont(c, options, size);
+    const candidateLines = wrappedLines(c, clean, options.maxWidth);
+    if (candidateLines.length <= maximumLines && candidateLines.every((line) => c.measureText(line).width <= options.maxWidth)) {
+      fontSize = size;
+      lineHeight = Math.max(size * 1.12, options.lineHeight * (size / startSize));
+      lines = candidateLines;
+      break;
+    }
+  }
+
+  if (!lines.length && options.preserveAll) {
+    fontSize = minimum;
+    lineHeight = Math.max(fontSize * 1.12, options.lineHeight * (fontSize / startSize));
+    setCanvasFont(c, options, fontSize);
+    lines = wrappedLines(c, clean, options.maxWidth);
+  }
+
+  if (!lines.length) {
+    fontSize = requestedMinimum;
+    lineHeight = Math.max(fontSize * 1.12, options.lineHeight * (fontSize / startSize));
+    setCanvasFont(c, options, fontSize);
+    fittedText = completeTextForLineBudget(c, clean, options.maxWidth, maximumLines);
+    lines = wrappedLines(c, fittedText, options.maxWidth);
+  }
+
+  lines.forEach((line, index) => c.fillText(line, options.x, options.y + index * lineHeight));
+  return {
+    endY: options.y + lines.length * lineHeight,
+    fontSize,
+    lineHeight,
+    lines,
+    text: fittedText,
+  };
+}
+
+function completeTextForLineBudget(
+  c: CanvasRenderingContext2D,
+  clean: string,
+  maxWidth: number,
+  maxLines: number,
+) {
+  const sentences = sentenceParts(clean);
+  let complete = "";
+
+  for (const sentence of sentences) {
+    const candidate = complete ? `${complete} ${sentence}` : sentence;
+    if (wrappedLines(c, candidate, maxWidth).length > maxLines) break;
+    complete = candidate;
+  }
+
+  if (complete) return complete;
+
+  const averageCharacterWidth = Math.max(1, c.measureText("abcdefghijklmnopqrstuvwxyz").width / 26);
+  let characterBudget = Math.max(18, Math.floor((maxWidth / averageCharacterWidth) * maxLines));
+  let phrase = shortenToCompletePhrase(clean, characterBudget);
+
+  while (characterBudget > 18 && wrappedLines(c, phrase, maxWidth).length > maxLines) {
+    characterBudget -= 6;
+    phrase = shortenToCompletePhrase(clean, characterBudget);
+  }
+
+  return phrase;
+}
+
+function sentenceParts(source: string) {
+  return source
+    .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+    ?.map((sentence) => sentence.replace(/^[-•]\s*/, "").trim())
+    .filter(Boolean) ?? [];
+}
+
+function setCanvasFont(c: CanvasRenderingContext2D, options: TextFitOptions, fontSize: number) {
+  c.font = [options.fontStyle, options.fontWeight, `${fontSize}px`, options.fontFamily].filter(Boolean).join(" ");
+}
+
+function wrappedLines(c: CanvasRenderingContext2D, source: string, maxWidth: number) {
+  const words = source.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && c.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+
+  if (line) lines.push(line);
+  return lines;
+}
+
 function wrap(
   c: CanvasRenderingContext2D,
   text: unknown,
@@ -939,22 +1378,17 @@ function wrap(
 }
 
 export function buildVisualPageSections(source: unknown, title = "") {
-  const clean = String(source).replace(/\s+/g, " ").trim();
-  const sentences = clean
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.replace(/^[-•]\s*/, "").trim())
-    .filter(Boolean);
+  const clean = cleanTruncatedText(source);
+  const sentences = sentenceParts(clean);
 
-  const fallback = clean || title.trim();
-  const highlightCount = sentences.length >= 4 ? 2 : sentences.length >= 2 ? 1 : 0;
-  const highlightSource = highlightCount ? sentences.slice(-highlightCount) : fallback ? [fallback] : [];
-  const highlights = highlightSource.map((sentence) => excerpt(sentence, 125));
+  const fallback = clean || cleanTruncatedText(title);
+  const highlights = extractCleanBullets(fallback, 2, 118);
   const noteSource = sentences[0] || fallback;
 
   return {
     body: fallback,
     highlights,
-    note: excerpt(noteSource, 118),
+    note: shortenToCompletePhrase(noteSource, 118),
   };
 }
 
@@ -972,14 +1406,22 @@ export function visualBodyTypography(source: unknown, narrow = false) {
   return { fontSize: 30, lineHeight: 47, maxLines: 8 };
 }
 
-function visualWordCount(source: unknown) {
-  return String(source).trim().split(/\s+/).filter(Boolean).length;
+function lineBudgetBefore(
+  startY: number,
+  bottomY: number,
+  typography: ReturnType<typeof visualBodyTypography>,
+  minimumFontSize: number,
+  maximumLines = typography.maxLines,
+) {
+  const minimumLineHeight = Math.max(
+    minimumFontSize * 1.12,
+    typography.lineHeight * (minimumFontSize / typography.fontSize),
+  );
+  return Math.min(maximumLines, Math.max(1, Math.floor((bottomY - startY) / minimumLineHeight)));
 }
 
-function excerpt(source: string, limit: number) {
-  if (source.length <= limit) return source;
-  const clipped = source.slice(0, limit - 1).replace(/\s+\S*$/, "").trim();
-  return `${clipped || source.slice(0, limit - 1).trim()}…`;
+function visualWordCount(source: unknown) {
+  return String(source).trim().split(/\s+/).filter(Boolean).length;
 }
 
 function roundedRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
