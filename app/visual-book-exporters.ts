@@ -28,6 +28,17 @@ const THEME = {
   ivory: "#fff8eb",
 };
 
+const NOTEBOOK = {
+  cream: "#f7f1e7",
+  paperEdge: "#ded3bf",
+  line: "rgba(64,118,174,.24)",
+  green: "#0f5d3b",
+  navy: "#0a3a74",
+  ink: "#1d2730",
+  muted: "#59636b",
+  tape: "rgba(223,211,174,.80)",
+};
+
 export async function exportVisualPdf(project: VisualBookProject) {
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [W, H] });
@@ -82,6 +93,8 @@ export async function renderVisualPage(project: VisualBookProject, page: VisualB
 
   if (isComicProject(project)) {
     await drawComic(c, project, page);
+  } else if (isNotebookReflectionProject(project)) {
+    await drawNotebookReflectionPage(c, project, page);
   } else {
     await drawEditorialVisual(c, project, page);
   }
@@ -100,6 +113,19 @@ export function isComicProject(project: Pick<VisualBookProject, "mode">) {
 
 export function isEditorialVisualProject(project: Pick<VisualBookProject, "mode">) {
   return !isComicProject(project);
+}
+
+export function getVisualTemplate(project: VisualBookProject): string {
+  const source = project as VisualBookProject & Record<string, unknown>;
+  const candidates = [source.template, source.style, source.theme, source.visualStyle];
+  const templates = candidates
+    .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+    .map((value) => value.trim().toLowerCase());
+  return templates.includes("notebook-reflection") ? "notebook-reflection" : templates[0] ?? "";
+}
+
+export function isNotebookReflectionProject(project: VisualBookProject) {
+  return !isComicProject(project) && getVisualTemplate(project) === "notebook-reflection";
 }
 
 export function resolveEditorialLayout(
@@ -155,6 +181,251 @@ async function drawEditorialVisual(c: CanvasRenderingContext2D, project: VisualB
   }
 
   await drawImageTopEditorial(c, page, pageIndex);
+}
+
+async function drawNotebookReflectionPage(
+  c: CanvasRenderingContext2D,
+  project: VisualBookProject,
+  page: VisualBookPage,
+) {
+  drawNotebookPaper(c);
+
+  if (page.role === "cover") {
+    await drawNotebookReflectionCover(c, project, page);
+    return;
+  }
+
+  const layout = resolveEditorialLayout(page);
+  const photoOnLeft = layout === "image-left" || (layout !== "image-right" && page.pageNumber % 2 === 0);
+  const photoX = photoOnLeft ? 76 : 674;
+  const titleX = photoOnLeft ? 604 : 76;
+  const titleWidth = 520;
+  const copy = notebookCopy(page.body, page.title);
+  const label = notebookReflectionLabel(page);
+
+  drawHandwrittenNoteLabel(c, page.role === "cta" ? "CLOSING NOTE" : "FIELD NOTE", 76, 78, NOTEBOOK.green);
+
+  c.fillStyle = NOTEBOOK.ink;
+  c.font = "700 72px Georgia";
+  const afterTitle = wrap(c, page.title, titleX, 205, titleWidth, 78, 5);
+  drawScribbleUnderline(c, titleX, afterTitle + 20, Math.min(350, titleWidth - 30), page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
+
+  c.fillStyle = NOTEBOOK.muted;
+  c.font = "italic 25px Georgia";
+  wrap(c, copy.note, titleX, afterTitle + 68, titleWidth - 12, 36, 3);
+
+  await drawPinnedPhoto(c, page.imageData, photoX, 172, 450, 570, page.pageNumber % 2 ? -0.025 : 0.022);
+
+  c.fillStyle = NOTEBOOK.ink;
+  c.font = "29px Georgia";
+  const afterBody = wrap(c, copy.body, 78, 850, 1042, 47, 9);
+
+  const boxY = Math.min(Math.max(afterBody + 50, 1335), 1440);
+  drawPartialBorderBox(c, 78, boxY, 1044, 245, page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
+  drawHandwrittenNoteLabel(c, label, 116, boxY + 50, page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
+  drawNotebookHighlights(c, copy.highlights, 116, boxY + 101, 940);
+  drawNotebookFooter(c, project, page);
+}
+
+async function drawNotebookReflectionCover(
+  c: CanvasRenderingContext2D,
+  project: VisualBookProject,
+  page: VisualBookPage,
+) {
+  drawHandwrittenNoteLabel(c, "NOTEBOOK REFLECTION", 78, 86, NOTEBOOK.green);
+  await drawPinnedPhoto(c, page.imageData, 126, 170, 948, 770, -0.014);
+
+  c.fillStyle = NOTEBOOK.ink;
+  c.font = "700 90px Georgia";
+  const afterTitle = wrap(c, project.title || page.title, 86, 1090, 1020, 98, 4);
+  drawScribbleUnderline(c, 88, afterTitle + 24, 390, NOTEBOOK.green);
+
+  if (project.subtitle) {
+    c.fillStyle = NOTEBOOK.muted;
+    c.font = "italic 30px Georgia";
+    wrap(c, project.subtitle, 90, afterTitle + 78, 930, 45, 3);
+  }
+
+  c.fillStyle = NOTEBOOK.navy;
+  c.font = "700 22px Arial";
+  c.fillText(project.author.toUpperCase(), 90, H - 92);
+  drawTapeAccent(c, 970, H - 142, 120, 42, 0.07);
+}
+
+function drawNotebookPaper(c: CanvasRenderingContext2D) {
+  c.fillStyle = NOTEBOOK.cream;
+  c.fillRect(0, 0, W, H);
+
+  const wash = c.createRadialGradient(W * 0.42, H * 0.2, 100, W * 0.5, H * 0.5, H);
+  wash.addColorStop(0, "rgba(255,255,255,.38)");
+  wash.addColorStop(1, "rgba(128,102,65,.08)");
+  c.fillStyle = wash;
+  c.fillRect(0, 0, W, H);
+
+  c.strokeStyle = NOTEBOOK.line;
+  c.lineWidth = 2;
+  for (let y = 126; y < H - 80; y += 52) {
+    c.beginPath();
+    c.moveTo(58, y);
+    c.lineTo(W - 58, y);
+    c.stroke();
+  }
+
+  c.strokeStyle = "rgba(15,93,59,.18)";
+  c.lineWidth = 3;
+  c.beginPath();
+  c.moveTo(55, 0);
+  c.lineTo(55, H);
+  c.stroke();
+}
+
+async function drawPinnedPhoto(
+  c: CanvasRenderingContext2D,
+  data: string | undefined,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rotation: number,
+) {
+  c.save();
+  c.translate(x + w / 2, y + h / 2);
+  c.rotate(rotation);
+
+  c.shadowColor = "rgba(29,39,48,.18)";
+  c.shadowBlur = 26;
+  c.shadowOffsetY = 16;
+  c.fillStyle = "#fffdf8";
+  c.fillRect(-w / 2, -h / 2, w, h);
+  c.shadowColor = "transparent";
+
+  await imageCover(c, data, -w / 2 + 24, -h / 2 + 24, w - 48, h - 104, "#dfe5df");
+  c.strokeStyle = NOTEBOOK.paperEdge;
+  c.lineWidth = 2;
+  c.strokeRect(-w / 2, -h / 2, w, h);
+  drawTapeAccent(c, -74, -h / 2 - 14, 148, 48, -0.025);
+  c.restore();
+}
+
+function drawTapeAccent(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rotation = 0,
+) {
+  c.save();
+  c.translate(x + w / 2, y + h / 2);
+  c.rotate(rotation);
+  c.fillStyle = NOTEBOOK.tape;
+  c.beginPath();
+  c.moveTo(-w / 2 + 8, -h / 2);
+  c.lineTo(w / 2, -h / 2 + 5);
+  c.lineTo(w / 2 - 7, h / 2);
+  c.lineTo(-w / 2, h / 2 - 4);
+  c.closePath();
+  c.fill();
+  c.restore();
+}
+
+export function drawPartialBorderBox(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: string,
+) {
+  const corner = Math.min(82, w * 0.16, h * 0.32);
+  c.strokeStyle = color;
+  c.lineWidth = 3;
+  c.beginPath();
+  c.moveTo(x, y + corner);
+  c.lineTo(x, y);
+  c.lineTo(x + corner, y);
+  c.moveTo(x + w - corner, y);
+  c.lineTo(x + w, y);
+  c.lineTo(x + w, y + corner);
+  c.moveTo(x + w, y + h - corner);
+  c.lineTo(x + w, y + h);
+  c.lineTo(x + w - corner, y + h);
+  c.moveTo(x + corner, y + h);
+  c.lineTo(x, y + h);
+  c.lineTo(x, y + h - corner);
+  c.stroke();
+}
+
+function drawNotebookFooter(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
+  c.fillStyle = NOTEBOOK.muted;
+  c.font = "italic 20px Georgia";
+  c.fillText(project.title, 76, H - 60);
+
+  c.fillStyle = NOTEBOOK.navy;
+  c.font = "700 21px Arial";
+  c.textAlign = "right";
+  c.fillText(String(page.pageNumber).padStart(2, "0"), W - 76, H - 60);
+  c.textAlign = "left";
+}
+
+function drawHandwrittenNoteLabel(
+  c: CanvasRenderingContext2D,
+  label: string,
+  x: number,
+  y: number,
+  color: string,
+) {
+  c.fillStyle = color;
+  c.font = "italic 700 22px 'Segoe Print', 'Bradley Hand', cursive";
+  c.fillText(label, x, y);
+}
+
+function drawScribbleUnderline(c: CanvasRenderingContext2D, x: number, y: number, w: number, color: string) {
+  c.strokeStyle = color;
+  c.lineWidth = 3;
+  c.lineCap = "round";
+  c.beginPath();
+  c.moveTo(x, y);
+  c.bezierCurveTo(x + w * 0.24, y - 5, x + w * 0.52, y + 5, x + w, y - 1);
+  c.stroke();
+  c.lineCap = "butt";
+}
+
+function drawNotebookHighlights(c: CanvasRenderingContext2D, highlights: string[], x: number, y: number, w: number) {
+  c.font = "26px Georgia";
+  highlights.slice(0, 2).forEach((item, index) => {
+    const itemY = y + index * 64;
+    c.fillStyle = index % 2 ? NOTEBOOK.navy : NOTEBOOK.green;
+    c.beginPath();
+    c.arc(x + 8, itemY - 9, 5, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = NOTEBOOK.ink;
+    wrap(c, item, x + 32, itemY, w - 32, 34, 2);
+  });
+}
+
+function notebookReflectionLabel(page: VisualBookPage) {
+  if (page.role === "cta") return "TONIGHT’S TRUTHS";
+  if (page.layout === "quote") return "REFLECTION";
+  if (page.pageNumber === 2) return "WHAT MATTERS MOST";
+  return "FIELD NOTE";
+}
+
+function notebookCopy(source: unknown, title: string) {
+  const clean = String(source).replace(/\s+/g, " ").trim();
+  const sentences = clean.split(/(?<=[.!?])\s+/).map((item) => item.trim()).filter(Boolean);
+  const noteSource = sentences[0] || title;
+  const note = noteSource.length > 118 ? `${noteSource.slice(0, 115).trim()}…` : noteSource;
+  const highlights = (sentences.length > 2 ? sentences.slice(-2) : sentences.slice(0, 2))
+    .map((item) => item.length > 125 ? `${item.slice(0, 122).trim()}…` : item);
+
+  if (!highlights.length) highlights.push(title);
+
+  return {
+    body: clean || title,
+    note,
+    highlights,
+  };
 }
 
 async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
