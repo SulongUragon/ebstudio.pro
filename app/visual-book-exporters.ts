@@ -142,6 +142,7 @@ export function resolveEditorialLayout(
 async function drawEditorialVisual(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
   const pageIndex = Math.max(0, page.pageNumber - 1);
   const layout = resolveEditorialLayout(page);
+  const denseCopy = visualWordCount(page.body) > 115;
 
   if (page.role === "cover") {
     await drawCover(c, project, page);
@@ -160,17 +161,17 @@ async function drawEditorialVisual(c: CanvasRenderingContext2D, project: VisualB
     return;
   }
 
-  if (layout === "full-bleed") {
+  if (layout === "full-bleed" && !denseCopy) {
     await drawCinematicFullBleed(c, project, page);
     return;
   }
 
-  if (layout === "image-left") {
+  if (layout === "image-left" && !denseCopy) {
     await drawSplitEditorial(c, page, "left");
     return;
   }
 
-  if (layout === "image-right") {
+  if (layout === "image-right" && !denseCopy) {
     await drawSplitEditorial(c, page, "right");
     return;
   }
@@ -200,7 +201,7 @@ async function drawNotebookReflectionPage(
   const photoX = photoOnLeft ? 76 : 674;
   const titleX = photoOnLeft ? 604 : 76;
   const titleWidth = 520;
-  const copy = notebookCopy(page.body, page.title);
+  const copy = buildVisualPageSections(page.body, page.title);
   const label = notebookReflectionLabel(page);
 
   drawHandwrittenNoteLabel(c, page.role === "cta" ? "CLOSING NOTE" : "FIELD NOTE", 76, 78, NOTEBOOK.green);
@@ -217,8 +218,9 @@ async function drawNotebookReflectionPage(
   await drawPinnedPhoto(c, page.imageData, photoX, 172, 450, 570, page.pageNumber % 2 ? -0.025 : 0.022);
 
   c.fillStyle = NOTEBOOK.ink;
-  c.font = "29px Georgia";
-  const afterBody = wrap(c, copy.body, 78, 850, 1042, 47, 9);
+  const notebookType = visualBodyTypography(copy.body);
+  c.font = `${notebookType.fontSize}px Georgia`;
+  const afterBody = wrap(c, copy.body, 78, 850, 1042, notebookType.lineHeight, Math.max(10, notebookType.maxLines));
 
   const boxY = Math.min(Math.max(afterBody + 50, 1335), 1440);
   drawPartialBorderBox(c, 78, boxY, 1044, 245, page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
@@ -411,23 +413,6 @@ function notebookReflectionLabel(page: VisualBookPage) {
   return "FIELD NOTE";
 }
 
-function notebookCopy(source: unknown, title: string) {
-  const clean = String(source).replace(/\s+/g, " ").trim();
-  const sentences = clean.split(/(?<=[.!?])\s+/).map((item) => item.trim()).filter(Boolean);
-  const noteSource = sentences[0] || title;
-  const note = noteSource.length > 118 ? `${noteSource.slice(0, 115).trim()}…` : noteSource;
-  const highlights = (sentences.length > 2 ? sentences.slice(-2) : sentences.slice(0, 2))
-    .map((item) => item.length > 125 ? `${item.slice(0, 122).trim()}…` : item);
-
-  if (!highlights.length) highlights.push(title);
-
-  return {
-    body: clean || title,
-    note,
-    highlights,
-  };
-}
-
 async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
   await imageCover(c, page.imageData, 0, 0, W, H, THEME.charcoal);
 
@@ -460,7 +445,7 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
 }
 
 async function drawOpeningEditorial(c: CanvasRenderingContext2D, page: VisualBookPage) {
-  const copy = editorialCopy(page.body);
+  const copy = buildVisualPageSections(page.body, page.title);
 
   c.fillStyle = THEME.ink;
   c.font = "700 82px Georgia";
@@ -468,21 +453,24 @@ async function drawOpeningEditorial(c: CanvasRenderingContext2D, page: VisualBoo
   drawAccentLine(c, 78, afterTitle + 22, 300);
 
   const imageY = afterTitle + 82;
-  const imageH = Math.min(650, 1050 - imageY);
+  const requestedImageH = visualWordCount(copy.body) > 120 ? 500 : visualWordCount(copy.body) > 90 ? 570 : 650;
+  const imageH = Math.min(requestedImageH, 1050 - imageY);
   await imageCover(c, page.imageData, 76, imageY, 1048, imageH, THEME.paperWarm);
   drawImageFrame(c, 76, imageY, 1048, imageH);
 
   c.fillStyle = "#312d2b";
-  c.font = "30px Arial";
-  const afterBody = wrap(c, copy.body, 78, imageY + imageH + 88, 1010, 48, 7);
+  const bodyType = visualBodyTypography(copy.body);
+  c.font = `${bodyType.fontSize}px Arial`;
+  const afterBody = wrap(c, copy.body, 78, imageY + imageH + 82, 1010, bodyType.lineHeight, bodyType.maxLines);
 
   drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 44, 1430), 1500), 1044, 210, copy.highlights);
   drawFooter(c, page);
 }
 
 async function drawImageTopEditorial(c: CanvasRenderingContext2D, page: VisualBookPage, pageIndex: number) {
-  const imageH = pageIndex % 3 === 0 ? 680 : 630;
-  const copy = editorialCopy(page.body);
+  const copy = buildVisualPageSections(page.body, page.title);
+  const words = visualWordCount(copy.body);
+  const imageH = words > 130 ? 440 : words > 100 ? 520 : pageIndex % 3 === 0 ? 680 : 630;
 
   await imageCover(c, page.imageData, 76, 150, 1048, imageH, THEME.paperWarm);
   drawImageFrame(c, 76, 150, 1048, imageH);
@@ -495,8 +483,9 @@ async function drawImageTopEditorial(c: CanvasRenderingContext2D, page: VisualBo
   drawAccentLine(c, 78, afterTitle + 28, 320);
 
   c.fillStyle = "#312d2b";
-  c.font = "31px Arial";
-  const afterBody = wrap(c, copy.body, 78, afterTitle + 92, 1010, 49, 8);
+  const bodyType = visualBodyTypography(copy.body);
+  c.font = `${bodyType.fontSize}px Arial`;
+  const afterBody = wrap(c, copy.body, 78, afterTitle + 88, 1010, bodyType.lineHeight, bodyType.maxLines);
 
   drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 54, 1400), 1490), 1044, 220, copy.highlights);
   drawFooter(c, page);
@@ -507,7 +496,7 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
   const textX = imageSide === "left" ? 650 : 78;
   const imageW = 470;
   const imageH = 1320;
-  const copy = editorialCopy(page.body);
+  const copy = buildVisualPageSections(page.body, page.title);
 
   await imageCover(c, page.imageData, imageX, 178, imageW, imageH, THEME.paperWarm);
   drawImageFrame(c, imageX, 178, imageW, imageH);
@@ -519,8 +508,9 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
   drawAccentLine(c, textX, afterTitle + 28, 210);
 
   c.fillStyle = "#302d2a";
-  c.font = "31px Arial";
-  const afterBody = wrap(c, copy.body, textX, afterTitle + 92, 480, 50, 13);
+  const bodyType = visualBodyTypography(copy.body, true);
+  c.font = `${bodyType.fontSize}px Arial`;
+  const afterBody = wrap(c, copy.body, textX, afterTitle + 88, 480, bodyType.lineHeight, bodyType.maxLines);
 
   const boxY = Math.min(Math.max(afterBody + 56, 1130), 1280);
   drawCompactBox(c, textX, boxY, 480, 260, copy.highlights);
@@ -529,19 +519,21 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
 }
 
 async function drawClosingEditorial(c: CanvasRenderingContext2D, page: VisualBookPage) {
-  const copy = editorialCopy(page.body);
+  const copy = buildVisualPageSections(page.body, page.title);
+  const imageH = visualWordCount(copy.body) > 115 ? 470 : visualWordCount(copy.body) > 90 ? 540 : 610;
 
-  await imageCover(c, page.imageData, 76, 150, 1048, 610, THEME.paperWarm);
-  drawImageFrame(c, 76, 150, 1048, 610);
+  await imageCover(c, page.imageData, 76, 150, 1048, imageH, THEME.paperWarm);
+  drawImageFrame(c, 76, 150, 1048, imageH);
 
   c.fillStyle = THEME.ink;
   c.font = "700 84px Georgia";
-  const afterTitle = wrap(c, page.title, 84, 900, 1010, 90, 3);
+  const afterTitle = wrap(c, page.title, 84, imageH + 290, 1010, 90, 3);
   drawAccentLine(c, 86, afterTitle + 24, 300);
 
   c.fillStyle = "#302d2a";
-  c.font = "31px Arial";
-  const afterBody = wrap(c, copy.body, 86, afterTitle + 88, 990, 50, 8);
+  const bodyType = visualBodyTypography(copy.body);
+  c.font = `${bodyType.fontSize}px Arial`;
+  const afterBody = wrap(c, copy.body, 86, afterTitle + 84, 990, bodyType.lineHeight, bodyType.maxLines);
 
   drawTakeawayBox(c, 86, Math.min(Math.max(afterBody + 48, 1430), 1490), 1028, 220, copy.highlights);
   drawFooter(c, page);
@@ -562,8 +554,10 @@ async function drawCinematicFullBleed(c: CanvasRenderingContext2D, project: Visu
   const afterTitle = wrap(c, page.title, 86, 1195, 990, 94, 4);
 
   c.fillStyle = "rgba(255,248,235,.88)";
-  c.font = "30px Arial";
-  wrap(c, page.body, 90, afterTitle + 54, 930, 46, 5);
+  const copy = buildVisualPageSections(page.body, page.title);
+  const bodyType = visualBodyTypography(copy.body);
+  c.font = `${bodyType.fontSize}px Arial`;
+  wrap(c, copy.body, 90, afterTitle + 50, 930, bodyType.lineHeight, Math.min(7, bodyType.maxLines));
 
   c.fillStyle = "rgba(255,248,235,.78)";
   c.font = "700 22px Arial";
@@ -572,22 +566,27 @@ async function drawCinematicFullBleed(c: CanvasRenderingContext2D, project: Visu
 }
 
 async function drawQuoteEditorial(c: CanvasRenderingContext2D, page: VisualBookPage) {
-  await imageCover(c, page.imageData, 80, 150, 1040, 600, THEME.paperWarm);
-  drawImageFrame(c, 80, 150, 1040, 600);
+  const copy = buildVisualPageSections(page.body, page.title);
+  const imageH = visualWordCount(copy.body) > 115 ? 410 : visualWordCount(copy.body) > 90 ? 480 : 540;
+  await imageCover(c, page.imageData, 80, 150, 1040, imageH, THEME.paperWarm);
+  drawImageFrame(c, 80, 150, 1040, imageH);
 
   c.fillStyle = THEME.wine;
   c.font = "700 112px Georgia";
-  c.fillText("“", 94, 955);
+  c.fillText("“", 94, imageH + 335);
 
   c.fillStyle = THEME.ink;
   c.font = "700 72px Georgia";
-  const afterTitle = wrap(c, page.title, 154, 940, 880, 82, 4);
+  const afterTitle = wrap(c, page.title, 154, imageH + 320, 880, 82, 4);
 
   drawAccentLine(c, 156, afterTitle + 26, 260);
 
   c.fillStyle = "#302d2a";
-  c.font = "30px Arial";
-  wrap(c, page.body, 156, afterTitle + 88, 870, 48, 8);
+  const bodyType = visualBodyTypography(copy.body);
+  c.font = `${bodyType.fontSize}px Arial`;
+  const afterBody = wrap(c, copy.body, 156, afterTitle + 84, 870, bodyType.lineHeight, Math.min(8, bodyType.maxLines));
+
+  drawTakeawayBox(c, 80, Math.min(Math.max(afterBody + 42, 1440), 1490), 1040, 210, copy.highlights);
 
   drawFooter(c, page);
 }
@@ -939,24 +938,48 @@ function wrap(
   return y + lines.length * lh;
 }
 
-function editorialCopy(source: unknown) {
+export function buildVisualPageSections(source: unknown, title = "") {
   const clean = String(source).replace(/\s+/g, " ").trim();
   const sentences = clean
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.replace(/^[-•]\s*/, "").trim())
     .filter(Boolean);
 
-  if (sentences.length < 2) return { body: clean, highlights: [] as string[] };
-
-  const highlightCount = sentences.length >= 4 ? 2 : 1;
-  const highlights = sentences.slice(-highlightCount).map((sentence) =>
-    sentence.length > 112 ? `${sentence.slice(0, 109).trim()}…` : sentence,
-  );
+  const fallback = clean || title.trim();
+  const highlightCount = sentences.length >= 4 ? 2 : sentences.length >= 2 ? 1 : 0;
+  const highlightSource = highlightCount ? sentences.slice(-highlightCount) : fallback ? [fallback] : [];
+  const highlights = highlightSource.map((sentence) => excerpt(sentence, 125));
+  const noteSource = sentences[0] || fallback;
 
   return {
-    body: sentences.slice(0, -highlightCount).join(" "),
+    body: fallback,
     highlights,
+    note: excerpt(noteSource, 118),
   };
+}
+
+export function visualBodyTypography(source: unknown, narrow = false) {
+  const words = visualWordCount(source);
+
+  if (narrow) {
+    if (words > 115) return { fontSize: 24, lineHeight: 38, maxLines: 16 };
+    if (words > 82) return { fontSize: 26, lineHeight: 41, maxLines: 15 };
+    return { fontSize: 29, lineHeight: 46, maxLines: 13 };
+  }
+
+  if (words > 135) return { fontSize: 25, lineHeight: 39, maxLines: 10 };
+  if (words > 95) return { fontSize: 27, lineHeight: 42, maxLines: 9 };
+  return { fontSize: 30, lineHeight: 47, maxLines: 8 };
+}
+
+function visualWordCount(source: unknown) {
+  return String(source).trim().split(/\s+/).filter(Boolean).length;
+}
+
+function excerpt(source: string, limit: number) {
+  if (source.length <= limit) return source;
+  const clipped = source.slice(0, limit - 1).replace(/\s+\S*$/, "").trim();
+  return `${clipped || source.slice(0, limit - 1).trim()}…`;
 }
 
 function roundedRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
