@@ -467,17 +467,17 @@ async function createVisualStoryboard(body: RequestBody) {
     schema: { type: "object", additionalProperties: false, properties: { refined_subtitle: { type: "string" }, character_bible: { type: "string" }, palette: { type: "string" }, pages: { type: "array", items: visualPageSchema } }, required: ["refined_subtitle", "character_bible", "palette", "pages"] },
     instructions: comic
       ? "You are the graphic-story director inside EB Studio Pro. Create concise, visually clear, original comic storyboards with consistent characters, deliberate panel rhythm, readable dialogue, and a complete emotional arc. Never imitate a living artist or copyrighted franchise. Never use the em dash character."
-      : "You are the visual publishing director inside EB Studio Pro. Create concise, premium mini ebooks where every page has one clear job, short publication-ready copy, and art direction that materially supports the text. Never invent factual claims, research, credentials, or statistics. Never use the em dash character.",
+      : "You are the visual publishing director inside EB Studio Pro. Create premium, content-rich mini ebooks where every page has one clear job, substantial publication-ready copy, and art direction that materially supports the text. Every page must earn its place and give the reader real narrative, emotional, practical, or reflective value. Never pad pages with generic slogans, repeated ideas, invented facts, research, credentials, or statistics. Never use the em dash character.",
     input: `${visualProjectContext(project)}
 
 Create exactly ${pageCount} total pages, including the cover. Page 1 is the cover. The final page must provide a satisfying resolution for a story, or a focused takeaway and call to action for a guide, teaser, lead magnet, or product book.
 
 ${comic
   ? `This is a comic. Every non-cover page must contain 1 to 4 panels. Use the selected ${project.comicFormat} format. Put all spoken words in dialogue, narration in caption, and optional short impact lettering in sound_effect. Keep every dialogue line concise enough to fit in a speech bubble. The page body may contain a one-sentence page note but must not repeat the dialogue. For the cover return one panel. Each panel scene must describe only the visible art, without speech bubbles, captions, lettering, written signs, watermarks, or logos.`
-  : `This is an image-rich mini ebook, not a chapter book. Keep cover body to one short hook. Keep every other body between 25 and 90 words, using fewer words when the image carries the moment. Return an empty panels array and panel_count 0 on every page. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks.`}
+  : `This is an image-rich mini ebook, not a chapter book. Keep the cover body to a focused 12 to 28 word hook. Every non-cover page must contain 90 to 150 words across 4 to 7 complete sentences. Build one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflective observations that can become designed takeaway sections. For fiction and memoir, use concrete scene detail, interiority, and consequence. For guides, workbooks, lead magnets, and self-help, use explanation, practical application, and a meaningful reflection or takeaway. Use the available page space fully, but never repeat an idea merely to increase length. Return an empty panels array and panel_count 0 on every page. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks.`}
 
 Maintain a single narrative or instructional progression with no repeated page purpose. The title supplied by the author is authoritative and must not be changed. If the subtitle is blank, create one in refined_subtitle. If the author supplied one, return it exactly. Strengthen the character bible and palette only when their fields are blank. Return exactly ${pageCount} page objects numbered 1 through ${pageCount}.`,
-    maxOutputTokens: comic ? 9000 : 6500,
+    maxOutputTokens: comic ? 9000 : 8000,
   }, body.provider ?? "auto", body.preferredProvider);
   const pages = Array.isArray(generated.output.pages) ? generated.output.pages : [];
   if (pages.length !== pageCount) throw new ProviderRequestError(generated.provider, 502, "invalid_response", `The visual storyboard did not contain exactly ${pageCount} pages.`);
@@ -508,8 +508,8 @@ Current art direction: ${page.imagePrompt}
 
 Preserve its role in the complete book and return the same page_number. ${comic
   ? "Return 1 to 4 panels. Put spoken words only in dialogue, narration only in caption, and visible impact lettering only in sound_effect. Panel scene art directions must exclude all written words, speech bubbles, signs, logos, and watermarks."
-  : "Return no panels, panel_count 0, and 25 to 90 words of body copy unless this is the cover. The image_prompt must exclude all words, lettering, typography, logos, and watermarks."}`,
-    maxOutputTokens: comic ? 3400 : 1800,
+  : "Return no panels and panel_count 0. Unless this is the cover, return 90 to 150 words across 4 to 7 complete sentences: one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflections. Use concrete story detail for fiction and practical value for guides. Fill the page meaningfully without generic padding or repeated ideas. The image_prompt must exclude all words, lettering, typography, logos, and watermarks."}`,
+    maxOutputTokens: comic ? 3400 : 2400,
   }, body.provider ?? "auto", body.preferredProvider);
   return { ...generated.output, provider: generated.provider };
 }
