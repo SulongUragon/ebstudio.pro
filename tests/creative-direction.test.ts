@@ -5,6 +5,7 @@ import {
   buildAskEBCreativeGuidance,
   buildCopywritingGuidance,
   buildCoverPrompt,
+  buildCoverTypographyLayout,
   buildVisualArtworkDirection,
   describeVisualDirection,
   formatPremiumCoverAuthor,
@@ -17,6 +18,7 @@ import {
   rejectCoverPlaceholderArtifacts,
   stripCoverPlaceholderText,
   validateCoverPromptForPlaceholders,
+  validateCoverArtworkPrompt,
 } from "../app/creative-direction";
 
 const houseContext = {
@@ -104,7 +106,8 @@ test("rain-soaked gothic combines style, surface finish, and market finish", () 
   assert.match(prompt, /old house or window/i);
   assert.match(prompt, /warm glowing window/i);
   assert.match(prompt, /deep navy and teal/i);
-  assert.match(prompt, /premium spaced small caps/i);
+  assert.match(prompt, /IMAGE-ONLY ARTWORK/i);
+  assert.doesNotMatch(prompt, /premium spaced small caps/i);
 });
 
 test("creative finish auto inference and aliases remain safe", () => {
@@ -130,7 +133,7 @@ test("premium author typography follows the selected market finish", () => {
 });
 
 test("customer-facing gothic prompt uses the actual premium author credit", () => {
-  const prompt = buildCoverPrompt({
+  const input = {
     mode: "fiction",
     title: "The Window That Waited for Thunder",
     subtitle: "A gothic novel about inheritance, silence, and the storm a family refused to name.",
@@ -140,12 +143,42 @@ test("customer-facing gothic prompt uses the actual premium author credit", () =
     style: "photoreal-title",
     finishDirection: "premium glossy cover finish",
     creativeFinish: "rain-soaked-gothic",
+  } as const;
+  const artworkPrompt = buildCoverPrompt(input);
+  const typographyLayout = buildCoverTypographyLayout(input);
+  assert.doesNotMatch(artworkPrompt, /S U L O N G|SULONG URAGON/i);
+  assert.match(typographyLayout, /S U L O N G\s{3}U R A G O N/);
+  assert.match(typographyLayout, /The Window That Waited for Thunder/i);
+  assert.match(typographyLayout, /gothic novel about inheritance/i);
+  assert.equal(validateCoverArtworkPrompt(artworkPrompt), true);
+  assert.equal(validateCoverPromptForPlaceholders(typographyLayout), true);
+});
+
+test("cover artwork prompt is image-only while preserving gothic visual direction", () => {
+  const artworkPrompt = buildCoverPrompt({
+    mode: "fiction",
+    title: "The Window That Waited for Thunder",
+    subtitle: "A gothic novel about inheritance and silence.",
+    author: "Sulong Uragon",
+    genre: "Literary Gothic Mystery",
+    premise: "A woman returns to an old coastal house during a violent rainstorm.",
+    style: "photoreal-title",
+    finishDirection: "premium glossy cover finish",
+    creativeFinish: "rain-soaked-gothic",
   });
-  assert.match(prompt, /S U L O N G\s{3}U R A G O N/);
-  assert.doesNotMatch(prompt, /\b(?:AUTHOR NAME|YOUR NAME|BOOK TITLE|LOREM IPSUM|SAMPLE TEXT)\b/i);
-  assert.match(prompt, /template placeholders/i);
-  assert.match(prompt, /do not render any author wording/i);
-  assert.equal(validateCoverPromptForPlaceholders(prompt), true);
+  for (const constraint of [
+    /no text/i, /no letters/i, /no words/i, /no typography/i,
+    /no title/i, /no subtitle/i, /no author name/i, /no watermark/i,
+  ]) assert.match(artworkPrompt, constraint);
+  assert.doesNotMatch(artworkPrompt, /render\s+(?:the\s+)?(?:title|subtitle|author)/i);
+  assert.doesNotMatch(artworkPrompt, /(?:serif|sans|display)\s+title/i);
+  assert.doesNotMatch(artworkPrompt, /Sulong Uragon|S U L O N G/i);
+  assert.match(artworkPrompt, /Real Person/i);
+  assert.match(artworkPrompt, /rain/i);
+  assert.match(artworkPrompt, /old house or window/i);
+  assert.match(artworkPrompt, /warm glowing window/i);
+  assert.match(artworkPrompt, /solitary believable woman/i);
+  assert.match(artworkPrompt, /navy and teal/i);
 });
 
 test("cover placeholder sanitizer removes template values and preserves real names", () => {
@@ -164,16 +197,15 @@ test("cover placeholder sanitizer removes template values and preserves real nam
 
 test("missing or placeholder author is omitted without generating a template credit", () => {
   for (const author of ["", "AUTHOR NAME", "Your Name"]) {
-    const prompt = buildCoverPrompt({
+    const input = {
       ...houseContext,
       author,
-      style: "photoreal-title",
-      finishDirection: "premium glossy cover finish",
       creativeFinish: "rain-soaked-gothic",
-    });
-    assert.match(prompt, /no author was supplied, so omit the author line entirely/i);
-    assert.doesNotMatch(prompt, /AUTHOR NAME|YOUR NAME/i);
-    assert.equal(validateCoverPromptForPlaceholders(prompt), true);
+    };
+    const layout = buildCoverTypographyLayout(input);
+    assert.match(layout, /omit the author line/i);
+    assert.doesNotMatch(layout, /AUTHOR NAME|YOUR NAME/i);
+    assert.equal(validateCoverPromptForPlaceholders(layout), true);
   }
 });
 
@@ -184,18 +216,14 @@ test("customer-facing cover prompts reject internal labels and title artifacts",
     finishDirection: "matte printed finish",
   });
 
-  assert.equal(prompt.split(houseContext.title).length - 1, 1);
+  assert.doesNotMatch(prompt, new RegExp(houseContext.title, "i"));
   assert.doesNotMatch(prompt, /EB Studio Pro/i);
   assert.doesNotMatch(prompt, /KDP Edition/i);
-  assert.match(prompt, /exact title once and only once/i);
-  assert.match(prompt, /ghost title/i);
-  assert.match(prompt, /background lettering/i);
-  assert.match(prompt, /internal product or edition labels/i);
-  assert.match(prompt, /random cropped title bands/i);
-  assert.match(prompt, /watermarks/i);
-  assert.match(prompt, /author credit tiny or unreadable/i);
-  assert.match(prompt, /author and subtitle overlap/i);
-  assert.match(prompt, /Subtitle and author will be added separately/i);
+  assert.match(prompt, /IMAGE-ONLY ARTWORK/i);
+  assert.match(prompt, /no ghost text/i);
+  assert.match(prompt, /no publisher mark/i);
+  assert.match(prompt, /no watermark/i);
+  assert.equal(validateCoverArtworkPrompt(prompt), true);
 });
 
 test("custom cover direction remains highest priority without weakening safety", () => {
@@ -208,8 +236,8 @@ test("custom cover direction remains highest priority without weakening safety",
 
   assert.match(prompt, /highest priority/i);
   assert.match(prompt, /woman under a red umbrella beside the garden gate/i);
-  assert.match(prompt, /author request wins/i);
-  assert.match(prompt, /Do not add a second title/i);
+  assert.match(prompt, /image-only rule always overrides/i);
+  assert.match(prompt, /no text/i);
 });
 
 test("genre-aware copy frameworks separate fiction atmosphere from nonfiction outcomes", () => {
