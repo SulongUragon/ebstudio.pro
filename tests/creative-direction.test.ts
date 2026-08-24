@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CREATIVE_COVER_FINISH_OPTIONS,
   buildAskEBCreativeGuidance,
   buildCopywritingGuidance,
   buildCoverPrompt,
   buildVisualArtworkDirection,
   describeVisualDirection,
+  formatPremiumCoverAuthor,
+  getCreativeCoverFinishPreset,
+  inferCreativeCoverFinish,
   inferCreativeGenre,
+  resolveCreativeCoverFinishId,
   resolveVisualBookKindId,
   resolveVisualStyleId,
 } from "../app/creative-direction";
@@ -72,6 +77,55 @@ test("gothic literary cover direction turns the title into a cinematic compositi
   assert.match(prompt, /Background:/);
 });
 
+test("creative cover finish options expose every supported market preset", () => {
+  const labels = CREATIVE_COVER_FINISH_OPTIONS.map((option) => option.label);
+  assert.equal(new Set(labels).size, labels.length);
+  for (const label of [
+    "Auto", "Rain-Soaked Gothic", "Gothic Literary", "Cinematic Mystery",
+    "Dark Academia", "Emotional Memoir", "Premium Nonfiction", "Founder Authority",
+    "Warm Storybook", "Minimal Literary", "Luxury Thriller", "Dark Romance",
+    "Epic Fantasy", "Clean How-To", "Product Guide Premium",
+  ]) assert.ok(labels.includes(label as (typeof labels)[number]), `${label} should be selectable`);
+});
+
+test("rain-soaked gothic combines style, surface finish, and market finish", () => {
+  const prompt = buildCoverPrompt({
+    ...houseContext,
+    style: "photoreal-title",
+    finishDirection: "glossy premium surface finish",
+    creativeFinish: "rain-soaked-gothic",
+  });
+  assert.match(prompt, /Real Person/i);
+  assert.match(prompt, /glossy premium surface finish/i);
+  assert.match(prompt, /Rain-Soaked Gothic/i);
+  assert.match(prompt, /old house or window/i);
+  assert.match(prompt, /warm glowing window/i);
+  assert.match(prompt, /deep navy and teal/i);
+  assert.match(prompt, /premium spaced small caps/i);
+});
+
+test("creative finish auto inference and aliases remain safe", () => {
+  assert.equal(inferCreativeCoverFinish(houseContext), "rain-soaked-gothic");
+  assert.equal(resolveCreativeCoverFinishId("Founder/Business Authority"), "founder-authority");
+  assert.equal(resolveCreativeCoverFinishId("unknown future preset"), "auto");
+  assert.equal(getCreativeCoverFinishPreset("auto", houseContext).label, "Rain-Soaked Gothic");
+});
+
+test("premium author typography follows the selected market finish", () => {
+  assert.equal(
+    formatPremiumCoverAuthor("Sulong Uragon", "rain-soaked-gothic", houseContext),
+    "S U L O N G   U R A G O N",
+  );
+  const founder = {
+    mode: "nonfiction" as const,
+    title: "The Focused Founder",
+    genre: "Business",
+    topic: "A practical operating system for founders",
+  };
+  assert.equal(formatPremiumCoverAuthor("Sulong Uragon", "founder-authority", founder), "SULONG URAGON");
+  assert.equal(formatPremiumCoverAuthor("Sulong Uragon", "warm-storybook", houseContext), "SULONG URAGON");
+});
+
 test("customer-facing cover prompts reject internal labels and title artifacts", () => {
   const prompt = buildCoverPrompt({
     ...houseContext,
@@ -88,6 +142,8 @@ test("customer-facing cover prompts reject internal labels and title artifacts",
   assert.match(prompt, /internal product or edition labels/i);
   assert.match(prompt, /random cropped title bands/i);
   assert.match(prompt, /watermarks/i);
+  assert.match(prompt, /tiny or illegible author names/i);
+  assert.match(prompt, /author and subtitle overlap/i);
   assert.match(prompt, /Subtitle and author will be added separately/i);
 });
 
@@ -134,6 +190,9 @@ test("Ask EB guidance demands immediately usable subtitles, blurbs, and cover di
   assert.match(guidance, /negative constraints/i);
   assert.match(guidance, /existing mini-book type/i);
   assert.match(guidance, /existing visual direction/i);
+  assert.match(guidance, /Creative Cover Finish/i);
+  assert.match(guidance, /Rain-Soaked Gothic/i);
+  assert.match(guidance, /author treatment/i);
 });
 
 test("premium recommendations map back to backward-compatible visual style IDs", () => {

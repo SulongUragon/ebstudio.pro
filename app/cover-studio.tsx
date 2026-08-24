@@ -4,6 +4,10 @@ import { Check, ImageIcon, LoaderCircle, RefreshCw, Sparkles } from "lucide-reac
 import { useEffect, useRef, useState } from "react";
 import type { AuthorStyle, CoverDesign, Manuscript } from "./book-types";
 import {
+  CREATIVE_COVER_FINISH_OPTIONS,
+  formatPremiumCoverAuthor,
+} from "./creative-direction";
+import {
   contrastingTextStroke,
   getCoverTypographyPreset,
   normalizeCoverTypographyPreset,
@@ -36,6 +40,25 @@ const finishes = [
   { id: "glossy-premium", label: "Glossy Premium" },
 ];
 
+function formattedCoverAuthor(
+  manuscript: Manuscript,
+  subtitle: string,
+  creativeFinish: string,
+  authorStyle: AuthorStyle,
+) {
+  if (authorStyle !== "uppercase") return manuscript.author;
+  return formatPremiumCoverAuthor(manuscript.author, creativeFinish, {
+    mode: manuscript.mode,
+    title: manuscript.title,
+    subtitle,
+    genre: manuscript.brief.genre,
+    topic: manuscript.brief.topic,
+    premise: manuscript.brief.premise,
+    audience: manuscript.brief.audience,
+    keyPoints: manuscript.brief.keyPoints,
+  });
+}
+
 export default function CoverStudio({
   manuscript,
   onSave,
@@ -54,6 +77,9 @@ export default function CoverStudio({
   );
   const [style, setStyle] = useState(initialStyle);
   const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
+  const [creativeFinish, setCreativeFinish] = useState(
+    manuscript.cover?.creativeFinish ?? "auto",
+  );
   const [customDirection, setCustomDirection] = useState("");
   const [authorStyle, setAuthorStyle] = useState<AuthorStyle>(
     manuscript.cover?.authorStyle ?? "uppercase",
@@ -121,7 +147,12 @@ export default function CoverStudio({
           const imageData = await composeCover(
             currentCover.sourceImageData ?? "",
             coverSubtitle.trim(),
-            currentManuscript.author,
+            formattedCoverAuthor(
+              currentManuscript,
+              coverSubtitle.trim(),
+              creativeFinish,
+              authorStyle,
+            ),
             finish,
             style,
             autoFitText,
@@ -141,6 +172,7 @@ export default function CoverStudio({
             sourceImageData: currentCover.sourceImageData,
             style,
             finish,
+            creativeFinish,
             displayTitle: exactTitle,
             displaySubtitle: coverSubtitle.trim(),
             showTitle: false,
@@ -175,6 +207,7 @@ export default function CoverStudio({
     autoFitText,
     coverSubtitle,
     coverTitle,
+    creativeFinish,
     finish,
     loading,
     manuscript.author,
@@ -207,6 +240,7 @@ export default function CoverStudio({
           subtitle: exactSubtitle,
           style,
           finish,
+          creativeFinish,
           customDirection: customDirection.trim(),
         }),
       });
@@ -232,7 +266,12 @@ export default function CoverStudio({
       const imageData = await composeCover(
         sourceImageData,
         exactSubtitle,
-        manuscript.author,
+        formattedCoverAuthor(
+          manuscript,
+          exactSubtitle,
+          creativeFinish,
+          authorStyle,
+        ),
         finish,
         style,
         autoFitText,
@@ -241,6 +280,7 @@ export default function CoverStudio({
         nextSubtitleAlignment,
         nextSubtitleColor,
         nextAuthorColor,
+        authorStyle,
       );
       setTypographyPreset(selectedTypographyPreset);
       setSubtitleAlignment(nextSubtitleAlignment);
@@ -253,6 +293,7 @@ export default function CoverStudio({
         sourceImageData,
         style,
         finish,
+        creativeFinish,
         displayTitle: exactTitle,
         displaySubtitle: exactSubtitle,
         showTitle: false,
@@ -297,7 +338,12 @@ export default function CoverStudio({
       const imageData = await composeCover(
         sourceImageData,
         coverSubtitle.trim(),
-        manuscript.author,
+        formattedCoverAuthor(
+          manuscript,
+          coverSubtitle.trim(),
+          creativeFinish,
+          authorStyle,
+        ),
         finish,
         style,
         autoFitText,
@@ -317,6 +363,7 @@ export default function CoverStudio({
         sourceImageData,
         style,
         finish,
+        creativeFinish,
         displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
         showTitle: false,
@@ -573,6 +620,23 @@ export default function CoverStudio({
                 ? "Soft, restrained color with a refined editorial finish."
                 : "Balanced color depth with a subtle premium sheen."}
           </small>
+          <label className="cover-select-control cover-finish-label">
+            <span>Creative Cover Finish</span>
+            <select
+              value={creativeFinish}
+              onChange={(event) => setCreativeFinish(event.target.value)}
+              disabled={loading}
+            >
+              {CREATIVE_COVER_FINISH_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <small className="cover-finish-note">
+            Controls the market and design direction, such as Rain-Soaked Gothic or Premium Nonfiction. Auto chooses from your book context.
+          </small>
           <button
             className="cover-generate-button"
             type="button"
@@ -695,13 +759,21 @@ async function composeCover(
   context.fillStyle = authorColor;
   const signature = authorStyle === "signature";
   const typewriter = authorStyle === "typewriter";
+  const premiumSpaced = /\s{3}/.test(author);
   const authorText = signature ? author : author.toUpperCase();
-  context.font = signature
-    ? '400 76px "Great Vibes", "Brush Script MT", cursive'
-    : typewriter
-      ? '700 44px "Courier Prime", "Courier New", Courier, monospace'
-      : "700 48px Arial, sans-serif";
-  context.letterSpacing = signature ? "0px" : typewriter ? "7px" : "3px";
+  let authorFontSize = signature ? 76 : typewriter ? 44 : premiumSpaced ? 44 : 48;
+  const authorFont = (size: number) =>
+    signature
+      ? `400 ${size}px "Great Vibes", "Brush Script MT", cursive`
+      : typewriter
+        ? `700 ${size}px "Courier Prime", "Courier New", Courier, monospace`
+        : `700 ${size}px Arial, sans-serif`;
+  context.font = authorFont(authorFontSize);
+  context.letterSpacing = signature || premiumSpaced ? "0px" : typewriter ? "7px" : "3px";
+  while (context.measureText(authorText).width > 1160 && authorFontSize > 30) {
+    authorFontSize -= 2;
+    context.font = authorFont(authorFontSize);
+  }
   context.lineWidth = signature ? 2 : 3;
   context.strokeStyle = contrastingTextStroke(authorColor);
   const authorY = resolveCoverAuthorY(

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { BookBrief, Mode } from "../../book-types";
-import { buildCoverPrompt } from "../../creative-direction";
+import { buildCoverPrompt, resolveCreativeCoverFinishId } from "../../creative-direction";
 
 export const maxDuration = 300;
 
@@ -10,6 +10,7 @@ type CoverRequest = {
   subtitle?: string;
   style?: string;
   finish?: string;
+  creativeFinish?: string;
   customDirection?: string;
 };
 
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       ? body.finish ?? "satin"
       : "satin";
     const finishDirection = FINISH_DIRECTIONS[finish];
+    const creativeFinish = resolveCreativeCoverFinishId(body.creativeFinish);
     const prompt = buildCoverPrompt({
       mode: body.mode,
       title: body.brief.title,
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
       keyPoints: body.brief.keyPoints,
       style,
       finishDirection,
+      creativeFinish,
       customDirection: body.customDirection,
     });
 
@@ -114,6 +117,7 @@ export async function POST(request: Request) {
       imageData: `data:image/jpeg;base64,${data.data[0].b64_json}`,
       style,
       finish,
+      creativeFinish,
     });
   } catch (error) {
     console.error(
