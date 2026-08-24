@@ -147,6 +147,7 @@ export default function CoverStudio({
           const exactTitle = resolveExactCoverTitle(currentManuscript, coverTitle);
           const imageData = await composeCover(
             currentCover.sourceImageData ?? "",
+            exactTitle,
             coverSubtitle.trim(),
             formattedCoverAuthor(
               currentManuscript,
@@ -163,6 +164,7 @@ export default function CoverStudio({
             subtitleColor,
             authorColor,
             authorStyle,
+            typographyPreset,
           );
           if (sequence !== autoApplySequence.current) return;
           onSaveRef.current({
@@ -176,7 +178,7 @@ export default function CoverStudio({
             creativeFinish,
             displayTitle: exactTitle,
             displaySubtitle: coverSubtitle.trim(),
-            showTitle: false,
+            showTitle: true,
             autoFitText,
             subtitleFontSize,
             subtitlePosition,
@@ -267,6 +269,7 @@ export default function CoverStudio({
         : authorColor;
       const imageData = await composeCover(
         sourceImageData,
+        exactTitle,
         exactSubtitle,
         formattedCoverAuthor(
           manuscript,
@@ -283,6 +286,7 @@ export default function CoverStudio({
         nextSubtitleColor,
         nextAuthorColor,
         authorStyle,
+        selectedTypographyPreset,
       );
       setTypographyPreset(selectedTypographyPreset);
       setSubtitleAlignment(nextSubtitleAlignment);
@@ -298,7 +302,7 @@ export default function CoverStudio({
         creativeFinish,
         displayTitle: exactTitle,
         displaySubtitle: exactSubtitle,
-        showTitle: false,
+        showTitle: true,
         autoFitText,
         subtitleFontSize,
         subtitlePosition,
@@ -339,6 +343,7 @@ export default function CoverStudio({
       );
       const imageData = await composeCover(
         sourceImageData,
+        exactTitle,
         coverSubtitle.trim(),
         formattedCoverAuthor(
           manuscript,
@@ -355,6 +360,7 @@ export default function CoverStudio({
         subtitleColor,
         authorColor,
         authorStyle,
+        selectedTypographyPreset,
       );
       setTypographyPreset(selectedTypographyPreset);
       onSave({
@@ -368,7 +374,7 @@ export default function CoverStudio({
         creativeFinish,
         displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
-        showTitle: false,
+        showTitle: true,
         autoFitText,
         subtitleFontSize,
         subtitlePosition,
@@ -396,7 +402,7 @@ export default function CoverStudio({
         <div>
           <span><Sparkles size={15} /> AI Book Cover Studio</span>
           <h3>Give your finished book a cover.</h3>
-          <p>AI integrates your exact title into the artwork. Subtitle and author stay editable.</p>
+          <p>AI creates text-free artwork. EB Studio Pro adds your exact title, subtitle, and author separately.</p>
         </div>
         {manuscript.cover ? <small><Check size={14} /> Cover selected</small> : null}
       </div>
@@ -657,6 +663,7 @@ export default function CoverStudio({
 
 async function composeCover(
   artworkData: string,
+  title: string,
   subtitle: string,
   author: string,
   finish: string,
@@ -668,6 +675,7 @@ async function composeCover(
   subtitleColor: string,
   authorColor: string,
   authorStyle: AuthorStyle = "uppercase",
+  typographyPresetId?: string,
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
@@ -723,8 +731,48 @@ async function composeCover(
   context.shadowOffsetY = 6;
 
   let y = 0;
+  let titleTop = 0;
+  let titleBottom = 0;
   let subtitleTop = 0;
   let subtitleBottom = 0;
+
+  const safeTitle = stripCoverPlaceholderText(title);
+  if (safeTitle) {
+    const typography = getCoverTypographyPreset(typographyPresetId);
+    const titleText = typography.uppercase ? safeTitle.toUpperCase() : safeTitle;
+    const titleFont = (size: number) =>
+      `${typography.fontWeight} ${size}px ${typography.fontFamily}`;
+    context.letterSpacing = `${typography.letterSpacing}px`;
+    const fittedTitle = fitText(
+      context,
+      titleText,
+      typography.maxWidth,
+      typography.maxLines,
+      typography.titleSize,
+      typography.minSize,
+      titleFont,
+    );
+    context.font = titleFont(fittedTitle.size);
+    context.textAlign = typography.titleAlignment;
+    context.fillStyle = typography.titleColor;
+    context.strokeStyle = contrastingTextStroke(typography.titleColor);
+    context.lineWidth = Math.max(2, fittedTitle.size * 0.045);
+    const titleX = alignmentX(typography.titleAlignment, canvas.width);
+    const titleLineHeight = fittedTitle.size * typography.lineHeight;
+    y = (canvas.height * typography.titlePosition) / 100;
+    titleTop = y;
+    for (const line of fittedTitle.lines.slice(0, typography.maxLines)) {
+      context.strokeText(line, titleX, y);
+      context.fillText(line, titleX, y);
+      y += titleLineHeight;
+    }
+    titleBottom = y;
+    if (typography.rule) {
+      context.fillStyle = "#0f5d3b";
+      context.fillRect(canvas.width * 0.39, titleBottom + 18, canvas.width * 0.22, 5);
+      titleBottom += 31;
+    }
+  }
 
   if (subtitle) {
     context.letterSpacing = "0px";
@@ -745,6 +793,7 @@ async function composeCover(
     const subtitleX = alignmentX(subtitleAlignment, canvas.width);
     const subtitleLineHeight = fittedSubtitle.size * 1.3;
     y = (canvas.height * subtitlePosition) / 100;
+    if (subtitlePosition < 70) y = Math.max(y, titleBottom + 54);
     if (subtitlePosition >= 70) {
       y -= fittedSubtitle.lines.length * subtitleLineHeight;
     }
@@ -781,6 +830,7 @@ async function composeCover(
   const authorY = resolveCoverAuthorY(
     canvas.height,
     [
+      { top: titleTop, bottom: titleBottom },
       { top: subtitleTop, bottom: subtitleBottom },
     ],
     signature

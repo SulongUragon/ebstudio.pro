@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import type { BookBrief, Mode } from "../../book-types";
 import {
   buildCoverPrompt,
+  buildCoverTypographyLayout,
   resolveCreativeCoverFinishId,
   stripCoverPlaceholderText,
+  validateCoverArtworkPrompt,
   validateCoverPromptForPlaceholders,
 } from "../../creative-direction";
 
@@ -77,7 +79,22 @@ export async function POST(request: Request) {
       creativeFinish,
       customDirection: body.customDirection,
     });
-    if (!validateCoverPromptForPlaceholders(prompt)) {
+    const typographyLayout = buildCoverTypographyLayout({
+      mode: body.mode,
+      title,
+      subtitle: body.subtitle ?? body.brief.subtitle,
+      author: stripCoverPlaceholderText(body.author),
+      genre: body.brief.genre,
+      topic: body.brief.topic,
+      premise: body.brief.premise,
+      audience: body.brief.audience,
+      keyPoints: body.brief.keyPoints,
+      creativeFinish,
+    });
+    if (
+      !validateCoverArtworkPrompt(prompt) ||
+      !validateCoverPromptForPlaceholders(typographyLayout)
+    ) {
       return NextResponse.json(
         { error: "Remove template placeholder text before generating the cover." },
         { status: 400 },
@@ -132,6 +149,7 @@ export async function POST(request: Request) {
       style,
       finish,
       creativeFinish,
+      typographyLayout,
     });
   } catch (error) {
     console.error(

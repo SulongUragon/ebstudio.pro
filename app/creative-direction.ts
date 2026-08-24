@@ -525,6 +525,9 @@ const COPY_FRAMEWORKS: Record<CreativeGenre, string> = {
 export const COVER_ARTIFACT_GUARD =
   "Render the exact title once and only once. Never invent or render template placeholders, generic author/title/subtitle/tagline labels, lorem-ipsum copy, sample-copy labels, fake book-cover labels, or duplicate author lines. Do not add a second title, ghost title, background lettering, random readable background text, fake readable text, internal product or edition labels, publisher marks, logos, watermarks, random cropped title bands, decorative word fragments, borders, mockups, books, or devices. Keep image detail away from the title, subtitle, and author zones. Prevent author and subtitle overlap, never make the real author credit tiny or unreadable, and never place text in the generated image background unless the app typography layer intentionally owns it. Avoid distorted typography, malformed anatomy, low-resolution artifacts, generic stock-photo posing, and overcrowded composition.";
 
+export const COVER_ARTWORK_NO_TEXT_GUARD =
+  "IMAGE-ONLY ARTWORK. No text, no letters, no words, no typography, no title, no subtitle, no author name, no book-cover text, no text overlay, no signage, no labels, no watermark, no publisher mark, no readable symbols, no embedded words, no ghost text, and no placeholder text anywhere in the image. Leave clean visual safe areas for the separate app typography layer.";
+
 const COVER_PLACEHOLDER_VALUE = /^(?:author name|your name|book title|title|subtitle|tagline|placeholder|lorem ipsum|sample text)$/i;
 
 export function rejectCoverPlaceholderArtifacts(text: string | undefined) {
@@ -540,6 +543,38 @@ export function validateCoverPromptForPlaceholders(prompt: string) {
   const explicitTemplateArtifact = /\b(?:author name|your name|book title|lorem ipsum|sample text)\b/i;
   const standaloneTemplateLabel = /(?:^|\n)\s*(?:title|subtitle|tagline|placeholder)\s*(?::|$)/im;
   return !explicitTemplateArtifact.test(prompt) && !standaloneTemplateLabel.test(prompt);
+}
+
+export function sanitizeCoverArtworkDirection(text: string | undefined) {
+  const clean = String(text ?? "").trim().slice(0, 900);
+  if (!clean) return "";
+  const textInstruction = /\b(?:title|subtitle|author|text|typograph\w*|lettering|words?|labels?|signage|watermark)\b/i;
+  return clean
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((sentence) => sentence.trim() && !textInstruction.test(sentence))
+    .join(" ")
+    .trim();
+}
+
+export function validateCoverArtworkPrompt(prompt: string) {
+  const required = [
+    /IMAGE-ONLY ARTWORK/i,
+    /no text/i,
+    /no letters/i,
+    /no words/i,
+    /no typography/i,
+    /no title/i,
+    /no subtitle/i,
+    /no author name/i,
+    /no watermark/i,
+  ];
+  const unsafePositiveInstruction = [
+    /render\s+(?:the\s+)?(?:title|subtitle|author)/i,
+    /(?:title|subtitle|author)\s+(?:at|near|along)\s+(?:the\s+)?(?:top|bottom|image)/i,
+    /(?:serif|sans|display)\s+title/i,
+  ];
+  return required.every((pattern) => pattern.test(prompt)) &&
+    unsafePositiveInstruction.every((pattern) => !pattern.test(prompt));
 }
 
 function normalize(value: string | undefined) {
@@ -668,7 +703,11 @@ export function getCreativeCoverFinishPreset(
   return CREATIVE_COVER_FINISH_PRESETS[id];
 }
 
-export function describeCreativeCoverFinish(value: string | undefined, context: CreativeContext) {
+export function describeCreativeCoverFinish(
+  value: string | undefined,
+  context: CreativeContext,
+  includeTypography = true,
+) {
   const preset = getCreativeCoverFinishPreset(value, context);
   return [
     `Creative cover finish: ${preset.label}.`,
@@ -677,11 +716,11 @@ export function describeCreativeCoverFinish(value: string | undefined, context: 
     `Finish lighting: ${preset.lighting}.`,
     `Finish background: ${preset.background}.`,
     `Finish palette: ${preset.palette}.`,
-    `Title typography: ${preset.typography}.`,
-    `Author typography: ${preset.authorTypography}.`,
+    includeTypography ? `Title typography: ${preset.typography}.` : "",
+    includeTypography ? `Author typography: ${preset.authorTypography}.` : "",
     `Best genres: ${preset.bestGenres}.`,
     `Finish exclusions: ${preset.avoid}.`,
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 }
 
 export function formatPremiumCoverAuthor(
@@ -759,6 +798,22 @@ function subjectDirection(context: CreativeContext, genre: CreativeGenre) {
   return "one emotionally charged person, object, or place that belongs specifically to this book";
 }
 
+export function buildCoverTypographyLayout(input: CreativeContext & {
+  creativeFinish?: string;
+}) {
+  const preset = getCreativeCoverFinishPreset(input.creativeFinish, input);
+  const title = stripCoverPlaceholderText(input.title);
+  const subtitle = stripCoverPlaceholderText(input.subtitle);
+  const author = formatPremiumCoverAuthor(input.author ?? "", preset.id, input);
+  return [
+    "APP TYPOGRAPHY LAYER ONLY. Never send these instructions to the artwork image model.",
+    title ? `Official title: “${title}”. Render once using ${preset.typography}.` : "Omit the title because no valid title was supplied.",
+    subtitle ? `Official subtitle: “${subtitle}”. Keep it complete, readable, and separate from the title.` : "Omit the subtitle.",
+    author ? `Official author: “${author}”. Render once using ${preset.authorTypography}.` : "Omit the author line.",
+    "Keep title, subtitle, and author in separate safe zones with no overlap, duplication, cropping, or placeholder text.",
+  ].join(" ");
+}
+
 export function buildCoverPrompt(input: CreativeContext & {
   style?: string;
   finishDirection: string;
@@ -769,34 +824,29 @@ export function buildCoverPrompt(input: CreativeContext & {
   const selectedPreset = getVisualDirectionPreset(input.style);
   const genrePreset = getVisualDirectionPreset(inferredPremiumPreset(genre));
   const creativeFinishPreset = getCreativeCoverFinishPreset(input.creativeFinish, input);
-  const title = stripCoverPlaceholderText(input.title);
-  const subtitle = stripCoverPlaceholderText(input.subtitle);
-  const author = formatPremiumCoverAuthor(input.author ?? "", creativeFinishPreset.id, input);
   const premise = input.mode === "fiction"
     ? input.premise || "Use the title and genre as the authoritative story context."
     : input.topic || input.keyPoints || "Use the title and reader promise as the authoritative subject context.";
-  const custom = String(input.customDirection ?? "").trim().slice(0, 900);
+  const custom = sanitizeCoverArtworkDirection(input.customDirection);
   const customBlock = custom
-    ? `Author scene request, highest priority: ${custom}\nHonor every concrete requested element and exclusion. When it conflicts with a preset, the author request wins.`
+    ? `Author scene request, highest priority for visual content: ${custom}\nHonor every safe visual element and exclusion. The image-only rule always overrides requests for readable text.`
     : "No custom scene request was supplied. Build the concept from the title, premise, genre, and audience.";
 
-  return `Create original customer-facing front-cover artwork for a premium ${input.mode === "fiction" ? "fiction" : "non-fiction"} book.
+  return `Create original image-only front-cover artwork for a premium ${input.mode === "fiction" ? "fiction" : "non-fiction"} book. This generation produces the artwork layer only; the app adds all official typography afterward.
 
-Book and market context:
-Exact title to render once: ${title}
-Subtitle context only, do not render: ${subtitle || "No subtitle supplied"}
+Story and market context:
 Creative category: ${genre.replace(/-/g, " ")}
 Premise or reader promise: ${premise}
 Target reader: ${input.audience || "General readers"}
 
 Selected visual direction:
-${describeVisualDirection(selectedPreset.label)}
+${describeVisualDirection(selectedPreset.label, false)}
 
 Genre-specific elevation:
-${describeVisualDirection(genrePreset.label)}
+${describeVisualDirection(genrePreset.label, false)}
 
 Market/design finish:
-${describeCreativeCoverFinish(creativeFinishPreset.id, input)}
+${describeCreativeCoverFinish(creativeFinishPreset.id, input, false)}
 
 Title-aware symbols: ${titleAwareSymbols(input, genre)}.
 Emotional subject: ${subjectDirection(input, genre)}.
@@ -804,17 +854,14 @@ Foreground: place the emotional subject or primary symbolic object here with imm
 Midground: show the specific location, relationship, method, or story evidence that gives the title meaning.
 Background: use restrained atmosphere and depth that support the concept without becoming a second cover.
 Lighting and palette: combine the genre-specific elevation and selected market/design finish, keep one motivated light source, and reserve one warm or contrasting accent for emotional focus.
-Typography direction: render the exact supplied title once using ${creativeFinishPreset.typography}. If the title is long, reduce its size or stack it into balanced lines. Never crop, abbreviate, distort, or replace any title word.
-Author typography direction: ${author ? `reserve a clean bottom safe area for the app-rendered author “${author}” using ${creativeFinishPreset.authorTypography}` : "no author was supplied, so omit the author line entirely"}. The final cover renderer owns this text; do not render any author wording into the generated artwork.
-Layout direction: protect independent title, subtitle, artwork-subject, and author zones with generous margins and no overlap.
+Artwork layout: protect generous clean visual space near the top and bottom for the app-owned typography layer, but place no readable marks in those areas.
 Surface/print finish: ${input.finishDirection}.
-Subtitle and author will be added separately by the final cover renderer, so do not render them into the artwork.
 
 ${customBlock}
 
-Compose for a 5:8 portrait cover. Keep all important subjects inside the central 85% safe area. Keep every title letter inside the central 76% of the image width, below the top 7%, and above the bottom 12% author-safe area. Leave at least 12% clear space on both sides. Preserve clean hierarchy and readability at thumbnail size.
+Compose for a 5:8 portrait cover. Keep all important subjects inside the central 85% safe area. Preserve uncluttered negative space and strong image recognition at thumbnail size.
 
-${COVER_ARTIFACT_GUARD}`;
+${COVER_ARTWORK_NO_TEXT_GUARD}`;
 }
 
 export function buildVisualArtworkDirection(context: CreativeContext, style: string | undefined) {
