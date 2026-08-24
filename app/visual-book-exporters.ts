@@ -218,6 +218,7 @@ async function drawNotebookReflectionPage(
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
   drawScribbleUnderline(c, titleX, afterTitle + 20, Math.min(350, titleWidth - 30), page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
 
@@ -252,7 +253,7 @@ async function drawNotebookReflectionPage(
   const boxY = Math.min(Math.max(afterBody + 50, 1335), 1440);
   drawPartialBorderBox(c, 78, boxY, 1044, 245, page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
   drawHandwrittenNoteLabel(c, label, 116, boxY + 50, page.pageNumber % 2 ? NOTEBOOK.green : NOTEBOOK.navy);
-  drawNotebookHighlights(c, copy.highlights, 116, boxY + 101, 940);
+  drawNotebookHighlights(c, copy.body, 116, boxY + 101, 940);
   drawNotebookFooter(c, project, page);
 }
 
@@ -276,6 +277,7 @@ async function drawNotebookReflectionCover(
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
   drawScribbleUnderline(c, 88, afterTitle + 24, 390, NOTEBOOK.green);
 
@@ -419,6 +421,7 @@ function drawNotebookFooter(c: CanvasRenderingContext2D, project: VisualBookProj
     fontFamily: "Georgia",
     fontStyle: "italic",
     preserveAll: true,
+    textRole: "headline",
   });
 
   c.fillStyle = NOTEBOOK.navy;
@@ -451,15 +454,20 @@ function drawScribbleUnderline(c: CanvasRenderingContext2D, x: number, y: number
   c.lineCap = "butt";
 }
 
-function drawNotebookHighlights(c: CanvasRenderingContext2D, highlights: string[], x: number, y: number, w: number) {
-  highlights.slice(0, 2).forEach((item, index) => {
+function drawNotebookHighlights(c: CanvasRenderingContext2D, source: string, x: number, y: number, w: number) {
+  const bullets = extractCompleteBullets(c, source, 2, w - 32, 2, {
+    fontSize: 22,
+    fontFamily: "Georgia",
+  });
+
+  bullets.forEach((item, index) => {
     const itemY = y + index * 64;
     c.fillStyle = index % 2 ? NOTEBOOK.navy : NOTEBOOK.green;
     c.beginPath();
     c.arc(x + 8, itemY - 9, 5, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = NOTEBOOK.ink;
-    fitTextWithoutEllipsis(c, shortenToCompletePhrase(item, 118), {
+    fitTextWithoutEllipsis(c, item, {
       x: x + 32,
       y: itemY,
       maxWidth: w - 32,
@@ -469,6 +477,7 @@ function drawNotebookHighlights(c: CanvasRenderingContext2D, highlights: string[
       lineHeight: 34,
       fontFamily: "Georgia",
       preserveAll: true,
+      textRole: "sentence",
     });
   });
 }
@@ -506,6 +515,7 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
 
   const subtitle = fitCompleteSentenceOnly(project.subtitle, page.body);
@@ -546,6 +556,7 @@ async function drawOpeningEditorial(c: CanvasRenderingContext2D, page: VisualBoo
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
   drawAccentLine(c, 78, afterTitle + 22, 300);
 
@@ -570,7 +581,7 @@ async function drawOpeningEditorial(c: CanvasRenderingContext2D, page: VisualBoo
     fontFamily: "Arial",
   }).endY;
 
-  drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 44, 1430), 1500), 1044, 210, copy.highlights);
+  drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 44, 1430), 1500), 1044, 210, copy.body);
   drawFooter(c, page);
 }
 
@@ -595,6 +606,7 @@ async function drawImageTopEditorial(c: CanvasRenderingContext2D, page: VisualBo
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
 
   drawAccentLine(c, 78, afterTitle + 28, 320);
@@ -614,7 +626,7 @@ async function drawImageTopEditorial(c: CanvasRenderingContext2D, page: VisualBo
     fontFamily: "Arial",
   }).endY;
 
-  drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 54, 1400), 1490), 1044, 220, copy.highlights);
+  drawTakeawayBox(c, 78, Math.min(Math.max(afterBody + 54, 1400), 1490), 1044, 220, copy.body);
   drawFooter(c, page);
 }
 
@@ -640,6 +652,7 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
 
   drawAccentLine(c, textX, afterTitle + 28, 210);
@@ -660,7 +673,7 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
   }).endY;
 
   const boxY = Math.min(Math.max(afterBody + 56, 1130), 1280);
-  drawCompactBox(c, textX, boxY, 480, 260, copy.highlights);
+  drawCompactBox(c, textX, boxY, 480, 260, copy.body);
 
   drawFooter(c, page);
 }
@@ -684,6 +697,7 @@ async function drawClosingEditorial(c: CanvasRenderingContext2D, page: VisualBoo
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
   drawAccentLine(c, 86, afterTitle + 24, 300);
 
@@ -702,7 +716,7 @@ async function drawClosingEditorial(c: CanvasRenderingContext2D, page: VisualBoo
     fontFamily: "Arial",
   }).endY;
 
-  drawTakeawayBox(c, 86, Math.min(Math.max(afterBody + 48, 1430), 1490), 1028, 220, copy.highlights);
+  drawTakeawayBox(c, 86, Math.min(Math.max(afterBody + 48, 1430), 1490), 1028, 220, copy.body);
   drawFooter(c, page);
 }
 
@@ -728,6 +742,7 @@ async function drawCinematicFullBleed(c: CanvasRenderingContext2D, project: Visu
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
 
   c.fillStyle = "rgba(255,248,235,.88)";
@@ -758,6 +773,7 @@ async function drawCinematicFullBleed(c: CanvasRenderingContext2D, project: Visu
     fontFamily: "Arial",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   });
   c.fillText(String(page.pageNumber).padStart(2, "0"), 1040, 1708);
 }
@@ -784,6 +800,7 @@ async function drawQuoteEditorial(c: CanvasRenderingContext2D, page: VisualBookP
     fontFamily: "Georgia",
     fontWeight: "700",
     preserveAll: true,
+    textRole: "headline",
   }).endY;
 
   drawAccentLine(c, 156, afterTitle + 26, 260);
@@ -803,7 +820,7 @@ async function drawQuoteEditorial(c: CanvasRenderingContext2D, page: VisualBookP
     fontFamily: "Arial",
   }).endY;
 
-  drawTakeawayBox(c, 80, Math.min(Math.max(afterBody + 42, 1440), 1490), 1040, 210, copy.highlights);
+  drawTakeawayBox(c, 80, Math.min(Math.max(afterBody + 42, 1440), 1490), 1040, 210, copy.body);
 
   drawFooter(c, page);
 }
@@ -820,6 +837,7 @@ function drawRunningHeader(c: CanvasRenderingContext2D, project: VisualBookProje
     lineHeight: 28,
     fontFamily: "Georgia",
     preserveAll: true,
+    textRole: "headline",
   });
 
   c.fillStyle = THEME.ink;
@@ -870,9 +888,13 @@ function drawTakeawayBox(
   y: number,
   w: number,
   h: number,
-  highlights: string[],
+  source: string,
 ) {
-  if (!highlights.length) return;
+  const bullets = extractCompleteBullets(c, source, 2, w - 125, 2, {
+    fontSize: 23,
+    fontFamily: "Arial",
+  });
+  if (!bullets.length) return;
 
   c.strokeStyle = "rgba(169,130,74,.78)";
   c.lineWidth = 2.4;
@@ -884,7 +906,7 @@ function drawTakeawayBox(
   c.font = "700 18px Arial";
   c.fillText("KEY TAKEAWAY", x + 42, y + 40);
 
-  highlights.slice(0, 2).forEach((item, index) => {
+  bullets.forEach((item, index) => {
     const by = y + 88 + index * 64;
     c.fillStyle = THEME.gold;
     c.beginPath();
@@ -892,7 +914,7 @@ function drawTakeawayBox(
     c.fill();
 
     c.fillStyle = "#3a342f";
-    fitTextWithoutEllipsis(c, shortenToCompletePhrase(item, 118), {
+    fitTextWithoutEllipsis(c, item, {
       x: x + 78,
       y: by,
       maxWidth: w - 125,
@@ -902,6 +924,7 @@ function drawTakeawayBox(
       lineHeight: 35,
       fontFamily: "Arial",
       preserveAll: true,
+      textRole: "sentence",
     });
   });
 }
@@ -912,9 +935,13 @@ function drawCompactBox(
   y: number,
   w: number,
   h: number,
-  highlights: string[],
+  source: string,
 ) {
-  if (!highlights.length) return;
+  const bullets = extractCompleteBullets(c, source, 2, w - 86, 2, {
+    fontSize: 20,
+    fontFamily: "Arial",
+  });
+  if (!bullets.length) return;
 
   c.strokeStyle = "rgba(169,130,74,.70)";
   c.lineWidth = 2;
@@ -924,7 +951,7 @@ function drawCompactBox(
   c.font = "700 17px Arial";
   c.fillText("TAKEAWAY", x + 28, y + 35);
 
-  highlights.slice(0, 2).forEach((item, index) => {
+  bullets.forEach((item, index) => {
     const by = y + 82 + index * 76;
     c.fillStyle = THEME.gold;
     c.beginPath();
@@ -932,7 +959,7 @@ function drawCompactBox(
     c.fill();
 
     c.fillStyle = "#3a342f";
-    fitTextWithoutEllipsis(c, shortenToCompletePhrase(item, 72), {
+    fitTextWithoutEllipsis(c, item, {
       x: x + 58,
       y: by,
       maxWidth: w - 86,
@@ -942,6 +969,7 @@ function drawCompactBox(
       lineHeight: 32,
       fontFamily: "Arial",
       preserveAll: true,
+      textRole: "sentence",
     });
   });
 }
@@ -1148,6 +1176,7 @@ type TextFitOptions = {
   fontWeight?: string;
   fontStyle?: string;
   preserveAll?: boolean;
+  textRole?: "headline" | "sentence" | "paragraph";
 };
 
 type TextFitResult = {
@@ -1159,7 +1188,14 @@ type TextFitResult = {
 };
 
 const VISIBLE_ELLIPSIS = /(?:\.{3,}|…+)/;
-const ELLIPSIS_MARKER = "__VISUAL_ELLIPSIS__";
+const SENTENCE_ENDING = /[.!?]["'”’)}\]]*$/;
+
+type VisualTextFont = {
+  fontSize: number;
+  fontFamily: string;
+  fontWeight?: string;
+  fontStyle?: string;
+};
 
 /**
  * Ellipsis-bearing trailing fragments are already incomplete source copy. They
@@ -1167,28 +1203,14 @@ const ELLIPSIS_MARKER = "__VISUAL_ELLIPSIS__";
  * chopped words such as `answe...` survive as `answe.` in the final artwork.
  */
 export function removeVisibleEllipsis(source: unknown) {
-  const protectedText = String(source ?? "")
-    .replace(/(?:\.{3,}|…+)/g, ` ${ELLIPSIS_MARKER} `)
-    .replace(/\s+/g, " ")
-    .trim();
+  const original = String(source ?? "");
+  if (VISIBLE_ELLIPSIS.test(original)) return removeIncompleteTrailingFragment(original);
+  return sanitizeHeadline(original);
+}
 
-  if (!protectedText) return "";
-
-  const fragments = protectedText.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
-  const safeFragments = fragments.flatMap((fragment) => {
-    const trimmed = fragment.trim();
-    if (!trimmed.includes(ELLIPSIS_MARKER)) return [trimmed];
-
-    const afterMarker = trimmed.slice(trimmed.lastIndexOf(ELLIPSIS_MARKER) + ELLIPSIS_MARKER.length);
-    if (!afterMarker.replace(/[.!?\s"'”’)\]}]/g, "")) return [];
-
-    return [trimmed.replaceAll(ELLIPSIS_MARKER, " ")];
-  });
-
-  return safeFragments
-    .join(" ")
-    .replaceAll(ELLIPSIS_MARKER, "")
-    .replace(/(?:\.{3,}|…+)/g, "")
+function sanitizeHeadline(source: unknown) {
+  return String(source ?? "")
+    .replace(/(?:\.{3,}|…+)/g, " ")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/([.!?])(?:\s*[.!?])+/g, "$1")
@@ -1196,79 +1218,73 @@ export function removeVisibleEllipsis(source: unknown) {
 }
 
 export function cleanTruncatedText(source: unknown) {
-  return removeVisibleEllipsis(source);
+  return removeIncompleteTrailingFragment(source);
+}
+
+export function isCompleteSentence(source: unknown) {
+  const clean = String(source ?? "").trim();
+  const beginsNaturally = /^[“"'([{]*[A-Z0-9]/.test(clean);
+  return Boolean(clean && beginsNaturally && !VISIBLE_ELLIPSIS.test(clean) && SENTENCE_ENDING.test(clean));
+}
+
+export function splitIntoCompleteSentences(source: unknown) {
+  return String(source ?? "")
+    .split(/(?:\.{3,}|…+)/)
+    .flatMap((chunk) => chunk.match(/[^.!?]+[.!?]+(?:["'”’)}\]]+)?/g) ?? [])
+    .map((sentence) => sentence.replace(/^[-•]\s*/, "").replace(/\s+/g, " ").trim())
+    .filter(isCompleteSentence);
+}
+
+export function removeIncompleteTrailingFragment(source: unknown) {
+  return splitIntoCompleteSentences(source).join(" ");
 }
 
 export function fitCompleteSentenceOnly(source: unknown, fallback: unknown = "", maxCharacters = 220) {
-  const clean = removeVisibleEllipsis(source);
-  const fallbackClean = removeVisibleEllipsis(fallback);
-  const candidates = [clean, fallbackClean].filter(Boolean);
+  const limit = Math.max(18, maxCharacters);
 
-  for (const candidate of candidates) {
-    const sentence = sentenceParts(candidate).find((part) => /[.!?]$/.test(part));
-    if (sentence) return shortenToCompletePhrase(sentence, maxCharacters);
-    if (candidate.length <= maxCharacters) return shortenToCompletePhrase(candidate, maxCharacters);
+  for (const candidate of [source, fallback]) {
+    const sentence = splitIntoCompleteSentences(candidate).find((part) => part.length <= limit);
+    if (sentence) return sentence;
+
+    for (const complete of splitIntoCompleteSentences(candidate)) {
+      const clause = shorterCompleteClause(complete, limit);
+      if (clause) return clause;
+    }
   }
 
   return "";
 }
 
 export function shortenToCompletePhrase(source: unknown, maxCharacters = 118) {
-  const clean = removeVisibleEllipsis(source);
   const limit = Math.max(18, maxCharacters);
-  if (!clean) return "";
-  if (clean.length <= limit) return /[.!?]$/.test(clean) ? clean : `${clean}.`;
-
-  const sentences = sentenceParts(clean);
-  const completeSentence = sentences.find((sentence) => sentence.length <= limit && /[.!?]$/.test(sentence));
+  const sentences = splitIntoCompleteSentences(source);
+  const completeSentence = sentences.find((sentence) => sentence.length <= limit);
   if (completeSentence) return completeSentence;
 
-  const prefix = clean.slice(0, limit);
-  const punctuationBreak = Math.max(
-    prefix.lastIndexOf(";"),
-    prefix.lastIndexOf(":"),
-    prefix.lastIndexOf(","),
-    prefix.lastIndexOf(" — "),
-    prefix.lastIndexOf(" – "),
-  );
-  let phrase = punctuationBreak >= limit * 0.25 ? prefix.slice(0, punctuationBreak) : prefix.replace(/\s+\S*$/, "");
-
-  const danglingEnding = /\b(?:a|an|and|as|at|because|but|by|for|from|if|in|of|on|or|that|the|their|these|this|those|to|when|while|with|without|your)$/i;
-  while (danglingEnding.test(phrase) && phrase.includes(" ")) {
-    phrase = phrase.replace(/\s+\S+$/, "").trim();
+  for (const sentence of sentences) {
+    const clause = shorterCompleteClause(sentence, limit);
+    if (clause) return clause;
   }
 
-  phrase = phrase.replace(/[,:;\-–—\s]+$/, "").trim();
-  if (!phrase) phrase = clean.slice(0, limit - 1).replace(/\s+\S*$/, "").trim();
-  return /[.!?]$/.test(phrase) ? phrase : `${phrase}.`;
+  return "";
 }
 
 export function extractShortCompleteBullets(source: unknown, maxBullets = 2, maxCharacters = 118) {
-  const clean = removeVisibleEllipsis(source);
-  if (!clean) return [];
-
-  const sentences = sentenceParts(clean);
-  let candidates = sentences.length > 1 ? sentences.slice(-maxBullets) : sentences;
-
-  if (candidates.length < 2 && candidates[0]) {
-    const clauses = candidates[0]
-      .replace(/[.!?]+$/, "")
-      .split(/\s*(?:;|:|,\s+(?:and|but|so|yet)\s+|\s+(?:and|but|so|yet)\s+)\s*/i)
-      .map((clause) => clause.trim())
-      .filter((clause) => clause.split(/\s+/).length >= 4);
-    if (clauses.length > 1) candidates = clauses;
-  }
-
+  const limit = Math.max(18, maxCharacters);
   const seen = new Set<string>();
-  return candidates
-    .map((candidate) => shortenToCompletePhrase(candidate, maxCharacters))
+  return splitIntoCompleteSentences(source)
+    .slice()
+    .reverse()
+    .map((candidate) => candidate.length <= limit ? candidate : shorterCompleteClause(candidate, limit))
     .filter((candidate) => {
+      if (!candidate) return false;
       const key = candidate.toLowerCase();
-      if (!candidate || seen.has(key)) return false;
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
-    .slice(0, Math.max(1, maxBullets));
+    .slice(0, Math.max(1, maxBullets))
+    .reverse();
 }
 
 export function extractCleanBullets(source: unknown, maxBullets = 4, maxCharacters = 118) {
@@ -1281,36 +1297,7 @@ export function fitCompleteWordsOnly(
   maxWidth: number,
   maxLines: number,
 ) {
-  const clean = removeVisibleEllipsis(source);
-  if (!clean) return "";
-
-  const words = clean.split(/\s+/).filter(Boolean);
-  let fitted: string[] = [];
-
-  for (const word of words) {
-    const candidate = [...fitted, word].join(" ");
-    const lines = wrappedLines(c, candidate, maxWidth);
-    if (lines.length > maxLines || lines.some((line) => c.measureText(line).width > maxWidth)) break;
-    fitted.push(word);
-  }
-
-  const danglingEnding = /^(?:a|an|and|as|at|because|but|by|for|from|if|in|of|on|or|that|the|their|these|this|those|to|when|while|with|without|your)$/i;
-  while (fitted.length > 1 && danglingEnding.test(fitted.at(-1) ?? "")) fitted.pop();
-
-  let phrase = fitted.join(" ").replace(/[,:;\-–—\s]+$/, "").trim();
-  if (!phrase) return "";
-  if (fitted.length < words.length && !/[.!?]$/.test(phrase)) phrase = `${phrase.replace(/[.!?]+$/, "")}.`;
-
-  while (phrase) {
-    const lines = wrappedLines(c, phrase, maxWidth);
-    if (lines.length <= maxLines && lines.every((line) => c.measureText(line).width <= maxWidth)) return phrase;
-    fitted.pop();
-    while (fitted.length > 1 && danglingEnding.test(fitted.at(-1) ?? "")) fitted.pop();
-    phrase = fitted.join(" ").replace(/[,:;.!?\-–—\s]+$/, "").trim();
-    if (phrase) phrase = `${phrase}.`;
-  }
-
-  return "";
+  return fitCompleteSentencesToLines(c, source, maxWidth, maxLines, canvasFont(c));
 }
 
 export function fitLinesWithoutEllipsis(
@@ -1319,12 +1306,8 @@ export function fitLinesWithoutEllipsis(
   maxWidth: number,
   maxLines: number,
 ) {
-  const clean = removeVisibleEllipsis(source);
-  if (!clean) return [];
-
-  const completeSentence = completeSentenceForLineBudget(c, clean, maxWidth, maxLines);
-  const fitted = completeSentence || fitCompleteWordsOnly(c, clean, maxWidth, maxLines);
-  return wrappedLines(c, fitted, maxWidth).slice(0, Math.max(1, maxLines));
+  const fitted = fitCompleteSentencesToLines(c, source, maxWidth, maxLines, canvasFont(c));
+  return fitted ? wrappedLines(c, fitted, maxWidth) : [];
 }
 
 export function fitTextWithoutEllipsis(
@@ -1332,10 +1315,13 @@ export function fitTextWithoutEllipsis(
   source: unknown,
   options: TextFitOptions,
 ): TextFitResult {
-  const clean = removeVisibleEllipsis(source);
+  const textRole = options.textRole ?? "paragraph";
+  const clean = textRole === "headline"
+    ? sanitizeHeadline(source)
+    : removeIncompleteTrailingFragment(source);
   const startSize = Math.max(1, options.fontSize);
   const requestedMinimum = Math.min(startSize, Math.max(1, options.minFontSize ?? startSize));
-  const minimum = options.preserveAll ? Math.min(requestedMinimum, 16) : requestedMinimum;
+  const minimum = requestedMinimum;
   const maximumLines = Math.max(1, options.maxLines);
   let fontSize = startSize;
   let lineHeight = options.lineHeight;
@@ -1354,16 +1340,22 @@ export function fitTextWithoutEllipsis(
   }
 
   if (!lines.length) {
-    fontSize = options.preserveAll ? minimum : requestedMinimum;
+    fontSize = minimum;
     lineHeight = Math.max(fontSize * 1.12, options.lineHeight * (fontSize / startSize));
     setCanvasFont(c, options, fontSize);
-    fittedText = completeTextForLineBudget(c, clean, options.maxWidth, maximumLines);
-    lines = fitLinesWithoutEllipsis(c, fittedText, options.maxWidth, maximumLines);
+    fittedText = textRole === "headline"
+      ? ""
+      : fitCompleteParagraphToBox(c, clean, options.maxWidth, maximumLines, {
+        fontSize,
+        fontFamily: options.fontFamily,
+        fontWeight: options.fontWeight,
+        fontStyle: options.fontStyle,
+      });
+    lines = fittedText ? wrappedLines(c, fittedText, options.maxWidth) : [];
   }
 
   lines.forEach((line, index) => {
-    const safeLine = removeVisibleEllipsis(line);
-    if (safeLine && !VISIBLE_ELLIPSIS.test(safeLine)) c.fillText(safeLine, options.x, options.y + index * lineHeight);
+    if (line && !VISIBLE_ELLIPSIS.test(line)) c.fillText(line, options.x, options.y + index * lineHeight);
   });
   return {
     endY: options.y + lines.length * lineHeight,
@@ -1374,42 +1366,126 @@ export function fitTextWithoutEllipsis(
   };
 }
 
-function completeTextForLineBudget(
+export function fitCompleteSentencesToLines(
   c: CanvasRenderingContext2D,
-  clean: string,
+  source: unknown,
   maxWidth: number,
   maxLines: number,
+  font: VisualTextFont,
 ) {
-  return completeSentenceForLineBudget(c, clean, maxWidth, maxLines)
-    || fitCompleteWordsOnly(c, clean, maxWidth, maxLines);
+  const previousFont = c.font;
+  setCanvasFont(c, font, font.fontSize);
+  const sentences = splitIntoCompleteSentences(source);
+  let complete = "";
+
+  for (const sentence of sentences) {
+    const candidate = complete ? `${complete} ${sentence}` : sentence;
+    if (fitsLineBudget(c, candidate, maxWidth, maxLines)) {
+      complete = candidate;
+      continue;
+    }
+    if (complete) break;
+  }
+
+  if (!complete) {
+    complete = sentences.find((sentence) => fitsLineBudget(c, sentence, maxWidth, maxLines)) ?? "";
+  }
+
+  c.font = previousFont;
+  return complete;
 }
 
-function completeSentenceForLineBudget(
+export function fitCompleteParagraphToBox(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  maxWidth: number,
+  maxLines: number,
+  font: VisualTextFont,
+) {
+  return fitCompleteSentencesToLines(c, source, maxWidth, maxLines, font);
+}
+
+export function extractCompleteBullets(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  maxBullets: number,
+  maxWidth: number,
+  maxLinesPerBullet: number,
+  font: VisualTextFont,
+) {
+  const previousFont = c.font;
+  setCanvasFont(c, font, font.fontSize);
+  const selected: string[] = [];
+
+  for (const sentence of splitIntoCompleteSentences(source).slice().reverse()) {
+    const candidate = fitsLineBudget(c, sentence, maxWidth, maxLinesPerBullet)
+      ? sentence
+      : completeClauseForLineBudget(c, sentence, maxWidth, maxLinesPerBullet);
+    if (candidate && !selected.some((item) => item.toLowerCase() === candidate.toLowerCase())) {
+      selected.push(candidate);
+    }
+    if (selected.length >= Math.max(1, maxBullets)) break;
+  }
+
+  c.font = previousFont;
+  return selected.reverse();
+}
+
+function sentenceParts(source: string) {
+  return splitIntoCompleteSentences(source);
+}
+
+function shorterCompleteClause(source: string, maxCharacters: number) {
+  const clauses = source
+    .replace(/[.!?]["'”’)}\]]*$/, "")
+    .split(/[;:]/)
+    .map((clause) => clause.trim())
+    .filter(isStandaloneClause)
+    .map((clause) => `${clause.replace(/[,;:\-–—\s]+$/, "")}.`)
+    .filter((clause) => isCompleteSentence(clause) && clause.length <= maxCharacters);
+  return clauses[0] ?? "";
+}
+
+function completeClauseForLineBudget(
   c: CanvasRenderingContext2D,
   source: string,
   maxWidth: number,
   maxLines: number,
 ) {
-  let complete = "";
-
-  for (const sentence of sentenceParts(source).filter((part) => /[.!?]$/.test(part))) {
-    const candidate = complete ? `${complete} ${sentence}` : sentence;
-    const lines = wrappedLines(c, candidate, maxWidth);
-    if (lines.length > maxLines || lines.some((line) => c.measureText(line).width > maxWidth)) break;
-    complete = candidate;
-  }
-
-  return complete;
+  const clauses = source
+    .replace(/[.!?]["'”’)}\]]*$/, "")
+    .split(/[;:]/)
+    .map((clause) => clause.trim())
+    .filter(isStandaloneClause)
+    .map((clause) => `${clause.replace(/[,;:\-–—\s]+$/, "")}.`);
+  return clauses.find((clause) => fitsLineBudget(c, clause, maxWidth, maxLines)) ?? "";
 }
 
-function sentenceParts(source: string) {
-  return source
-    .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
-    ?.map((sentence) => sentence.replace(/^[-•]\s*/, "").trim())
-    .filter(Boolean) ?? [];
+function isStandaloneClause(source: string) {
+  const clean = source.replace(/^[“"'([{]+/, "").replace(/[”"')\]}]+$/, "").trim();
+  if (clean.split(/\s+/).length < 4) return false;
+  if (/^(?:although|as|because|if|since|that|though|unless|until|when|whenever|where|whether|which|while|who|whose)\b/i.test(clean)) return false;
+  return !/\b(?:a|an|and|as|at|because|but|by|for|from|if|in|of|on|or|that|the|their|these|this|those|to|when|while|with|without|your)$/i.test(clean);
 }
 
-function setCanvasFont(c: CanvasRenderingContext2D, options: TextFitOptions, fontSize: number) {
+function fitsLineBudget(c: CanvasRenderingContext2D, source: string, maxWidth: number, maxLines: number) {
+  const lines = wrappedLines(c, source, maxWidth);
+  return lines.length > 0
+    && lines.length <= Math.max(1, maxLines)
+    && lines.every((line) => c.measureText(line).width <= maxWidth);
+}
+
+function canvasFont(c: CanvasRenderingContext2D): VisualTextFont {
+  const match = /(?:(italic)\s+)?(?:(\d{3})\s+)?(\d+(?:\.\d+)?)px\s+(.+)/.exec(c.font);
+  return {
+    fontSize: Number(match?.[3] ?? 16),
+    fontFamily: match?.[4] ?? "Arial",
+    fontWeight: match?.[2],
+    fontStyle: match?.[1],
+  };
+}
+
+function setCanvasFont(c: CanvasRenderingContext2D, options: VisualTextFont, fontSize: number) {
   c.font = [options.fontStyle, options.fontWeight, `${fontSize}px`, options.fontFamily].filter(Boolean).join(" ");
 }
 
@@ -1476,16 +1552,17 @@ function wrap(
   return y + lines.length * lh;
 }
 
-export function buildVisualPageSections(source: unknown, title = "") {
+export function buildVisualPageSections(source: unknown, _title = "") {
+  void _title; // Keep the existing call contract without using a headline as body-copy fallback.
   const clean = cleanTruncatedText(source);
   const sentences = sentenceParts(clean);
 
-  const fallback = clean || cleanTruncatedText(title);
-  const highlights = extractShortCompleteBullets(fallback, 2, 118);
-  const noteSource = sentences[0] || fallback;
+  const body = clean;
+  const highlights = extractShortCompleteBullets(body, 2, 118);
+  const noteSource = sentences[0] ?? "";
 
   return {
-    body: fallback,
+    body,
     highlights,
     note: shortenToCompletePhrase(noteSource, 118),
   };
