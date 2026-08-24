@@ -6,6 +6,7 @@ import type { AuthorStyle, CoverDesign, Manuscript } from "./book-types";
 import {
   CREATIVE_COVER_FINISH_OPTIONS,
   formatPremiumCoverAuthor,
+  stripCoverPlaceholderText,
 } from "./creative-direction";
 import {
   contrastingTextStroke,
@@ -46,7 +47,7 @@ function formattedCoverAuthor(
   creativeFinish: string,
   authorStyle: AuthorStyle,
 ) {
-  if (authorStyle !== "uppercase") return manuscript.author;
+  if (authorStyle !== "uppercase") return stripCoverPlaceholderText(manuscript.author);
   return formatPremiumCoverAuthor(manuscript.author, creativeFinish, {
     mode: manuscript.mode,
     title: manuscript.title,
@@ -238,6 +239,7 @@ export default function CoverStudio({
           mode: manuscript.mode,
           brief: { ...manuscript.brief, title: exactTitle },
           subtitle: exactSubtitle,
+          author: stripCoverPlaceholderText(manuscript.author),
           style,
           finish,
           creativeFinish,

@@ -14,6 +14,9 @@ import {
   resolveCreativeCoverFinishId,
   resolveVisualBookKindId,
   resolveVisualStyleId,
+  rejectCoverPlaceholderArtifacts,
+  stripCoverPlaceholderText,
+  validateCoverPromptForPlaceholders,
 } from "../app/creative-direction";
 
 const houseContext = {
@@ -126,6 +129,54 @@ test("premium author typography follows the selected market finish", () => {
   assert.equal(formatPremiumCoverAuthor("Sulong Uragon", "warm-storybook", houseContext), "SULONG URAGON");
 });
 
+test("customer-facing gothic prompt uses the actual premium author credit", () => {
+  const prompt = buildCoverPrompt({
+    mode: "fiction",
+    title: "The Window That Waited for Thunder",
+    subtitle: "A gothic novel about inheritance, silence, and the storm a family refused to name.",
+    author: "Sulong Uragon",
+    genre: "Literary Gothic Mystery",
+    premise: "A woman returns to a rain-darkened family house before a storm.",
+    style: "photoreal-title",
+    finishDirection: "premium glossy cover finish",
+    creativeFinish: "rain-soaked-gothic",
+  });
+  assert.match(prompt, /S U L O N G\s{3}U R A G O N/);
+  assert.doesNotMatch(prompt, /\b(?:AUTHOR NAME|YOUR NAME|BOOK TITLE|LOREM IPSUM|SAMPLE TEXT)\b/i);
+  assert.match(prompt, /template placeholders/i);
+  assert.match(prompt, /do not render any author wording/i);
+  assert.equal(validateCoverPromptForPlaceholders(prompt), true);
+});
+
+test("cover placeholder sanitizer removes template values and preserves real names", () => {
+  for (const placeholder of [
+    "AUTHOR NAME", "Author Name", "author name", "YOUR NAME", "Your Name",
+    "BOOK TITLE", "Book Title", "TITLE", "Title", "SUBTITLE", "Subtitle",
+    "TAGLINE", "Tagline", "PLACEHOLDER", "Placeholder", "LOREM IPSUM",
+    "Lorem Ipsum", "SAMPLE TEXT", "Sample Text",
+  ]) {
+    assert.equal(rejectCoverPlaceholderArtifacts(placeholder), true);
+    assert.equal(stripCoverPlaceholderText(placeholder), "");
+  }
+  assert.equal(stripCoverPlaceholderText("Sulong Uragon"), "Sulong Uragon");
+  assert.equal(stripCoverPlaceholderText("The Window That Waited for Thunder"), "The Window That Waited for Thunder");
+});
+
+test("missing or placeholder author is omitted without generating a template credit", () => {
+  for (const author of ["", "AUTHOR NAME", "Your Name"]) {
+    const prompt = buildCoverPrompt({
+      ...houseContext,
+      author,
+      style: "photoreal-title",
+      finishDirection: "premium glossy cover finish",
+      creativeFinish: "rain-soaked-gothic",
+    });
+    assert.match(prompt, /no author was supplied, so omit the author line entirely/i);
+    assert.doesNotMatch(prompt, /AUTHOR NAME|YOUR NAME/i);
+    assert.equal(validateCoverPromptForPlaceholders(prompt), true);
+  }
+});
+
 test("customer-facing cover prompts reject internal labels and title artifacts", () => {
   const prompt = buildCoverPrompt({
     ...houseContext,
@@ -142,7 +193,7 @@ test("customer-facing cover prompts reject internal labels and title artifacts",
   assert.match(prompt, /internal product or edition labels/i);
   assert.match(prompt, /random cropped title bands/i);
   assert.match(prompt, /watermarks/i);
-  assert.match(prompt, /tiny or illegible author names/i);
+  assert.match(prompt, /author credit tiny or unreadable/i);
   assert.match(prompt, /author and subtitle overlap/i);
   assert.match(prompt, /Subtitle and author will be added separately/i);
 });
