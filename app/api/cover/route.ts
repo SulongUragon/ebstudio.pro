@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import type { BookBrief, Mode } from "../../book-types";
-import { buildCoverPrompt, resolveCreativeCoverFinishId } from "../../creative-direction";
+import {
+  buildCoverPrompt,
+  resolveCreativeCoverFinishId,
+  stripCoverPlaceholderText,
+  validateCoverPromptForPlaceholders,
+} from "../../creative-direction";
 
 export const maxDuration = 300;
 
@@ -8,6 +13,7 @@ type CoverRequest = {
   mode: Mode;
   brief: BookBrief;
   subtitle?: string;
+  author?: string;
   style?: string;
   finish?: string;
   creativeFinish?: string;
@@ -43,7 +49,8 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as CoverRequest;
-    if (!body.brief?.title || !body.mode) {
+    const title = stripCoverPlaceholderText(body.brief?.title);
+    if (!title || !body.mode) {
       return NextResponse.json({ error: "Complete the book title first." }, { status: 400 });
     }
 
@@ -57,8 +64,9 @@ export async function POST(request: Request) {
     const creativeFinish = resolveCreativeCoverFinishId(body.creativeFinish);
     const prompt = buildCoverPrompt({
       mode: body.mode,
-      title: body.brief.title,
+      title,
       subtitle: body.subtitle ?? body.brief.subtitle,
+      author: stripCoverPlaceholderText(body.author),
       genre: body.brief.genre,
       topic: body.brief.topic,
       premise: body.brief.premise,
@@ -69,6 +77,12 @@ export async function POST(request: Request) {
       creativeFinish,
       customDirection: body.customDirection,
     });
+    if (!validateCoverPromptForPlaceholders(prompt)) {
+      return NextResponse.json(
+        { error: "Remove template placeholder text before generating the cover." },
+        { status: 400 },
+      );
+    }
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",

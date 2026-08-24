@@ -26,6 +26,7 @@ export type CreativeContext = {
   mode: Mode;
   title: string;
   subtitle?: string;
+  author?: string;
   genre?: string;
   topic?: string;
   premise?: string;
@@ -522,7 +523,24 @@ const COPY_FRAMEWORKS: Record<CreativeGenre, string> = {
 };
 
 export const COVER_ARTIFACT_GUARD =
-  "Render the exact title once and only once. Do not add a second title, ghost title, background lettering, random readable background text, fake readable text, internal product or edition labels, publisher marks, logos, watermarks, random cropped title bands, decorative word fragments, borders, mockups, books, or devices. Keep image detail away from the title, subtitle, and author zones. Prevent author and subtitle overlap, never make tiny or illegible author names, and never place text in the generated image background unless the app typography layer intentionally owns it. Avoid distorted typography, malformed anatomy, low-resolution artifacts, generic stock-photo posing, and overcrowded composition.";
+  "Render the exact title once and only once. Never invent or render template placeholders, generic author/title/subtitle/tagline labels, lorem-ipsum copy, sample-copy labels, fake book-cover labels, or duplicate author lines. Do not add a second title, ghost title, background lettering, random readable background text, fake readable text, internal product or edition labels, publisher marks, logos, watermarks, random cropped title bands, decorative word fragments, borders, mockups, books, or devices. Keep image detail away from the title, subtitle, and author zones. Prevent author and subtitle overlap, never make the real author credit tiny or unreadable, and never place text in the generated image background unless the app typography layer intentionally owns it. Avoid distorted typography, malformed anatomy, low-resolution artifacts, generic stock-photo posing, and overcrowded composition.";
+
+const COVER_PLACEHOLDER_VALUE = /^(?:author name|your name|book title|title|subtitle|tagline|placeholder|lorem ipsum|sample text)$/i;
+
+export function rejectCoverPlaceholderArtifacts(text: string | undefined) {
+  return COVER_PLACEHOLDER_VALUE.test(String(text ?? "").trim());
+}
+
+export function stripCoverPlaceholderText(text: string | undefined) {
+  const clean = String(text ?? "").trim().replace(/\s+/g, " ");
+  return rejectCoverPlaceholderArtifacts(clean) ? "" : clean;
+}
+
+export function validateCoverPromptForPlaceholders(prompt: string) {
+  const explicitTemplateArtifact = /\b(?:author name|your name|book title|lorem ipsum|sample text)\b/i;
+  const standaloneTemplateLabel = /(?:^|\n)\s*(?:title|subtitle|tagline|placeholder)\s*(?::|$)/im;
+  return !explicitTemplateArtifact.test(prompt) && !standaloneTemplateLabel.test(prompt);
+}
 
 function normalize(value: string | undefined) {
   return String(value ?? "").trim().toLowerCase();
@@ -672,7 +690,7 @@ export function formatPremiumCoverAuthor(
   context: CreativeContext,
 ) {
   const preset = getCreativeCoverFinishPreset(value, context);
-  const clean = author.trim().replace(/\s+/g, " ");
+  const clean = stripCoverPlaceholderText(author);
   if (!clean) return "";
   if (preset.authorTreatment !== "spaced-small-caps" && preset.authorTreatment !== "grand") {
     return clean.toUpperCase();
@@ -751,7 +769,9 @@ export function buildCoverPrompt(input: CreativeContext & {
   const selectedPreset = getVisualDirectionPreset(input.style);
   const genrePreset = getVisualDirectionPreset(inferredPremiumPreset(genre));
   const creativeFinishPreset = getCreativeCoverFinishPreset(input.creativeFinish, input);
-  const title = input.title.trim();
+  const title = stripCoverPlaceholderText(input.title);
+  const subtitle = stripCoverPlaceholderText(input.subtitle);
+  const author = formatPremiumCoverAuthor(input.author ?? "", creativeFinishPreset.id, input);
   const premise = input.mode === "fiction"
     ? input.premise || "Use the title and genre as the authoritative story context."
     : input.topic || input.keyPoints || "Use the title and reader promise as the authoritative subject context.";
@@ -764,7 +784,7 @@ export function buildCoverPrompt(input: CreativeContext & {
 
 Book and market context:
 Exact title to render once: ${title}
-Subtitle context only, do not render: ${input.subtitle || "No subtitle supplied"}
+Subtitle context only, do not render: ${subtitle || "No subtitle supplied"}
 Creative category: ${genre.replace(/-/g, " ")}
 Premise or reader promise: ${premise}
 Target reader: ${input.audience || "General readers"}
@@ -784,8 +804,8 @@ Foreground: place the emotional subject or primary symbolic object here with imm
 Midground: show the specific location, relationship, method, or story evidence that gives the title meaning.
 Background: use restrained atmosphere and depth that support the concept without becoming a second cover.
 Lighting and palette: combine the genre-specific elevation and selected market/design finish, keep one motivated light source, and reserve one warm or contrasting accent for emotional focus.
-Typography direction: render the exact title once using ${creativeFinishPreset.typography}. If the title is long, reduce its size or stack it into balanced lines. Never crop, abbreviate, distort, or replace any title word.
-Author typography direction: reserve a clean bottom safe area for ${creativeFinishPreset.authorTypography}; the final cover renderer adds the author separately, so do not render the author into the artwork.
+Typography direction: render the exact supplied title once using ${creativeFinishPreset.typography}. If the title is long, reduce its size or stack it into balanced lines. Never crop, abbreviate, distort, or replace any title word.
+Author typography direction: ${author ? `reserve a clean bottom safe area for the app-rendered author “${author}” using ${creativeFinishPreset.authorTypography}` : "no author was supplied, so omit the author line entirely"}. The final cover renderer owns this text; do not render any author wording into the generated artwork.
 Layout direction: protect independent title, subtitle, artwork-subject, and author zones with generous margins and no overlap.
 Surface/print finish: ${input.finishDirection}.
 Subtitle and author will be added separately by the final cover renderer, so do not render them into the artwork.
