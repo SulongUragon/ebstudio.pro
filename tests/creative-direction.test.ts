@@ -154,6 +154,56 @@ test("customer-facing gothic prompt uses the actual premium author credit", () =
   assert.equal(validateCoverPromptForPlaceholders(typographyLayout), true);
 });
 
+test("rain-soaked real-person covers auto-select premium title direction", () => {
+  const layout = buildCoverTypographyLayout({
+    mode: "fiction",
+    title: "The Window That Waited for Thunder",
+    subtitle: "A gothic novel about inheritance and silence.",
+    author: "Sulong Uragon",
+    genre: "Literary Gothic Mystery",
+    premise: "A woman returns to a rain-darkened family house before a storm.",
+    style: "photoreal-title",
+    creativeFinish: "rain-soaked-gothic",
+    titleTypography: "auto",
+    titlePlacement: "auto",
+  });
+  assert.match(layout, /Title typography preset: Stormglass Serif/i);
+  assert.match(layout, /Title placement preset: Upper Third/i);
+  assert.match(layout, /balanced complete lines/i);
+  assert.match(layout, /no ellipsis or cropping/i);
+  assert.match(layout, /S U L O N G\s{3}U R A G O N/);
+});
+
+test("manual title typography and placement stay in app-only layout metadata", () => {
+  const input = {
+    ...houseContext,
+    style: "photoreal-title",
+    finishDirection: "premium glossy cover finish",
+    creativeFinish: "rain-soaked-gothic",
+    titleTypography: "editorial-luxe",
+    titlePlacement: "lower-third",
+  };
+  const artworkPrompt = buildCoverPrompt(input);
+  const typographyLayout = buildCoverTypographyLayout(input);
+  assert.match(typographyLayout, /Title typography preset: Editorial Luxe/i);
+  assert.match(typographyLayout, /Title placement preset: Lower Third/i);
+  assert.doesNotMatch(artworkPrompt, /Editorial Luxe|Lower Third/i);
+  assert.doesNotMatch(artworkPrompt, /render.*title/i);
+  assert.equal(validateCoverArtworkPrompt(artworkPrompt), true);
+});
+
+test("gothic literary auto typography remains a premium serif treatment", () => {
+  const layout = buildCoverTypographyLayout({
+    ...houseContext,
+    creativeFinish: "gothic-literary",
+    titleTypography: "auto",
+    titlePlacement: "center",
+  });
+  assert.match(layout, /Literary Tall Serif/i);
+  assert.match(layout, /Title placement preset: Center/i);
+  assert.doesNotMatch(layout, /(?:\.\.\.|…)/);
+});
+
 test("cover artwork prompt is image-only while preserving gothic visual direction", () => {
   const artworkPrompt = buildCoverPrompt({
     mode: "fiction",

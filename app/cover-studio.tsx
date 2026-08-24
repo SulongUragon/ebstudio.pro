@@ -6,17 +6,23 @@ import type { AuthorStyle, CoverDesign, Manuscript } from "./book-types";
 import {
   CREATIVE_COVER_FINISH_OPTIONS,
   formatPremiumCoverAuthor,
+  getCreativeCoverFinishPreset,
   stripCoverPlaceholderText,
 } from "./creative-direction";
 import {
+  TITLE_PLACEMENT_OPTIONS,
+  TITLE_TYPOGRAPHY_OPTIONS,
   contrastingTextStroke,
+  getCoverTitlePlacementPreset,
   getCoverTypographyPreset,
-  normalizeCoverTypographyPreset,
   resolveCoverAuthorY,
   resolveExactCoverSubtitle,
   resolveExactCoverTitle,
-  selectCoverTypographyPreset,
-  usesAutomaticTitleVariety,
+  resolveCoverTitlePlacement,
+  resolveCoverTitleTop,
+  resolveCoverTitleTypography,
+  resolveNonCollidingCoverTextY,
+  wrapBalancedCoverTitle,
 } from "./cover-utils";
 
 const authorStyles: Array<{ id: AuthorStyle; label: string }> = [
@@ -60,6 +66,45 @@ function formattedCoverAuthor(
   });
 }
 
+function resolveTitleDirections(
+  manuscript: Manuscript,
+  subtitle: string,
+  creativeFinish: string,
+  style: string,
+  titleTypography: string,
+  titlePlacement: string,
+) {
+  const creativeContext = {
+    mode: manuscript.mode,
+    title: manuscript.title,
+    subtitle,
+    genre: manuscript.brief.genre,
+    topic: manuscript.brief.topic,
+    premise: manuscript.brief.premise,
+    audience: manuscript.brief.audience,
+    keyPoints: manuscript.brief.keyPoints,
+  };
+  const resolvedCreativeFinish = getCreativeCoverFinishPreset(
+    creativeFinish,
+    creativeContext,
+  ).id;
+  const directionContext = {
+    ...creativeContext,
+    creativeFinish: resolvedCreativeFinish,
+    style,
+  };
+  return {
+    typographyPreset: resolveCoverTitleTypography(
+      titleTypography,
+      directionContext,
+    ),
+    placementPreset: resolveCoverTitlePlacement(
+      titlePlacement,
+      directionContext,
+    ),
+  };
+}
+
 export default function CoverStudio({
   manuscript,
   onSave,
@@ -70,16 +115,16 @@ export default function CoverStudio({
   onSaveAuthor?: (author: string) => void;
 }) {
   const initialStyle = manuscript.cover?.style ?? "cinematic";
-  const savedTypographyPreset =
-    manuscript.cover?.typographyPreset ?? "cinematic-ivory";
-  const initialTypographyPreset = normalizeCoverTypographyPreset(
-    initialStyle,
-    savedTypographyPreset,
-  );
   const [style, setStyle] = useState(initialStyle);
   const [finish, setFinish] = useState(manuscript.cover?.finish ?? "satin");
   const [creativeFinish, setCreativeFinish] = useState(
     manuscript.cover?.creativeFinish ?? "auto",
+  );
+  const [titleTypography, setTitleTypography] = useState(
+    manuscript.cover?.titleTypography ?? "auto",
+  );
+  const [titlePlacement, setTitlePlacement] = useState(
+    manuscript.cover?.titlePlacement ?? "auto",
   );
   const [customDirection, setCustomDirection] = useState("");
   const [authorStyle, setAuthorStyle] = useState<AuthorStyle>(
@@ -108,9 +153,6 @@ export default function CoverStudio({
   );
   const [authorColor, setAuthorColor] = useState(
     manuscript.cover?.authorColor ?? "#e9dfcf",
-  );
-  const [typographyPreset, setTypographyPreset] = useState(
-    initialTypographyPreset,
   );
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -145,6 +187,14 @@ export default function CoverStudio({
         try {
           const currentManuscript = manuscriptRef.current;
           const exactTitle = resolveExactCoverTitle(currentManuscript, coverTitle);
+          const directions = resolveTitleDirections(
+            currentManuscript,
+            coverSubtitle.trim(),
+            creativeFinish,
+            style,
+            titleTypography,
+            titlePlacement,
+          );
           const imageData = await composeCover(
             currentCover.sourceImageData ?? "",
             exactTitle,
@@ -164,7 +214,8 @@ export default function CoverStudio({
             subtitleColor,
             authorColor,
             authorStyle,
-            typographyPreset,
+            directions.typographyPreset,
+            directions.placementPreset,
           );
           if (sequence !== autoApplySequence.current) return;
           onSaveRef.current({
@@ -186,7 +237,9 @@ export default function CoverStudio({
             subtitleColor,
             authorColor,
             authorStyle,
-            typographyPreset,
+            typographyPreset: directions.typographyPreset,
+            titleTypography,
+            titlePlacement,
             createdAt: currentCover.createdAt ?? new Date().toISOString(),
           });
         } catch (applyError) {
@@ -221,7 +274,8 @@ export default function CoverStudio({
     subtitleColor,
     subtitleFontSize,
     subtitlePosition,
-    typographyPreset,
+    titlePlacement,
+    titleTypography,
   ]);
 
   async function generateCover() {
@@ -245,6 +299,8 @@ export default function CoverStudio({
           style,
           finish,
           creativeFinish,
+          titleTypography,
+          titlePlacement,
           customDirection: customDirection.trim(),
         }),
       });
@@ -253,20 +309,18 @@ export default function CoverStudio({
         throw new Error(String(data.error ?? "The AI cover could not be generated."));
       }
       const sourceImageData = String(data.imageData);
-      const shouldVaryTitleDesign = usesAutomaticTitleVariety(style);
-      const selectedTypographyPreset = shouldVaryTitleDesign
-        ? selectCoverTypographyPreset(style, sourceImageData)
-        : typographyPreset;
-      const typography = getCoverTypographyPreset(selectedTypographyPreset);
-      const nextSubtitleAlignment = shouldVaryTitleDesign
-        ? typography.titleAlignment
-        : subtitleAlignment;
-      const nextSubtitleColor = shouldVaryTitleDesign
-        ? typography.subtitleColor
-        : subtitleColor;
-      const nextAuthorColor = shouldVaryTitleDesign
-        ? typography.authorColor
-        : authorColor;
+      const directions = resolveTitleDirections(
+        manuscript,
+        exactSubtitle,
+        creativeFinish,
+        style,
+        titleTypography,
+        titlePlacement,
+      );
+      const typography = getCoverTypographyPreset(directions.typographyPreset);
+      const nextSubtitleAlignment = typography.titleAlignment;
+      const nextSubtitleColor = typography.subtitleColor;
+      const nextAuthorColor = typography.authorColor;
       const imageData = await composeCover(
         sourceImageData,
         exactTitle,
@@ -286,9 +340,9 @@ export default function CoverStudio({
         nextSubtitleColor,
         nextAuthorColor,
         authorStyle,
-        selectedTypographyPreset,
+        directions.typographyPreset,
+        directions.placementPreset,
       );
-      setTypographyPreset(selectedTypographyPreset);
       setSubtitleAlignment(nextSubtitleAlignment);
       setSubtitleColor(nextSubtitleColor);
       setAuthorColor(nextAuthorColor);
@@ -309,7 +363,10 @@ export default function CoverStudio({
         subtitleAlignment: nextSubtitleAlignment,
         subtitleColor: nextSubtitleColor,
         authorColor: nextAuthorColor,
-        typographyPreset: selectedTypographyPreset,
+        authorStyle,
+        typographyPreset: directions.typographyPreset,
+        titleTypography,
+        titlePlacement,
         createdAt: new Date().toISOString(),
       });
     } catch (coverError) {
@@ -337,9 +394,13 @@ export default function CoverStudio({
     setApplying(true);
     setError("");
     try {
-      const selectedTypographyPreset = normalizeCoverTypographyPreset(
+      const directions = resolveTitleDirections(
+        manuscript,
+        coverSubtitle.trim(),
+        creativeFinish,
         style,
-        manuscript.cover?.typographyPreset ?? typographyPreset,
+        titleTypography,
+        titlePlacement,
       );
       const imageData = await composeCover(
         sourceImageData,
@@ -360,9 +421,9 @@ export default function CoverStudio({
         subtitleColor,
         authorColor,
         authorStyle,
-        selectedTypographyPreset,
+        directions.typographyPreset,
+        directions.placementPreset,
       );
-      setTypographyPreset(selectedTypographyPreset);
       onSave({
         ...manuscript.cover,
         imageData,
@@ -382,7 +443,9 @@ export default function CoverStudio({
         subtitleColor,
         authorColor,
         authorStyle,
-        typographyPreset: selectedTypographyPreset,
+        typographyPreset: directions.typographyPreset,
+        titleTypography,
+        titlePlacement,
         createdAt: manuscript.cover?.createdAt ?? new Date().toISOString(),
       });
     } catch (applyError) {
@@ -568,9 +631,6 @@ export default function CoverStudio({
               onChange={(event) => {
                 const nextStyle = event.target.value;
                 setStyle(nextStyle);
-                setTypographyPreset(
-                  normalizeCoverTypographyPreset(nextStyle, typographyPreset),
-                );
                 if (nextStyle === "eb-signature") {
                   setSubtitleColor("#e8d5b8");
                 } else {
@@ -587,9 +647,7 @@ export default function CoverStudio({
             </select>
           </label>
           <p>
-            {style === "eb-signature"
-              ? "AI integrates the exact title into EB Studio Pro’s signature artwork and palette."
-              : "AI integrates the exact title into the selected artwork as part of the cover design."}
+            AI creates the selected artwork direction without text. Cover Studio adds the exact title separately.
           </p>
           <label className="cover-select-control cover-direction-label">
             <span>Describe your cover (optional)</span>
@@ -645,6 +703,40 @@ export default function CoverStudio({
           <small className="cover-finish-note">
             Controls the market and design direction, such as Rain-Soaked Gothic or Premium Nonfiction. Auto chooses from your book context.
           </small>
+          <label className="cover-select-control cover-finish-label">
+            <span>Title Typography</span>
+            <select
+              value={titleTypography}
+              onChange={(event) => setTitleTypography(event.target.value)}
+              disabled={loading}
+            >
+              {TITLE_TYPOGRAPHY_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <small className="cover-finish-note">
+            Controls the title’s book-cover lettering style, such as Stormglass Serif or Editorial Luxe.
+          </small>
+          <label className="cover-select-control cover-finish-label">
+            <span>Title Placement</span>
+            <select
+              value={titlePlacement}
+              onChange={(event) => setTitlePlacement(event.target.value)}
+              disabled={loading}
+            >
+              {TITLE_PLACEMENT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <small className="cover-finish-note">
+            Controls where the title sits on the cover, such as Top, Center, Lower Third, or Split Title.
+          </small>
           <button
             className="cover-generate-button"
             type="button"
@@ -676,6 +768,7 @@ async function composeCover(
   authorColor: string,
   authorStyle: AuthorStyle = "uppercase",
   typographyPresetId?: string,
+  titlePlacementId?: string,
 ) {
   const image = await loadImage(artworkData);
   const canvas = document.createElement("canvas");
@@ -731,14 +824,14 @@ async function composeCover(
   context.shadowOffsetY = 6;
 
   let y = 0;
-  let titleTop = 0;
-  let titleBottom = 0;
   let subtitleTop = 0;
   let subtitleBottom = 0;
+  const titleBands: Array<{ top: number; bottom: number }> = [];
 
   const safeTitle = stripCoverPlaceholderText(title);
   if (safeTitle) {
     const typography = getCoverTypographyPreset(typographyPresetId);
+    const placement = getCoverTitlePlacementPreset(titlePlacementId);
     const titleText = typography.uppercase ? safeTitle.toUpperCase() : safeTitle;
     const titleFont = (size: number) =>
       `${typography.fontWeight} ${size}px ${typography.fontFamily}`;
@@ -749,38 +842,99 @@ async function composeCover(
       typography.maxWidth,
       typography.maxLines,
       typography.titleSize,
-      typography.minSize,
+      safeTitle.length > 54
+        ? Math.min(typography.minSize, 44)
+        : typography.minSize,
       titleFont,
+      (value, width) => wrapBalancedCoverTitle(
+        context,
+        value,
+        width,
+        typography.maxLines,
+      ),
     );
     context.font = titleFont(fittedTitle.size);
     context.textAlign = typography.titleAlignment;
-    context.fillStyle = typography.titleColor;
     context.strokeStyle = contrastingTextStroke(typography.titleColor);
     context.lineWidth = Math.max(2, fittedTitle.size * 0.045);
+    context.shadowColor = typography.shadowColor ?? "rgba(0,0,0,.72)";
+    context.shadowBlur = typography.shadowBlur ?? 18;
+    context.shadowOffsetY = typography.shadowOffsetY ?? 5;
     const titleX = alignmentX(typography.titleAlignment, canvas.width);
     const titleLineHeight = fittedTitle.size * typography.lineHeight;
-    y = (canvas.height * typography.titlePosition) / 100;
-    titleTop = y;
-    for (const line of fittedTitle.lines.slice(0, typography.maxLines)) {
-      context.strokeText(line, titleX, y);
-      context.fillText(line, titleX, y);
-      y += titleLineHeight;
+    const titleLines = fittedTitle.lines;
+    const splitIndex = placement.split && titleLines.length > 1
+      ? Math.ceil(titleLines.length / 2)
+      : titleLines.length;
+    const titleGroups = placement.split && titleLines.length > 1
+      ? [titleLines.slice(0, splitIndex), titleLines.slice(splitIndex)]
+      : [titleLines];
+    const drawTitleGroup = (lines: string[], top: number, framed: boolean) => {
+      const height = lines.length * titleLineHeight;
+      if (framed) {
+        const panelX = canvas.width * 0.065;
+        const panelY = top - 42;
+        const panelWidth = canvas.width * 0.87;
+        const panelHeight = height + 84;
+        context.save();
+        context.shadowColor = "rgba(0,0,0,0)";
+        context.fillStyle = "rgba(7, 13, 14, .58)";
+        context.strokeStyle = "rgba(230, 204, 150, .64)";
+        context.lineWidth = 3;
+        context.fillRect(panelX, panelY, panelWidth, panelHeight);
+        context.strokeRect(panelX + 10, panelY + 10, panelWidth - 20, panelHeight - 20);
+        context.restore();
+      }
+      const titleFill = typography.titleGradient
+        ? context.createLinearGradient(0, top, 0, top + height)
+        : typography.titleColor;
+      if (typography.titleGradient && titleFill instanceof CanvasGradient) {
+        titleFill.addColorStop(0, typography.titleGradient[0]);
+        titleFill.addColorStop(0.52, typography.titleGradient[1]);
+        titleFill.addColorStop(1, typography.titleGradient[2]);
+      }
+      context.fillStyle = titleFill;
+      y = top;
+      for (const line of lines) {
+        context.strokeText(line, titleX, y);
+        context.fillText(line, titleX, y);
+        y += titleLineHeight;
+      }
+      titleBands.push({ top, bottom: top + height });
+    };
+    const firstGroupHeight = titleGroups[0].length * titleLineHeight;
+    const firstTop = resolveCoverTitleTop(
+      canvas.height,
+      firstGroupHeight,
+      placement,
+    );
+    drawTitleGroup(titleGroups[0], firstTop, placement.frame);
+    if (titleGroups.length > 1) {
+      const secondGroupHeight = titleGroups[1].length * titleLineHeight;
+      const secondTop = resolveNonCollidingCoverTextY(
+        canvas.height * 0.61,
+        secondGroupHeight,
+        canvas.height,
+        titleBands,
+      );
+      drawTitleGroup(titleGroups[1], secondTop, false);
     }
-    titleBottom = y;
     if (typography.rule) {
+      const finalBand = titleBands[titleBands.length - 1];
       context.fillStyle = "#0f5d3b";
-      context.fillRect(canvas.width * 0.39, titleBottom + 18, canvas.width * 0.22, 5);
-      titleBottom += 31;
+      context.fillRect(canvas.width * 0.39, finalBand.bottom + 18, canvas.width * 0.22, 5);
+      finalBand.bottom += 31;
     }
   }
 
-  if (subtitle) {
+  const safeSubtitle = stripCoverPlaceholderText(subtitle);
+  if (safeSubtitle) {
     context.letterSpacing = "0px";
     context.textAlign = subtitleAlignment;
     context.fillStyle = subtitleColor;
     const fittedSubtitle = fitText(
       context,
-      subtitle,
+      safeSubtitle,
       1240,
       4,
       subtitleFontSize,
@@ -792,11 +946,16 @@ async function composeCover(
     context.strokeStyle = contrastingTextStroke(subtitleColor);
     const subtitleX = alignmentX(subtitleAlignment, canvas.width);
     const subtitleLineHeight = fittedSubtitle.size * 1.3;
-    y = (canvas.height * subtitlePosition) / 100;
-    if (subtitlePosition < 70) y = Math.max(y, titleBottom + 54);
-    if (subtitlePosition >= 70) {
-      y -= fittedSubtitle.lines.length * subtitleLineHeight;
-    }
+    const subtitleHeight = fittedSubtitle.lines.length * subtitleLineHeight;
+    const preferredSubtitleY = subtitlePosition >= 70
+      ? (canvas.height * subtitlePosition) / 100 - subtitleHeight
+      : (canvas.height * subtitlePosition) / 100;
+    y = resolveNonCollidingCoverTextY(
+      preferredSubtitleY,
+      subtitleHeight,
+      canvas.height,
+      titleBands,
+    );
     subtitleTop = y;
     for (const line of fittedSubtitle.lines) {
       context.strokeText(line, subtitleX, y);
@@ -806,39 +965,42 @@ async function composeCover(
     subtitleBottom = y;
   }
 
-  context.textAlign = "center";
-  context.fillStyle = authorColor;
-  const signature = authorStyle === "signature";
-  const typewriter = authorStyle === "typewriter";
-  const premiumSpaced = /\s{3}/.test(author);
-  const authorText = signature ? author : author.toUpperCase();
-  let authorFontSize = signature ? 76 : typewriter ? 44 : premiumSpaced ? 44 : 48;
-  const authorFont = (size: number) =>
-    signature
-      ? `400 ${size}px "Great Vibes", "Brush Script MT", cursive`
-      : typewriter
-        ? `700 ${size}px "Courier Prime", "Courier New", Courier, monospace`
-        : `700 ${size}px Arial, sans-serif`;
-  context.font = authorFont(authorFontSize);
-  context.letterSpacing = signature || premiumSpaced ? "0px" : typewriter ? "7px" : "3px";
-  while (context.measureText(authorText).width > 1160 && authorFontSize > 30) {
-    authorFontSize -= 2;
+  const safeAuthor = stripCoverPlaceholderText(author);
+  if (safeAuthor) {
+    context.textAlign = "center";
+    context.fillStyle = authorColor;
+    const signature = authorStyle === "signature";
+    const typewriter = authorStyle === "typewriter";
+    const premiumSpaced = /\s{3}/.test(safeAuthor);
+    const authorText = signature ? safeAuthor : safeAuthor.toUpperCase();
+    let authorFontSize = signature ? 76 : typewriter ? 44 : premiumSpaced ? 44 : 48;
+    const authorFont = (size: number) =>
+      signature
+        ? `400 ${size}px "Great Vibes", "Brush Script MT", cursive`
+        : typewriter
+          ? `700 ${size}px "Courier Prime", "Courier New", Courier, monospace`
+          : `700 ${size}px "Montserrat", Arial, sans-serif`;
     context.font = authorFont(authorFontSize);
+    context.letterSpacing = signature || premiumSpaced ? "0px" : typewriter ? "7px" : "3px";
+    while (context.measureText(authorText).width > 1160 && authorFontSize > 30) {
+      authorFontSize -= 2;
+      context.font = authorFont(authorFontSize);
+    }
+    context.lineWidth = signature ? 2 : 3;
+    context.strokeStyle = contrastingTextStroke(authorColor);
+    const authorY = resolveCoverAuthorY(
+      canvas.height,
+      [
+        ...titleBands,
+        { top: subtitleTop, bottom: subtitleBottom },
+      ],
+      signature
+        ? { heightRatio: 0.038, defaultRatio: 0.912 }
+        : {},
+    );
+    context.strokeText(authorText, canvas.width / 2, authorY);
+    context.fillText(authorText, canvas.width / 2, authorY);
   }
-  context.lineWidth = signature ? 2 : 3;
-  context.strokeStyle = contrastingTextStroke(authorColor);
-  const authorY = resolveCoverAuthorY(
-    canvas.height,
-    [
-      { top: titleTop, bottom: titleBottom },
-      { top: subtitleTop, bottom: subtitleBottom },
-    ],
-    signature
-      ? { heightRatio: 0.038, defaultRatio: 0.912 }
-      : {},
-  );
-  context.strokeText(authorText, canvas.width / 2, authorY);
-  context.fillText(authorText, canvas.width / 2, authorY);
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 
