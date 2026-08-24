@@ -1,24 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  COVER_TEXT_MODE_OPTIONS,
   CREATIVE_COVER_FINISH_OPTIONS,
   buildAskEBCreativeGuidance,
+  buildAppTypographyCoverPrompt,
   buildCopywritingGuidance,
   buildCoverPrompt,
   buildCoverTypographyLayout,
+  buildIntegratedTypographyCoverPrompt,
   buildVisualArtworkDirection,
   describeVisualDirection,
   formatPremiumCoverAuthor,
   getCreativeCoverFinishPreset,
   inferCreativeCoverFinish,
   inferCreativeGenre,
+  resolveCoverTextMode,
   resolveCreativeCoverFinishId,
   resolveVisualBookKindId,
   resolveVisualStyleId,
   rejectCoverPlaceholderArtifacts,
+  sanitizeIntegratedTypographyPrompt,
+  shouldOverlayCoverText,
   stripCoverPlaceholderText,
+  validateCoverTextModePayload,
   validateCoverPromptForPlaceholders,
   validateCoverArtworkPrompt,
+  validateIntegratedTypographyPrompt,
 } from "../app/creative-direction";
 
 const houseContext = {
@@ -28,6 +36,19 @@ const houseContext = {
   genre: "Literary Gothic Mystery",
   premise: "After her mother's death, a woman returns to the old family house and discovers that every room remembers a different storm.",
   audience: "Adult readers of literary mystery and atmospheric family drama",
+};
+
+const integratedGothicContext = {
+  mode: "fiction" as const,
+  title: "The Window That Waited for Thunder",
+  subtitle: "A gothic novel about inheritance, silence, and the storm a family refused to name.",
+  author: "Sulong Uragon",
+  genre: "Literary Gothic Mystery",
+  premise: "A woman returns to a rain-darkened old house and its warm glowing window before a storm.",
+  audience: "Adult readers of literary gothic mystery",
+  style: "photoreal-title",
+  finishDirection: "premium glossy cover finish",
+  creativeFinish: "rain-soaked-gothic",
 };
 
 test("every existing visual direction expands into a complete creative brief", () => {
@@ -91,6 +112,152 @@ test("creative cover finish options expose every supported market preset", () =>
     "Warm Storybook", "Minimal Literary", "Luxury Thriller", "Dark Romance",
     "Epic Fantasy", "Clean How-To", "Product Guide Premium",
   ]) assert.ok(labels.includes(label as (typeof labels)[number]), `${label} should be selectable`);
+});
+
+test("cover text mode options expose Auto, App Typography, and Integrated Typography", () => {
+  assert.deepEqual(COVER_TEXT_MODE_OPTIONS.map((option) => option.label), [
+    "Auto",
+    "App Typography",
+    "Integrated Typography",
+  ]);
+  assert.equal(validateCoverTextModePayload("auto"), true);
+  assert.equal(validateCoverTextModePayload("app-typography"), true);
+  assert.equal(validateCoverTextModePayload("integrated-typography"), true);
+  assert.equal(validateCoverTextModePayload("mixed-typography"), false);
+});
+
+test("App Typography mode keeps the generated artwork strictly image-only", () => {
+  const prompt = buildAppTypographyCoverPrompt({
+    ...integratedGothicContext,
+    coverTextMode: "app-typography",
+  });
+  assert.match(prompt, /IMAGE-ONLY ARTWORK/i);
+  assert.match(prompt, /no text/i);
+  assert.match(prompt, /no letters/i);
+  assert.match(prompt, /no words/i);
+  assert.match(prompt, /no typography/i);
+  assert.doesNotMatch(prompt, new RegExp(integratedGothicContext.title, "i"));
+  assert.equal(validateCoverArtworkPrompt(prompt), true);
+});
+
+test("Integrated Typography mode requests only the supplied customer-facing cover text", () => {
+  const prompt = buildIntegratedTypographyCoverPrompt({
+    ...integratedGothicContext,
+    coverTextMode: "integrated-typography",
+  });
+  assert.match(prompt, /complete customer-facing book cover/i);
+  assert.match(prompt, /render only these exact words as cover text/i);
+  assert.match(prompt, new RegExp(`“${integratedGothicContext.title}”`, "i"));
+  assert.match(prompt, new RegExp(`“${integratedGothicContext.subtitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}”`, "i"));
+  assert.match(prompt, new RegExp(`“${integratedGothicContext.author}”`, "i"));
+  assert.match(prompt, /Stormglass Serif/i);
+  assert.match(prompt, /Upper Third/i);
+  assert.match(prompt, /no duplicate title/i);
+  assert.match(prompt, /no duplicate author/i);
+  assert.match(prompt, /no watermark/i);
+  assert.doesNotMatch(prompt, /IMAGE-ONLY ARTWORK/i);
+  assert.equal(validateIntegratedTypographyPrompt(prompt), true);
+  assert.equal(validateCoverPromptForPlaceholders(prompt), true);
+});
+
+test("Integrated Typography strips template values and internal product labels", () => {
+  for (const placeholder of [
+    "AUTHOR NAME",
+    "YOUR NAME",
+    "BOOK TITLE",
+    "TITLE",
+    "SUBTITLE",
+    "SAMPLE TEXT",
+  ]) {
+    const prompt = buildIntegratedTypographyCoverPrompt({
+      ...integratedGothicContext,
+      subtitle: placeholder,
+      author: placeholder,
+      coverTextMode: "integrated-typography",
+    });
+    assert.doesNotMatch(prompt, new RegExp(`“${placeholder}”`, "i"));
+  }
+
+  const internalLabelPrompt = buildIntegratedTypographyCoverPrompt({
+    ...integratedGothicContext,
+    coverTextMode: "integrated-typography",
+    customDirection: "Add EB Studio Pro and KDP Edition as a badge near the house.",
+  });
+  assert.doesNotMatch(internalLabelPrompt, /EB Studio Pro|KDP Edition/i);
+  assert.doesNotMatch(sanitizeIntegratedTypographyPrompt("Add EB Studio Pro and KDP Edition."), /EB Studio Pro|KDP Edition/i);
+});
+
+test("Integrated Typography disables the duplicate app overlay contract", () => {
+  const context = {
+    ...integratedGothicContext,
+    coverTextMode: "integrated-typography",
+  };
+  assert.equal(shouldOverlayCoverText(context), false);
+  assert.match(buildCoverTypographyLayout(context), /disable the app text overlay/i);
+  assert.doesNotMatch(buildCoverTypographyLayout(context), /Official title:/i);
+  assert.equal(shouldOverlayCoverText({ ...context, coverTextMode: "app-typography" }), true);
+});
+
+test("Auto selects integrated typography for cinematic fiction finishes", () => {
+  for (const creativeFinish of [
+    "rain-soaked-gothic",
+    "gothic-literary",
+    "cinematic-mystery",
+    "dark-academia",
+    "luxury-thriller",
+    "dark-romance",
+    "epic-fantasy",
+  ]) {
+    assert.equal(resolveCoverTextMode({
+      ...integratedGothicContext,
+      creativeFinish,
+      coverTextMode: "auto",
+    }), "integrated-typography");
+  }
+});
+
+test("Auto selects app typography for accuracy-first nonfiction finishes", () => {
+  const nonfiction = {
+    mode: "nonfiction" as const,
+    title: "The Focused Founder",
+    genre: "Business",
+    topic: "A practical operating system for founders",
+    coverTextMode: "auto",
+  };
+  for (const creativeFinish of [
+    "premium-nonfiction",
+    "founder-authority",
+    "clean-how-to",
+    "product-guide-premium",
+  ]) {
+    assert.equal(resolveCoverTextMode({
+      ...nonfiction,
+      creativeFinish,
+    }), "app-typography");
+  }
+});
+
+test("Auto honors explicit text-in-image intent and defaults safely when uncertain", () => {
+  assert.equal(resolveCoverTextMode({
+    ...integratedGothicContext,
+    coverTextMode: "auto",
+    customDirection: "No text in the image; keep the artwork clean.",
+  }), "app-typography");
+  assert.equal(resolveCoverTextMode({
+    mode: "nonfiction",
+    title: "The Focused Founder",
+    topic: "A practical business guide",
+    creativeFinish: "premium-nonfiction",
+    coverTextMode: "auto",
+    customDirection: "Use integrated title typography in artwork.",
+  }), "integrated-typography");
+  assert.equal(resolveCoverTextMode({
+    mode: "fiction",
+    title: "A Quiet Afternoon",
+    genre: "Literary Fiction",
+    creativeFinish: "minimal-literary",
+    coverTextMode: "auto",
+  }), "app-typography");
 });
 
 test("rain-soaked gothic combines style, surface finish, and market finish", () => {

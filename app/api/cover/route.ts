@@ -4,8 +4,11 @@ import {
   buildCoverPrompt,
   buildCoverTypographyLayout,
   resolveCreativeCoverFinishId,
+  resolveCoverTextMode,
   stripCoverPlaceholderText,
   validateCoverArtworkPrompt,
+  validateCoverTextModePayload,
+  validateIntegratedTypographyPrompt,
   validateCoverPromptForPlaceholders,
 } from "../../creative-direction";
 
@@ -21,6 +24,7 @@ type CoverRequest = {
   creativeFinish?: string;
   titleTypography?: string;
   titlePlacement?: string;
+  coverTextMode?: string;
   customDirection?: string;
 };
 
@@ -57,6 +61,9 @@ export async function POST(request: Request) {
     if (!title || !body.mode) {
       return NextResponse.json({ error: "Complete the book title first." }, { status: 400 });
     }
+    if (!validateCoverTextModePayload(body.coverTextMode)) {
+      return NextResponse.json({ error: "Choose a valid Cover Text Mode." }, { status: 400 });
+    }
 
     const style = COVER_STYLES.has(body.style ?? "cinematic")
       ? body.style ?? "cinematic"
@@ -66,11 +73,28 @@ export async function POST(request: Request) {
       : "satin";
     const finishDirection = FINISH_DIRECTIONS[finish];
     const creativeFinish = resolveCreativeCoverFinishId(body.creativeFinish);
+    const subtitle = stripCoverPlaceholderText(body.subtitle ?? body.brief.subtitle);
+    const author = stripCoverPlaceholderText(body.author);
+    const coverTextMode = body.coverTextMode ?? "auto";
+    const resolvedCoverTextMode = resolveCoverTextMode({
+      mode: body.mode,
+      title,
+      subtitle,
+      author,
+      genre: body.brief.genre,
+      topic: body.brief.topic,
+      premise: body.brief.premise,
+      audience: body.brief.audience,
+      keyPoints: body.brief.keyPoints,
+      creativeFinish,
+      coverTextMode,
+      customDirection: body.customDirection,
+    });
     const prompt = buildCoverPrompt({
       mode: body.mode,
       title,
-      subtitle: body.subtitle ?? body.brief.subtitle,
-      author: stripCoverPlaceholderText(body.author),
+      subtitle,
+      author,
       genre: body.brief.genre,
       topic: body.brief.topic,
       premise: body.brief.premise,
@@ -79,13 +103,16 @@ export async function POST(request: Request) {
       style,
       finishDirection,
       creativeFinish,
+      coverTextMode: resolvedCoverTextMode,
+      titleTypography: body.titleTypography,
+      titlePlacement: body.titlePlacement,
       customDirection: body.customDirection,
     });
     const typographyLayout = buildCoverTypographyLayout({
       mode: body.mode,
       title,
-      subtitle: body.subtitle ?? body.brief.subtitle,
-      author: stripCoverPlaceholderText(body.author),
+      subtitle,
+      author,
       genre: body.brief.genre,
       topic: body.brief.topic,
       premise: body.brief.premise,
@@ -95,9 +122,15 @@ export async function POST(request: Request) {
       creativeFinish,
       titleTypography: body.titleTypography,
       titlePlacement: body.titlePlacement,
+      coverTextMode: resolvedCoverTextMode,
+      customDirection: body.customDirection,
     });
+    const validArtworkPrompt = resolvedCoverTextMode === "integrated-typography"
+      ? validateIntegratedTypographyPrompt(prompt)
+      : validateCoverArtworkPrompt(prompt);
     if (
-      !validateCoverArtworkPrompt(prompt) ||
+      !validArtworkPrompt ||
+      !validateCoverPromptForPlaceholders(prompt) ||
       !validateCoverPromptForPlaceholders(typographyLayout)
     ) {
       return NextResponse.json(
@@ -154,6 +187,9 @@ export async function POST(request: Request) {
       style,
       finish,
       creativeFinish,
+      coverTextMode,
+      resolvedCoverTextMode,
+      shouldOverlayText: resolvedCoverTextMode === "app-typography",
       typographyLayout,
     });
   } catch (error) {

@@ -41,6 +41,17 @@ export type CreativeContext = {
   kind?: string;
 };
 
+export const COVER_TEXT_MODE_OPTIONS = [
+  { id: "auto", label: "Auto" },
+  { id: "app-typography", label: "App Typography" },
+  { id: "integrated-typography", label: "Integrated Typography" },
+] as const;
+
+export type CoverTextModeId =
+  (typeof COVER_TEXT_MODE_OPTIONS)[number]["id"];
+
+export type ResolvedCoverTextMode = Exclude<CoverTextModeId, "auto">;
+
 export type VisualDirectionPreset = {
   label: string;
   mood: string;
@@ -534,6 +545,9 @@ export const COVER_ARTIFACT_GUARD =
 export const COVER_ARTWORK_NO_TEXT_GUARD =
   "IMAGE-ONLY ARTWORK. No text, no letters, no words, no typography, no title, no subtitle, no author name, no book-cover text, no text overlay, no signage, no labels, no watermark, no publisher mark, no readable symbols, no embedded words, no ghost text, and no placeholder text anywhere in the image. Leave clean visual safe areas for the separate app typography layer.";
 
+export const INTEGRATED_COVER_TEXT_GUARD =
+  "Render only these exact words as cover text. Preserve every supplied word and its spelling exactly. Use one title treatment, no duplicate title, no duplicate author, no extra readable text, no template or placeholder text, no internal product or edition labels, no invented publisher names, no fake publisher marks, no fake award seals, no logo, no watermark, no random background text, no ghost lettering, and no cropped text bands.";
+
 const COVER_PLACEHOLDER_VALUE = /^(?:author name|your name|book title|title|subtitle|tagline|placeholder|lorem ipsum|sample text)$/i;
 
 export function rejectCoverPlaceholderArtifacts(text: string | undefined) {
@@ -562,6 +576,13 @@ export function sanitizeCoverArtworkDirection(text: string | undefined) {
     .trim();
 }
 
+export function sanitizeIntegratedTypographyPrompt(text: string | undefined) {
+  return sanitizeCoverArtworkDirection(text)
+    .replace(/\b(?:EB Studio Pro|KDP Edition)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function validateCoverArtworkPrompt(prompt: string) {
   const required = [
     /IMAGE-ONLY ARTWORK/i,
@@ -581,6 +602,33 @@ export function validateCoverArtworkPrompt(prompt: string) {
   ];
   return required.every((pattern) => pattern.test(prompt)) &&
     unsafePositiveInstruction.every((pattern) => !pattern.test(prompt));
+}
+
+export function validateIntegratedTypographyPrompt(prompt: string) {
+  const required = [
+    /complete customer-facing book cover/i,
+    /render only these exact words as cover text/i,
+    /preserve every supplied word and its spelling exactly/i,
+    /no duplicate title/i,
+    /no duplicate author/i,
+    /no extra readable text/i,
+    /no watermark/i,
+    /no internal product or edition labels/i,
+    /no fake publisher marks/i,
+    /no random background text/i,
+  ];
+  const mixedModeInstruction = [
+    /IMAGE-ONLY ARTWORK/i,
+    /the app adds all official typography afterward/i,
+  ];
+  return required.every((pattern) => pattern.test(prompt)) &&
+    mixedModeInstruction.every((pattern) => !pattern.test(prompt));
+}
+
+export function validateCoverTextModePayload(value: unknown) {
+  return value === undefined || value === null || COVER_TEXT_MODE_OPTIONS.some(
+    (option) => option.id === value,
+  );
 }
 
 function normalize(value: string | undefined) {
@@ -709,6 +757,55 @@ export function getCreativeCoverFinishPreset(
   return CREATIVE_COVER_FINISH_PRESETS[id];
 }
 
+const INTEGRATED_AUTO_FINISHES = new Set<CreativeCoverFinishPreset["id"]>([
+  "rain-soaked-gothic",
+  "gothic-literary",
+  "cinematic-mystery",
+  "dark-academia",
+  "luxury-thriller",
+  "dark-romance",
+  "epic-fantasy",
+]);
+
+const APP_TYPOGRAPHY_AUTO_FINISHES = new Set<CreativeCoverFinishPreset["id"]>([
+  "premium-nonfiction",
+  "founder-authority",
+  "clean-how-to",
+  "product-guide-premium",
+]);
+
+export function resolveCoverTextMode(input: CreativeContext & {
+  coverTextMode?: string;
+  creativeFinish?: string;
+  customDirection?: string;
+}): ResolvedCoverTextMode {
+  if (input.coverTextMode === "integrated-typography") return "integrated-typography";
+  if (input.coverTextMode === "app-typography") return "app-typography";
+
+  const customDirection = normalize(input.customDirection);
+  if (/\b(?:no|without|avoid)\s+(?:any\s+)?(?:text|letters|words|typography)\s+(?:in|inside|on)\s+(?:the\s+)?(?:image|artwork|background)\b/.test(customDirection)) {
+    return "app-typography";
+  }
+  if (/\b(?:integrated title|integrated typography|typography in (?:the )?artwork|title in (?:the )?(?:image|artwork))\b/.test(customDirection)) {
+    return "integrated-typography";
+  }
+
+  const finish = getCreativeCoverFinishPreset(input.creativeFinish, input).id;
+  if (APP_TYPOGRAPHY_AUTO_FINISHES.has(finish) || input.mode !== "fiction") {
+    return "app-typography";
+  }
+  if (INTEGRATED_AUTO_FINISHES.has(finish)) return "integrated-typography";
+  return "app-typography";
+}
+
+export function shouldOverlayCoverText(input: CreativeContext & {
+  coverTextMode?: string;
+  creativeFinish?: string;
+  customDirection?: string;
+}) {
+  return resolveCoverTextMode(input) === "app-typography";
+}
+
 export function describeCreativeCoverFinish(
   value: string | undefined,
   context: CreativeContext,
@@ -804,12 +901,32 @@ function subjectDirection(context: CreativeContext, genre: CreativeGenre) {
   return "one emotionally charged person, object, or place that belongs specifically to this book";
 }
 
+type CoverPromptInput = CreativeContext & {
+  style?: string;
+  finishDirection: string;
+  creativeFinish?: string;
+  customDirection?: string;
+  coverTextMode?: string;
+  titleTypography?: string;
+  titlePlacement?: string;
+};
+
 export function buildCoverTypographyLayout(input: CreativeContext & {
   creativeFinish?: string;
   style?: string;
   titleTypography?: string;
   titlePlacement?: string;
+  coverTextMode?: string;
+  customDirection?: string;
 }) {
+  const resolvedTextMode = resolveCoverTextMode({
+    ...input,
+    coverTextMode: input.coverTextMode ?? "app-typography",
+  });
+  if (resolvedTextMode === "integrated-typography") {
+    return "INTEGRATED TYPOGRAPHY METADATA ONLY. The generated cover owns the single final title, subtitle, and author treatment. Disable the app text overlay for preview and final customer-facing output. Preserve the generated cover image without adding a second text layer.";
+  }
+
   const preset = getCreativeCoverFinishPreset(input.creativeFinish, input);
   const directionContext = {
     mode: input.mode,
@@ -847,12 +964,7 @@ export function buildCoverTypographyLayout(input: CreativeContext & {
   ].join(" ");
 }
 
-export function buildCoverPrompt(input: CreativeContext & {
-  style?: string;
-  finishDirection: string;
-  creativeFinish?: string;
-  customDirection?: string;
-}) {
+export function buildAppTypographyCoverPrompt(input: CoverPromptInput) {
   const genre = inferCreativeGenre(input);
   const selectedPreset = getVisualDirectionPreset(input.style);
   const genrePreset = getVisualDirectionPreset(inferredPremiumPreset(genre));
@@ -894,7 +1006,92 @@ ${customBlock}
 
 Compose for a 5:8 portrait cover. Keep all important subjects inside the central 85% safe area. Preserve uncluttered negative space and strong image recognition at thumbnail size.
 
-${COVER_ARTWORK_NO_TEXT_GUARD}`;
+	${COVER_ARTWORK_NO_TEXT_GUARD}`;
+}
+
+export function buildIntegratedTypographyCoverPrompt(input: CoverPromptInput) {
+  const genre = inferCreativeGenre(input);
+  const selectedPreset = getVisualDirectionPreset(input.style);
+  const genrePreset = getVisualDirectionPreset(inferredPremiumPreset(genre));
+  const creativeFinishPreset = getCreativeCoverFinishPreset(input.creativeFinish, input);
+  const premise = input.mode === "fiction"
+    ? input.premise || "Use the supplied genre and story context as the authoritative concept."
+    : input.topic || input.keyPoints || "Use the supplied reader promise as the authoritative subject context.";
+  const title = stripCoverPlaceholderText(input.title);
+  const subtitle = stripCoverPlaceholderText(input.subtitle);
+  const author = stripCoverPlaceholderText(input.author);
+  const exactText = [title, subtitle, author]
+    .filter(Boolean)
+    .map((value) => `“${value}”`)
+    .join("\n");
+  const directionContext = {
+    mode: input.mode,
+    title,
+    genre: input.genre,
+    premise: input.premise,
+    topic: input.topic,
+    creativeFinish: creativeFinishPreset.id,
+    style: input.style,
+  };
+  const typography = getCoverTypographyPreset(resolveCoverTitleTypography(
+    input.titleTypography,
+    directionContext,
+  ));
+  const placement = getCoverTitlePlacementPreset(resolveCoverTitlePlacement(
+    input.titlePlacement,
+    directionContext,
+  ), directionContext);
+  const custom = sanitizeIntegratedTypographyPrompt(input.customDirection);
+  const customBlock = custom
+    ? `Author scene request, highest priority for visual content: ${custom}\nHonor every safe visual element and exclusion. The exact-cover-text rules override any request for other readable words.`
+    : "No custom scene request was supplied. Build the concept from the story, genre, and audience.";
+
+  return `Create an original complete customer-facing book cover for a premium ${input.mode === "fiction" ? "fiction" : "non-fiction"} book. Generate the finished cover as one integrated image with its official typography already designed into the artwork. The app text overlay will remain disabled.
+
+Story and market context:
+Creative category: ${genre.replace(/-/g, " ")}
+Premise or reader promise: ${premise}
+Target reader: ${input.audience || "General readers"}
+
+Selected visual direction:
+${describeVisualDirection(selectedPreset.label, true)}
+
+Genre-specific elevation:
+${describeVisualDirection(genrePreset.label, true)}
+
+Market/design finish:
+${describeCreativeCoverFinish(creativeFinishPreset.id, input, true)}
+
+Exact cover text:
+Render only these exact words as cover text:
+${exactText}
+
+Typography composition:
+Use ${typography.label} for the title treatment and ${placement.label} for its primary placement. Preserve the wording and spelling exactly; capitalization, scale, tracking, and line breaks may serve the design without changing any word. Treat the author with ${creativeFinishPreset.authorTypography}. Keep one readable title treatment, one subtitle treatment only when supplied, and one author treatment only when supplied.
+
+Title-aware symbols: ${titleAwareSymbols(input, genre)}.
+Emotional subject: ${subjectDirection(input, genre)}.
+Foreground: place the emotional subject or primary symbolic object here with immediate thumbnail recognition.
+Midground: show the specific location, relationship, method, or story evidence that gives the concept meaning.
+Background: use restrained atmosphere and depth, with no readable environmental lettering or decorative word fragments.
+Lighting and palette: combine the genre-specific elevation and selected market/design finish, keep one motivated light source, and reserve one warm or contrasting accent for emotional focus.
+Surface/print finish: ${input.finishDirection}.
+
+${customBlock}
+
+Compose for a 5:8 portrait cover. Keep all important subjects and every official text line inside the central 85% safe area. Maintain readable hierarchy at thumbnail size and protect all cover text from trim, cropping, collision, distortion, or ghost duplication.
+
+${INTEGRATED_COVER_TEXT_GUARD}`;
+}
+
+export function buildCoverPrompt(input: CoverPromptInput) {
+  const resolvedTextMode = resolveCoverTextMode({
+    ...input,
+    coverTextMode: input.coverTextMode ?? "app-typography",
+  });
+  return resolvedTextMode === "integrated-typography"
+    ? buildIntegratedTypographyCoverPrompt(input)
+    : buildAppTypographyCoverPrompt(input);
 }
 
 export function buildVisualArtworkDirection(context: CreativeContext, style: string | undefined) {
