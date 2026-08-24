@@ -47,6 +47,230 @@ export type VisualDirectionPreset = {
   bestFor: string;
 };
 
+export const CREATIVE_COVER_FINISH_OPTIONS = [
+  { id: "auto", label: "Auto" },
+  { id: "rain-soaked-gothic", label: "Rain-Soaked Gothic" },
+  { id: "gothic-literary", label: "Gothic Literary" },
+  { id: "cinematic-mystery", label: "Cinematic Mystery" },
+  { id: "dark-academia", label: "Dark Academia" },
+  { id: "emotional-memoir", label: "Emotional Memoir" },
+  { id: "premium-nonfiction", label: "Premium Nonfiction" },
+  { id: "founder-authority", label: "Founder Authority" },
+  { id: "warm-storybook", label: "Warm Storybook" },
+  { id: "minimal-literary", label: "Minimal Literary" },
+  { id: "luxury-thriller", label: "Luxury Thriller" },
+  { id: "dark-romance", label: "Dark Romance" },
+  { id: "epic-fantasy", label: "Epic Fantasy" },
+  { id: "clean-how-to", label: "Clean How-To" },
+  { id: "product-guide-premium", label: "Product Guide Premium" },
+] as const;
+
+export type CreativeCoverFinishId =
+  (typeof CREATIVE_COVER_FINISH_OPTIONS)[number]["id"];
+
+export type CreativeCoverFinishPreset = {
+  id: Exclude<CreativeCoverFinishId, "auto">;
+  label: string;
+  mood: string;
+  composition: string;
+  lighting: string;
+  background: string;
+  palette: string;
+  typography: string;
+  authorTypography: string;
+  authorTreatment: "spaced-small-caps" | "classic" | "clean-authority" | "warm" | "grand";
+  bestGenres: string;
+  avoid: string;
+};
+
+const CREATIVE_COVER_FINISH_PRESETS: Record<
+  Exclude<CreativeCoverFinishId, "auto">,
+  CreativeCoverFinishPreset
+> = {
+  "rain-soaked-gothic": {
+    id: "rain-soaked-gothic", label: "Rain-Soaked Gothic",
+    mood: "literary, haunting, restrained, and visibly rain-darkened",
+    composition: "a solitary foreground figure or symbolic object, an old house or window in the midground, and storm depth behind it",
+    lighting: "cool storm light anchored by one warm glowing window or lamp",
+    background: "wet glass, rain, mist, aged architecture, and uncluttered shadow",
+    palette: "deep navy and teal shadows, forest green, ivory, muted gold, and one amber or burgundy accent",
+    typography: "elegant cream, ivory, or muted-gold literary serif with generous breathing room",
+    authorTypography: "premium spaced small caps, centered near the bottom in readable muted ivory",
+    authorTreatment: "spaced-small-caps",
+    bestGenres: "literary gothic mystery, family secrets, inheritance, grief, memory, and atmospheric suspense",
+    avoid: "cartoon horror, gore, lightning overload, cheap haunted-house clichés, duplicate titles, internal labels, and crop bands",
+  },
+  "gothic-literary": {
+    id: "gothic-literary", label: "Gothic Literary",
+    mood: "quietly haunted, emotionally restrained, literary, and intimate",
+    composition: "an atmospheric house, old room, threshold, or memory-bearing subject with deliberate negative space",
+    lighting: "one dim warm practical light against cool teal, navy, or charcoal shadow",
+    background: "old rooms, weathered architecture, dim lamps, mist, and family-history detail",
+    palette: "dark teal, navy, charcoal, forest green, cream, and restrained warm amber",
+    typography: "high-contrast elegant serif with calm hierarchy",
+    authorTypography: "quiet spaced small caps with refined tracking and a safe bottom margin",
+    authorTreatment: "spaced-small-caps",
+    bestGenres: "gothic fiction, literary mystery, family secrets, grief, and memory-led fiction",
+    avoid: "cheap horror clichés, theatrical ghosts, gore, distressed novelty type, and visual melodrama",
+  },
+  "cinematic-mystery": {
+    id: "cinematic-mystery", label: "Cinematic Mystery",
+    mood: "suspenseful, intelligent, premium, and unresolved",
+    composition: "one strong foreground subject, clue-bearing midground, obscured background, and protected title zone",
+    lighting: "high-contrast motivated light with one revealing highlight",
+    background: "rain, glass, haze, architecture, or night depth used with restraint",
+    palette: "navy, teal, forest green, charcoal, cream, and one amber accent",
+    typography: "sharp premium serif or restrained cinematic display face",
+    authorTypography: "subtle centered spaced small caps, cinematic and readable",
+    authorTreatment: "spaced-small-caps",
+    bestGenres: "mystery, suspense, psychological thriller, crime, and literary intrigue",
+    avoid: "police-tape clichés, generic detectives, random clues, clutter, and lurid color",
+  },
+  "dark-academia": {
+    id: "dark-academia", label: "Dark Academia",
+    mood: "scholarly, secretive, tactile, and atmospheric",
+    composition: "one architectural or scholarly focal point with formal depth and disciplined negative space",
+    lighting: "candlelight or window light shaped through rain and shadow",
+    background: "libraries, stone halls, rain-streaked windows, old books, and restrained academic detail",
+    palette: "muted brown, navy, forest green, parchment, charcoal, and antique brass",
+    typography: "refined classical serif with bookish authority",
+    authorTypography: "classic small caps with measured tracking and academic restraint",
+    authorTreatment: "classic",
+    bestGenres: "campus mystery, literary suspense, historical secrets, and intellectual thrillers",
+    avoid: "cluttered book piles, illegible background writing, costume parody, and sepia overload",
+  },
+  "emotional-memoir": {
+    id: "emotional-memoir", label: "Emotional Memoir",
+    mood: "intimate, truthful, warm, and emotionally controlled",
+    composition: "one honest portrait, place, or meaningful object with generous breathing room",
+    lighting: "soft natural light with one memory-bearing warm highlight",
+    background: "tactile real-world context softened into supporting depth",
+    palette: "warm cream, natural tones, deep green, navy, and muted amber",
+    typography: "restrained literary serif or clean humanist sans",
+    authorTypography: "personal, clean, elevated, and readable without severe spacing",
+    authorTreatment: "classic",
+    bestGenres: "memoir, grief, family history, personal growth, and reflective nonfiction",
+    avoid: "performative sadness, melodrama, generic inspirational portraits, and false nostalgia",
+  },
+  "premium-nonfiction": {
+    id: "premium-nonfiction", label: "Premium Nonfiction",
+    mood: "credible, intelligent, clear, and outcome-focused",
+    composition: "one strong central concept, disciplined grid, and generous editorial space",
+    lighting: "clean dimensional editorial light",
+    background: "white, cream, navy, or tactile minimal field with precise depth",
+    palette: "deep green, navy, warm white, muted ink, and restrained mint",
+    typography: "confident modern serif and sans hierarchy with a readable outcome-led subtitle",
+    authorTypography: "clean professional authority treatment with moderate tracking",
+    authorTreatment: "clean-authority",
+    bestGenres: "self-help, productivity, education, business, and practical guides",
+    avoid: "generic icons, stock handshakes, hype, crowded benefits, and empty corporate polish",
+  },
+  "founder-authority": {
+    id: "founder-authority", label: "Founder Authority",
+    mood: "decisive, modern, trusted, and premium",
+    composition: "one credible founder, operational object, or outcome signal with sharp hierarchy",
+    lighting: "controlled executive-editorial contrast with clean edge definition",
+    background: "minimal architectural, operational, or abstract business depth",
+    palette: "navy, deep green, charcoal, warm white, and one restrained metallic or blue accent",
+    typography: "authoritative modern sans with a refined serif accent",
+    authorTypography: "clean, confident authority line with restrained spacing",
+    authorTreatment: "clean-authority",
+    bestGenres: "business authority, founder stories, strategy, operations, and professional services",
+    avoid: "fake corporate stock scenes, handshakes, money imagery, dashboards, and aggressive hype",
+  },
+  "warm-storybook": {
+    id: "warm-storybook", label: "Warm Storybook",
+    mood: "inviting, imaginative, emotionally clear, and tasteful",
+    composition: "one clear character or setting performing one understandable story beat",
+    lighting: "soft warm daylight or gentle practical light",
+    background: "simple illustrated environment with a few meaningful details",
+    palette: "warm cream, green, clear blue, sunny gold, and restrained coral",
+    typography: "friendly high-legibility serif or rounded sans",
+    authorTypography: "simple, warm, friendly, and easy to read",
+    authorTreatment: "warm",
+    bestGenres: "children's stories, family narratives, gentle fiction, and illustrated learning",
+    avoid: "babyish clip art, chaotic props, muddy color, severe cinematic spacing, and tiny type",
+  },
+  "minimal-literary": {
+    id: "minimal-literary", label: "Minimal Literary",
+    mood: "quiet, intelligent, emotionally weighted, and refined",
+    composition: "one symbolic object with abundant breathing room and intentional asymmetry",
+    lighting: "precise soft light with tactile shadow",
+    background: "sparse paper, wall, landscape, or material field with subtle depth",
+    palette: "cream, muted ink, navy, forest green, and one restrained accent",
+    typography: "elegant literary serif with disciplined scale",
+    authorTypography: "small refined spaced caps, centered or grid-aligned safely",
+    authorTreatment: "spaced-small-caps",
+    bestGenres: "literary fiction, essays, poetry-adjacent prose, and quiet memoir",
+    avoid: "empty symbolism, oversized decoration, novelty type, and template-like minimalism",
+  },
+  "luxury-thriller": {
+    id: "luxury-thriller", label: "Luxury Thriller",
+    mood: "intense, controlled, sleek, and expensive",
+    composition: "one dominant threat, object, or silhouette with severe hierarchy and negative space",
+    lighting: "deep blacks cut by a narrow metallic or cold highlight",
+    background: "minimal night, architecture, smoke, or texture with cinematic depth",
+    palette: "black, midnight navy, steel, muted gold, ivory, and one restrained danger accent",
+    typography: "bold high-contrast title treatment with clean supporting type",
+    authorTypography: "bold but controlled spaced caps below the action-safe zone",
+    authorTreatment: "spaced-small-caps",
+    bestGenres: "thrillers, espionage, crime, high-stakes suspense, and prestige action",
+    avoid: "messy action collage, explosions, cheap metallic effects, and overcrowded typography",
+  },
+  "dark-romance": {
+    id: "dark-romance", label: "Dark Romance",
+    mood: "moody, intimate, sensual, and emotionally restrained",
+    composition: "one silhouette, fabric detail, candle, rain window, or charged distance between figures",
+    lighting: "soft shadow with warm candle or window highlights",
+    background: "dark interior, rain, fabric, or architecture kept atmospheric rather than explicit",
+    palette: "deep navy, charcoal, burgundy, forest green, ivory, and muted rose-gold",
+    typography: "elegant serif with controlled sensuality",
+    authorTypography: "elegant restrained spaced caps, never oversized",
+    authorTreatment: "spaced-small-caps",
+    bestGenres: "dark romance, romantic suspense, gothic romance, and emotionally intense fiction",
+    avoid: "explicit imagery, melodramatic poses, rose clutter, cheap script type, and visual coercion",
+  },
+  "epic-fantasy": {
+    id: "epic-fantasy", label: "Epic Fantasy",
+    mood: "mythic, cinematic, immersive, and emotionally legible",
+    composition: "one heroic symbol or figure against large-scale landscape and magical depth",
+    lighting: "motivated magical light with readable atmospheric scale",
+    background: "distinctive world architecture, landscape, sky, or elemental phenomenon",
+    palette: "deep blue, forest green, charcoal, luminous gold, and one magical accent",
+    typography: "ornate-but-readable serif with protected hierarchy",
+    authorTypography: "grand clean small caps with restrained scale below the main artwork",
+    authorTreatment: "grand",
+    bestGenres: "epic fantasy, mythic adventure, portal fantasy, and high-concept speculative fiction",
+    avoid: "overloaded armies, generic castles, unreadable ornament, and franchise imitation",
+  },
+  "clean-how-to": {
+    id: "clean-how-to", label: "Clean How-To",
+    mood: "practical, organized, bright, and trustworthy",
+    composition: "one clear visual metaphor with simple hierarchy and direct subtitle support",
+    lighting: "clean soft light with crisp separation",
+    background: "bright cream, white, navy, or simple working context",
+    palette: "navy, deep green, cream, white, and one useful accent",
+    typography: "high-legibility sans or modern serif with clear instructional hierarchy",
+    authorTypography: "clean readable professional line with minimal tracking",
+    authorTreatment: "clean-authority",
+    bestGenres: "how-to, productivity, education, workbooks, and practical self-help",
+    avoid: "tool collages, tiny benefit lists, generic arrows, and busy instructional diagrams",
+  },
+  "product-guide-premium": {
+    id: "product-guide-premium", label: "Product Guide Premium",
+    mood: "direct, high-trust, polished, and commercially useful",
+    composition: "one product, service outcome, or offer concept with disciplined editorial hierarchy",
+    lighting: "premium clean studio or editorial light",
+    background: "minimal brand-compatible environment with confident spacing",
+    palette: "deep green, navy, warm white, charcoal, and one controlled product accent",
+    typography: "modern offer-led hierarchy with a clear promise and restrained supporting copy",
+    authorTypography: "credible professional attribution that never overpowers the offer",
+    authorTreatment: "clean-authority",
+    bestGenres: "product guides, service guides, lead magnets, offers, and customer education",
+    avoid: "fake mockups, price-badge clutter, stock icons, excessive claims, and author dominance",
+  },
+};
+
 const VISUAL_DIRECTION_PRESETS: Record<string, VisualDirectionPreset> = {
   "cinematic-editorial": {
     label: "Cinematic Editorial",
@@ -298,7 +522,7 @@ const COPY_FRAMEWORKS: Record<CreativeGenre, string> = {
 };
 
 export const COVER_ARTIFACT_GUARD =
-  "Render the exact title once and only once. Do not add a second title, ghost title, background lettering, fake readable text, internal product or edition labels, publisher marks, logos, watermarks, random cropped title bands, decorative word fragments, borders, mockups, books, or devices. Keep image detail away from the title zone. Avoid distorted typography, malformed anatomy, generic stock-photo posing, and overcrowded composition.";
+  "Render the exact title once and only once. Do not add a second title, ghost title, background lettering, random readable background text, fake readable text, internal product or edition labels, publisher marks, logos, watermarks, random cropped title bands, decorative word fragments, borders, mockups, books, or devices. Keep image detail away from the title, subtitle, and author zones. Prevent author and subtitle overlap, never make tiny or illegible author names, and never place text in the generated image background unless the app typography layer intentionally owns it. Avoid distorted typography, malformed anatomy, low-resolution artifacts, generic stock-photo posing, and overcrowded composition.";
 
 function normalize(value: string | undefined) {
   return String(value ?? "").trim().toLowerCase();
@@ -353,6 +577,111 @@ function inferredPremiumPreset(genre: CreativeGenre) {
   if (["self-help", "productivity", "guide-how-to", "lead-magnet", "product-service-guide", "general-nonfiction"].includes(genre)) return "premium-nonfiction";
   if (genre === "children-story") return "children-warm-storybook";
   return "cinematic-editorial";
+}
+
+const CREATIVE_FINISH_ALIASES: Record<string, CreativeCoverFinishId> = {
+  auto: "auto",
+  "rain soaked gothic": "rain-soaked-gothic",
+  "rain-soaked-gothic": "rain-soaked-gothic",
+  "gothic literary": "gothic-literary",
+  "gothic-literary": "gothic-literary",
+  "cinematic mystery": "cinematic-mystery",
+  "cinematic-mystery": "cinematic-mystery",
+  "dark academia": "dark-academia",
+  "dark-academia": "dark-academia",
+  "emotional memoir": "emotional-memoir",
+  "emotional-memoir": "emotional-memoir",
+  "premium nonfiction": "premium-nonfiction",
+  "premium-nonfiction": "premium-nonfiction",
+  "founder authority": "founder-authority",
+  "founder-authority": "founder-authority",
+  "founder business authority": "founder-authority",
+  "founder/business authority": "founder-authority",
+  "founder-business-authority": "founder-authority",
+  "warm storybook": "warm-storybook",
+  "warm-storybook": "warm-storybook",
+  "minimal literary": "minimal-literary",
+  "minimal-literary": "minimal-literary",
+  "luxury thriller": "luxury-thriller",
+  "luxury-thriller": "luxury-thriller",
+  "dark romance": "dark-romance",
+  "dark-romance": "dark-romance",
+  "epic fantasy": "epic-fantasy",
+  "epic-fantasy": "epic-fantasy",
+  "clean how to": "clean-how-to",
+  "clean-how-to": "clean-how-to",
+  "product guide premium": "product-guide-premium",
+  "product-guide-premium": "product-guide-premium",
+};
+
+export function resolveCreativeCoverFinishId(value: string | undefined): CreativeCoverFinishId {
+  const normalized = normalize(value);
+  const key = normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return CREATIVE_FINISH_ALIASES[normalized] ?? CREATIVE_FINISH_ALIASES[key] ?? "auto";
+}
+
+export function inferCreativeCoverFinish(context: CreativeContext): Exclude<CreativeCoverFinishId, "auto"> {
+  const genre = inferCreativeGenre(context);
+  const text = contextText(context);
+  if (genre === "gothic-mystery") {
+    return /rain|storm|thunder|window|wet|mist/.test(text)
+      ? "rain-soaked-gothic"
+      : "gothic-literary";
+  }
+  if (genre === "literary-mystery") return "cinematic-mystery";
+  if (genre === "thriller" || genre === "horror") return "luxury-thriller";
+  if (genre === "fantasy") return "epic-fantasy";
+  if (genre === "romance") return "dark-romance";
+  if (genre === "children-story") return "warm-storybook";
+  if (genre === "memoir" || genre === "spiritual-reflection") return "emotional-memoir";
+  if (genre === "business") return "founder-authority";
+  if (genre === "guide-how-to" || genre === "productivity") return "clean-how-to";
+  if (genre === "product-service-guide" || genre === "lead-magnet") return "product-guide-premium";
+  if (context.mode === "nonfiction") return "premium-nonfiction";
+  return "minimal-literary";
+}
+
+export function getCreativeCoverFinishPreset(
+  value: string | undefined,
+  context: CreativeContext,
+) {
+  const requested = resolveCreativeCoverFinishId(value);
+  const id = requested === "auto" ? inferCreativeCoverFinish(context) : requested;
+  return CREATIVE_COVER_FINISH_PRESETS[id];
+}
+
+export function describeCreativeCoverFinish(value: string | undefined, context: CreativeContext) {
+  const preset = getCreativeCoverFinishPreset(value, context);
+  return [
+    `Creative cover finish: ${preset.label}.`,
+    `Market mood: ${preset.mood}.`,
+    `Cover composition: ${preset.composition}.`,
+    `Finish lighting: ${preset.lighting}.`,
+    `Finish background: ${preset.background}.`,
+    `Finish palette: ${preset.palette}.`,
+    `Title typography: ${preset.typography}.`,
+    `Author typography: ${preset.authorTypography}.`,
+    `Best genres: ${preset.bestGenres}.`,
+    `Finish exclusions: ${preset.avoid}.`,
+  ].join(" ");
+}
+
+export function formatPremiumCoverAuthor(
+  author: string,
+  value: string | undefined,
+  context: CreativeContext,
+) {
+  const preset = getCreativeCoverFinishPreset(value, context);
+  const clean = author.trim().replace(/\s+/g, " ");
+  if (!clean) return "";
+  if (preset.authorTreatment !== "spaced-small-caps" && preset.authorTreatment !== "grand") {
+    return clean.toUpperCase();
+  }
+  return clean
+    .toUpperCase()
+    .split(" ")
+    .map((word) => Array.from(word).join(" "))
+    .join("   ");
 }
 
 export function getVisualDirectionPreset(style: string | undefined) {
@@ -415,11 +744,13 @@ function subjectDirection(context: CreativeContext, genre: CreativeGenre) {
 export function buildCoverPrompt(input: CreativeContext & {
   style?: string;
   finishDirection: string;
+  creativeFinish?: string;
   customDirection?: string;
 }) {
   const genre = inferCreativeGenre(input);
   const selectedPreset = getVisualDirectionPreset(input.style);
   const genrePreset = getVisualDirectionPreset(inferredPremiumPreset(genre));
+  const creativeFinishPreset = getCreativeCoverFinishPreset(input.creativeFinish, input);
   const title = input.title.trim();
   const premise = input.mode === "fiction"
     ? input.premise || "Use the title and genre as the authoritative story context."
@@ -444,14 +775,20 @@ ${describeVisualDirection(selectedPreset.label)}
 Genre-specific elevation:
 ${describeVisualDirection(genrePreset.label)}
 
+Market/design finish:
+${describeCreativeCoverFinish(creativeFinishPreset.id, input)}
+
 Title-aware symbols: ${titleAwareSymbols(input, genre)}.
 Emotional subject: ${subjectDirection(input, genre)}.
 Foreground: place the emotional subject or primary symbolic object here with immediate thumbnail recognition.
 Midground: show the specific location, relationship, method, or story evidence that gives the title meaning.
 Background: use restrained atmosphere and depth that support the concept without becoming a second cover.
-Lighting and palette: follow the genre-specific elevation above, keep one motivated light source, and reserve one warm or contrasting accent for emotional focus.
-Typography: render the exact title once using ${genrePreset.typography}. If the title is long, reduce its size or stack it into balanced lines. Never crop, abbreviate, distort, or replace any title word. Subtitle and author will be added separately by the final cover renderer, so do not render them into the artwork.
-Cover finish: ${input.finishDirection}.
+Lighting and palette: combine the genre-specific elevation and selected market/design finish, keep one motivated light source, and reserve one warm or contrasting accent for emotional focus.
+Typography direction: render the exact title once using ${creativeFinishPreset.typography}. If the title is long, reduce its size or stack it into balanced lines. Never crop, abbreviate, distort, or replace any title word.
+Author typography direction: reserve a clean bottom safe area for ${creativeFinishPreset.authorTypography}; the final cover renderer adds the author separately, so do not render the author into the artwork.
+Layout direction: protect independent title, subtitle, artwork-subject, and author zones with generous margins and no overlap.
+Surface/print finish: ${input.finishDirection}.
+Subtitle and author will be added separately by the final cover renderer, so do not render them into the artwork.
 
 ${customBlock}
 
@@ -468,7 +805,8 @@ export function buildVisualArtworkDirection(context: CreativeContext, style: str
 }
 
 export function buildAskEBCreativeGuidance(context: CreativeContext) {
-  return `${buildCopywritingGuidance(context)} Infer the most precise genre or subgenre supported by the title and premise. For fiction subtitles, write one atmospheric, emotionally specific, cover-readable sentence fragment or sentence without repeating the title. For non-fiction subtitles, state the outcome, intended reader, and credible method in one cover-readable line. When writing a blurb, follow the genre framework above instead of producing a generic summary. When suggesting a cover, specify one focal subject, foreground, midground, background, motivated lighting, restrained palette, typography direction, and explicit negative constraints. For a visual mini-book setup, recommend one existing mini-book type and one existing visual direction that can be applied immediately. Prefer fewer decisive fields over generic filler.`;
+  const recommendedFinish = getCreativeCoverFinishPreset("auto", context);
+  return `${buildCopywritingGuidance(context)} Infer the most precise genre or subgenre supported by the title and premise. For fiction subtitles, write one atmospheric, emotionally specific, cover-readable sentence fragment or sentence without repeating the title. For non-fiction subtitles, state the outcome, intended reader, and credible method in one cover-readable line. When writing a blurb, follow the genre framework above instead of producing a generic summary. When suggesting a cover, recommend a Cover Style, surface Cover Finish, and Creative Cover Finish; the current best-fit Creative Cover Finish is ${recommendedFinish.label}. Specify one focal subject, foreground, midground, background, motivated lighting, restrained palette, title typography, author treatment, and explicit negative constraints. For gothic or cinematic fiction, recommend premium spaced small caps for the author; for nonfiction or business, recommend a clean authority treatment; for children's stories, recommend a simple warm readable author line. For a visual mini-book setup, recommend one existing mini-book type and one existing visual direction that can be applied immediately. Prefer fewer decisive fields over generic filler.`;
 }
 
 export function resolveVisualStyleId(value: string): VisualStyle | null {

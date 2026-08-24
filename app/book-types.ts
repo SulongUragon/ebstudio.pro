@@ -48,6 +48,7 @@ export type CoverDesign = {
   height?: number;
   style: string;
   finish?: string;
+  creativeFinish?: string;
   displayTitle?: string;
   displaySubtitle?: string;
   showTitle?: boolean;
