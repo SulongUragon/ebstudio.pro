@@ -1,5 +1,6 @@
 import type { Manuscript, Mode, SectionKind } from "./book-types";
 import type { ParagraphChild, TextRun as DocxTextRun } from "docx";
+import type { jsPDF as JsPdfDocument } from "jspdf";
 
 type InlineToken = {
   text: string;
@@ -488,60 +489,368 @@ export async function exportDocx(book: Manuscript, shouldDownload = true) {
   return blob;
 }
 
+const STANDARD_PUBLISHING_PALETTE = {
+  green: "#0f5d3b",
+  navy: "#0a3a74",
+  ink: "#1d2730",
+  muted: "#65717a",
+  cream: "#fbf8f1",
+  rule: "#d8e2dc",
+} as const;
+
+type ReferencePdfPageMeta =
+  | { kind: "title" }
+  | { kind: "contents" }
+  | { kind: "section"; label: string };
+
+function drawReferencePaper(
+  pdf: JsPdfDocument,
+  pageWidth: number,
+  pageHeight: number,
+) {
+  pdf.setFillColor(STANDARD_PUBLISHING_PALETTE.cream);
+  pdf.rect(0, 0, pageWidth, pageHeight, "F");
+  pdf.setFillColor(STANDARD_PUBLISHING_PALETTE.navy);
+  pdf.rect(0, 0, pageWidth, 12, "F");
+  pdf.setFillColor(STANDARD_PUBLISHING_PALETTE.green);
+  pdf.rect(0, 12, pageWidth, 3, "F");
+}
+
+function pdfTextLines(
+  pdf: JsPdfDocument,
+  text: string,
+  maxWidth: number,
+  font: "times" | "helvetica",
+  style: "normal" | "bold" | "italic",
+  size: number,
+) {
+  pdf.setFont(font, style);
+  pdf.setFontSize(size);
+  const lines = pdf.splitTextToSize(cleanText(text).trim(), maxWidth);
+  return Array.isArray(lines) ? lines.map(String) : [String(lines)];
+}
+
+function fitPdfText(
+  pdf: JsPdfDocument,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+  initialSize: number,
+  minimumSize: number,
+  font: "times" | "helvetica",
+  style: "normal" | "bold" | "italic",
+) {
+  let size = initialSize;
+  let lines = pdfTextLines(pdf, text, maxWidth, font, style, size);
+  while (lines.length > maxLines && size > minimumSize) {
+    size = Math.max(minimumSize, size - 1);
+    lines = pdfTextLines(pdf, text, maxWidth, font, style, size);
+  }
+  return { lines, size };
+}
+
+function drawReferenceTitlePage(
+  pdf: JsPdfDocument,
+  book: NormalizedBook,
+  pageWidth: number,
+  pageHeight: number,
+  margin: number,
+) {
+  drawReferencePaper(pdf, pageWidth, pageHeight);
+  const maxWidth = pageWidth - margin * 2;
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(9.5);
+  pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.green);
+  pdf.text("EB STUDIO PRO / REFERENCE EDITION", pageWidth / 2, 102, { align: "center" });
+  pdf.setDrawColor(STANDARD_PUBLISHING_PALETTE.green);
+  pdf.setLineWidth(2.2);
+  pdf.line(pageWidth / 2 - 42, 120, pageWidth / 2 + 42, 120);
+
+  const title = fitPdfText(pdf, book.title, maxWidth, 7, 34, 21, "times", "bold");
+  const titleLineHeight = title.size * 1.13;
+  const subtitle = book.subtitle
+    ? fitPdfText(pdf, book.subtitle, maxWidth - 24, 5, 15, 10.5, "times", "italic")
+    : null;
+  const subtitleHeight = subtitle ? subtitle.lines.length * subtitle.size * 1.35 + 30 : 0;
+  const titleHeight = title.lines.length * titleLineHeight;
+  const contentHeight = titleHeight + subtitleHeight;
+  let y = Math.max(190, (pageHeight - contentHeight) / 2 - 20);
+
+  pdf.setFont("times", "bold");
+  pdf.setFontSize(title.size);
+  pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.navy);
+  title.lines.forEach((line) => {
+    pdf.text(line, pageWidth / 2, y, { align: "center" });
+    y += titleLineHeight;
+  });
+
+  if (subtitle) {
+    y += 22;
+    pdf.setFont("times", "italic");
+    pdf.setFontSize(subtitle.size);
+    pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.muted);
+    subtitle.lines.forEach((line) => {
+      pdf.text(line, pageWidth / 2, y, { align: "center" });
+      y += subtitle.size * 1.35;
+    });
+  }
+
+  pdf.setDrawColor(STANDARD_PUBLISHING_PALETTE.rule);
+  pdf.setLineWidth(0.8);
+  pdf.line(pageWidth / 2 - 72, pageHeight - 155, pageWidth / 2 + 72, pageHeight - 155);
+  const author = fitPdfText(pdf, book.author.toUpperCase(), maxWidth - 40, 2, 11, 8.5, "helvetica", "bold");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(author.size);
+  pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.ink);
+  author.lines.forEach((line, index) => {
+    pdf.text(line, pageWidth / 2, pageHeight - 125 + index * author.size * 1.25, { align: "center" });
+  });
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8.5);
+  pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.muted);
+  pdf.text(book.mode === "fiction" ? "FICTION" : "NON-FICTION", pageWidth / 2, pageHeight - 98, { align: "center" });
+}
+
+function drawReferenceSectionHeading(
+  pdf: JsPdfDocument,
+  label: string,
+  title: string,
+  margin: number,
+  usableWidth: number,
+  startY: number,
+) {
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(9.5);
+  pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.green);
+  pdf.text(label, margin, startY);
+  const fitted = fitPdfText(pdf, title, usableWidth, 4, 26, 17, "times", "bold");
+  const lineHeight = fitted.size * 1.12;
+  let y = startY + 31;
+  pdf.setFont("times", "bold");
+  pdf.setFontSize(fitted.size);
+  pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.navy);
+  fitted.lines.forEach((line) => {
+    pdf.text(line, margin, y);
+    y += lineHeight;
+  });
+  y += 12;
+  pdf.setDrawColor(STANDARD_PUBLISHING_PALETTE.green);
+  pdf.setLineWidth(1.6);
+  pdf.line(margin, y, margin + 72, y);
+  pdf.setDrawColor(STANDARD_PUBLISHING_PALETTE.rule);
+  pdf.setLineWidth(0.6);
+  pdf.line(margin + 72, y, margin + usableWidth, y);
+  return y + 35;
+}
+
+function drawReferenceRunningElements(
+  pdf: JsPdfDocument,
+  pageMeta: Map<number, ReferencePdfPageMeta>,
+  pageWidth: number,
+  pageHeight: number,
+  margin: number,
+) {
+  const pageCount = pdf.getNumberOfPages();
+  for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
+    const meta = pageMeta.get(pageNumber);
+    if (!meta) continue;
+    pdf.setPage(pageNumber);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.muted);
+    pdf.text("EB STUDIO PRO", margin, 36);
+    if (meta.kind === "section") {
+      pdf.text(meta.label.toUpperCase(), pageWidth - margin, 36, { align: "right" });
+    } else {
+      pdf.text("CONTENTS", pageWidth - margin, 36, { align: "right" });
+    }
+    pdf.setDrawColor(STANDARD_PUBLISHING_PALETTE.rule);
+    pdf.setLineWidth(0.45);
+    pdf.line(margin, 44, pageWidth - margin, 44);
+    pdf.line(margin, pageHeight - 42, pageWidth - margin, pageHeight - 42);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.navy);
+    pdf.text(String(pageNumber - 1), pageWidth / 2, pageHeight - 23, { align: "center" });
+  }
+}
+
 export async function exportPdf(book: Manuscript, shouldDownload = true) {
   const exportBook = normalizeExportBook(book);
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ unit: "pt", format: "letter" });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 64;
+  const margin = 70;
   const usableWidth = pageWidth - margin * 2;
+  const bodyBottom = pageHeight - 64;
+  const pageMeta = new Map<number, ReferencePdfPageMeta>();
+  pageMeta.set(1, { kind: "title" });
 
-  if (exportBook.coverImage) {
-    pdf.addImage(exportBook.coverImage, "JPEG", 0, 0, pageWidth, pageHeight);
-  } else {
-    pdf.setFont("times", "bold");
-    pdf.setFontSize(32);
-    pdf.text(pdf.splitTextToSize(exportBook.title, usableWidth), pageWidth / 2, 285, { align: "center" });
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(13);
-    pdf.text(`by ${exportBook.author}`, pageWidth / 2, 470, { align: "center" });
-  }
+  pdf.setProperties({
+    title: exportBook.title,
+    subject: exportBook.subtitle || `${exportBook.mode === "fiction" ? "Fiction" : "Non-Fiction"} reference edition`,
+    author: exportBook.author,
+    creator: "EB Studio Pro",
+  });
+  drawReferenceTitlePage(pdf, exportBook, pageWidth, pageHeight, margin);
 
-  pdf.addPage();
-  pdf.setFont("times", "bold");
-  pdf.setFontSize(25);
-  pdf.text("Contents", margin, 82);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(11);
+  const addReferencePage = (meta: ReferencePdfPageMeta) => {
+    pdf.addPage();
+    pageMeta.set(pdf.getNumberOfPages(), meta);
+    drawReferencePaper(pdf, pageWidth, pageHeight);
+  };
+
+  let contentsY = 0;
+  const addContentsPage = (continued: boolean) => {
+    addReferencePage({ kind: "contents" });
+    drawReferenceSectionHeading(
+      pdf,
+      continued ? "CONTENTS / CONTINUED" : "REFERENCE EDITION",
+      "Contents",
+      margin,
+      usableWidth,
+      78,
+    );
+    contentsY = 150;
+  };
+  addContentsPage(false);
+
   exportBook.sections.forEach((section, index) => {
-    pdf.text(sectionTocLabel(section, exportBook.mode), margin, 118 + index * 20);
+    pdf.setFont("helvetica", "normal");
+    const fitted = fitPdfText(
+      pdf,
+      sectionTocLabel(section, exportBook.mode),
+      usableWidth - 54,
+      3,
+      11.5,
+      9.5,
+      "helvetica",
+      "normal",
+    );
+    const lineHeight = fitted.size * 1.35;
+    const entryHeight = fitted.lines.length * lineHeight + 15;
+    if (contentsY + entryHeight > bodyBottom) addContentsPage(true);
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(9.5);
+    pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.green);
+    pdf.text(String(index + 1).padStart(2, "0"), margin, contentsY + 1);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(fitted.size);
+    pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.ink);
+    fitted.lines.forEach((line, lineIndex) => {
+      pdf.text(line, margin + 42, contentsY + lineIndex * lineHeight);
+    });
+    pdf.setDrawColor(STANDARD_PUBLISHING_PALETTE.rule);
+    pdf.setLineWidth(0.45);
+    pdf.line(margin + 42, contentsY + entryHeight - 7, pageWidth - margin, contentsY + entryHeight - 7);
+    contentsY += entryHeight;
   });
 
   for (const section of exportBook.sections) {
-    pdf.addPage();
-    let y = 82;
-    pdf.setFont("times", "bold");
-    pdf.setFontSize(24);
-    pdf.text(pdf.splitTextToSize(sectionTocLabel(section, exportBook.mode), usableWidth), margin, y);
-    y += 52;
-    pdf.setFont("times", "normal");
-    pdf.setFontSize(11.5);
-    for (const block of parseRichBlocks(section.content, section.title, sectionTocLabel(section, exportBook.mode))) {
+    const role = sectionRole(section, exportBook.mode);
+    const title = sectionDescriptiveTitle(section, exportBook.mode);
+    const pageLabel = sectionTocLabel(section, exportBook.mode);
+    const addSectionPage = (continuation: boolean) => {
+      addReferencePage({ kind: "section", label: role });
+      if (continuation) return 72;
+      return drawReferenceSectionHeading(pdf, role.toUpperCase(), title, margin, usableWidth, 78);
+    };
+    let y = addSectionPage(false);
+
+    const moveToNextSectionPage = () => {
+      y = addSectionPage(true);
+    };
+    const ensureSpace = (height: number) => {
+      if (y + height > bodyBottom) moveToNextSectionPage();
+    };
+    const drawWrappedLines = (
+      lines: string[],
+      options: { x: number; size: number; lineHeight: number; font: "times" | "helvetica"; style: "normal" | "bold" | "italic"; color: string },
+    ) => {
+      pdf.setFont(options.font, options.style);
+      pdf.setFontSize(options.size);
+      pdf.setTextColor(options.color);
+      for (const line of lines) {
+        if (y + options.lineHeight > bodyBottom) moveToNextSectionPage();
+        pdf.text(line, options.x, y);
+        y += options.lineHeight;
+      }
+    };
+
+    for (const block of parseRichBlocks(section.content, section.title, pageLabel)) {
+      if (block.type === "scene-break") {
+        ensureSpace(42);
+        y += 8;
+        pdf.setFont("times", "normal");
+        pdf.setFontSize(12);
+        pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.green);
+        pdf.text("*  *  *", pageWidth / 2, y, { align: "center" });
+        y += 29;
+        continue;
+      }
+
+      if (block.type === "heading") {
+        const text = blockPlainText(block);
+        const size = block.level === 2 ? 14.5 : 12.5;
+        const lines = pdfTextLines(pdf, text, usableWidth, "helvetica", "bold", size);
+        ensureSpace(lines.length * (size * 1.3) + 22);
+        y += 10;
+        drawWrappedLines(lines, {
+          x: margin,
+          size,
+          lineHeight: size * 1.3,
+          font: "helvetica",
+          style: "bold",
+          color: STANDARD_PUBLISHING_PALETTE.navy,
+        });
+        y += 7;
+        continue;
+      }
+
+      if (block.type === "list") {
+        for (let itemIndex = 0; itemIndex < block.items.length; itemIndex += 1) {
+          const marker = block.ordered ? `${itemIndex + 1}.` : "-";
+          const text = block.items[itemIndex].map((token) => token.text).join("");
+          const lines = pdfTextLines(pdf, text, usableWidth - 26, "times", "normal", 11.5);
+          const lineHeight = 17.4;
+          ensureSpace(Math.min(lines.length, 3) * lineHeight + 5);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(9.5);
+          pdf.setTextColor(STANDARD_PUBLISHING_PALETTE.green);
+          pdf.text(marker, margin + 4, y);
+          drawWrappedLines(lines, {
+            x: margin + 24,
+            size: 11.5,
+            lineHeight,
+            font: "times",
+            style: "normal",
+            color: STANDARD_PUBLISHING_PALETTE.ink,
+          });
+          y += 4;
+        }
+        y += 6;
+        continue;
+      }
+
       const text = blockPlainText(block);
       if (!text) continue;
-      const lines = pdf.splitTextToSize(text, usableWidth);
-      for (const line of lines) {
-        if (y + 17 > pageHeight - 62) {
-          pdf.addPage();
-          y = 68;
-        }
-        pdf.text(line, margin, y);
-        y += 17;
-      }
-      y += 11;
+      const lines = pdfTextLines(pdf, text, usableWidth, "times", "normal", 11.5);
+      ensureSpace(Math.min(lines.length, 3) * 17.4 + 8);
+      drawWrappedLines(lines, {
+        x: margin,
+        size: 11.5,
+        lineHeight: 17.4,
+        font: "times",
+        style: "normal",
+        color: STANDARD_PUBLISHING_PALETTE.ink,
+      });
+      y += 10;
     }
   }
+
+  drawReferenceRunningElements(pdf, pageMeta, pageWidth, pageHeight, margin);
 
   const blob = pdf.output("blob");
   if (shouldDownload) downloadBlob(blob, `${exportFilenameStem(exportBook)}-Reference.pdf`);
@@ -659,11 +968,170 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
   return blob;
 }
 
+type CoverTextLayout = {
+  lines: string[];
+  size: number;
+  lineHeight: number;
+};
+
+function estimatedCoverTextWidth(text: string, size: number) {
+  let units = 0;
+  for (const character of text) {
+    if (character === " ") units += 0.28;
+    else if (/[ilI1.,'`]/.test(character)) units += 0.28;
+    else if (/[MW@%&]/.test(character)) units += 0.88;
+    else if (/[A-Z0-9]/.test(character)) units += 0.66;
+    else units += 0.52;
+  }
+  return units * size;
+}
+
+function wrapCoverText(text: string, maxWidth: number, size: number) {
+  const words = cleanText(text).trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (!current || estimatedCoverTextWidth(candidate, size) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    lines.push(current);
+    current = word;
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function fitCoverText(
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+  initialSize: number,
+  minimumSize: number,
+  lineHeightRatio: number,
+): CoverTextLayout {
+  let size = initialSize;
+  let lines = wrapCoverText(text, maxWidth, size);
+  while (lines.length > maxLines && size > minimumSize) {
+    size = Math.max(minimumSize, size - 2);
+    lines = wrapCoverText(text, maxWidth, size);
+  }
+  return { lines, size, lineHeight: size * lineHeightRatio };
+}
+
+function svgTextLines(
+  lines: string[],
+  x: number,
+  startY: number,
+  lineHeight: number,
+  attributes: string,
+) {
+  return lines
+    .map((line, index) => `<text x="${x}" y="${startY + index * lineHeight}" ${attributes}>${escapeXml(line)}</text>`)
+    .join("");
+}
+
+export function createPolishedKdpCoverSvg(book: Manuscript) {
+  const width = 1600;
+  const height = 2560;
+  const title = fitCoverText(book.title, 1260, 8, 118, 54, 1.08);
+  const subtitleCandidate = book.subtitle
+    ? fitCoverText(book.subtitle, 1180, 5, 45, 27, 1.28)
+    : null;
+  const subtitle = subtitleCandidate && subtitleCandidate.lines.length <= 5
+    ? subtitleCandidate
+    : null;
+  const author = fitCoverText(book.author.toUpperCase(), 1160, 2, 48, 30, 1.2);
+  const titleHeight = title.lines.length * title.lineHeight;
+  const subtitleHeight = subtitle ? subtitle.lines.length * subtitle.lineHeight : 0;
+  const titleStart = subtitle
+    ? Math.max(325, 735 - (titleHeight + subtitleHeight + 90) / 2)
+    : Math.max(390, 790 - titleHeight / 2);
+  const subtitleStart = titleStart + titleHeight + 70;
+  const authorStart = 2350 - (author.lines.length - 1) * author.lineHeight;
+  const artwork = book.cover?.sourceImageData || book.cover?.imageData || "";
+  const image = artwork
+    ? `<image href="${escapeXml(artwork)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice"/>`
+    : "";
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#061d34"/>
+      <stop offset="0.58" stop-color="#0a3a74"/>
+      <stop offset="1" stop-color="#0f5d3b"/>
+    </linearGradient>
+    <linearGradient id="title-panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#071d32" stop-opacity="0.985"/>
+      <stop offset="1" stop-color="#0a3a74" stop-opacity="0.94"/>
+    </linearGradient>
+    <linearGradient id="art-shade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a3a74" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#0f5d3b" stop-opacity="0.42"/>
+    </linearGradient>
+  </defs>
+  <rect width="${width}" height="${height}" fill="url(#base)"/>
+  ${image}
+  <rect width="${width}" height="${height}" fill="url(#art-shade)"/>
+  <rect x="0" y="0" width="${width}" height="1680" fill="url(#title-panel)"/>
+  <rect x="0" y="2200" width="${width}" height="360" fill="#071d32" fill-opacity="0.95"/>
+  <rect x="72" y="72" width="1456" height="2416" rx="4" fill="none" stroke="#f7f1e7" stroke-opacity="0.72" stroke-width="3"/>
+  <rect x="72" y="72" width="210" height="12" fill="#0f5d3b"/>
+  <rect x="1318" y="2476" width="210" height="12" fill="#0f5d3b"/>
+  <text x="800" y="220" text-anchor="middle" fill="#9ccbb7" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="700" letter-spacing="5">EB STUDIO PRO / KDP EDITION</text>
+  <line x1="680" y1="266" x2="920" y2="266" stroke="#0f5d3b" stroke-width="8"/>
+  ${svgTextLines(title.lines, 800, titleStart, title.lineHeight, `text-anchor="middle" fill="#f7f1e7" font-family="Georgia, 'Times New Roman', serif" font-size="${title.size}" font-weight="700"`)}
+  ${subtitle ? svgTextLines(subtitle.lines, 800, subtitleStart, subtitle.lineHeight, `text-anchor="middle" fill="#d7e6df" font-family="Georgia, 'Times New Roman', serif" font-size="${subtitle.size}" font-style="italic"`) : ""}
+  <line x1="610" y1="2280" x2="990" y2="2280" stroke="#0f5d3b" stroke-width="5"/>
+  ${svgTextLines(author.lines, 800, authorStart, author.lineHeight, `text-anchor="middle" fill="#f7f1e7" font-family="Arial, Helvetica, sans-serif" font-size="${author.size}" font-weight="700" letter-spacing="3"`)}
+</svg>`;
+}
+
+function imageFromObjectUrl(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("The KDP cover layout could not be rendered."));
+    image.src = url;
+  });
+}
+
+function canvasJpegBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", 0.94);
+  });
+}
+
+async function renderPolishedKdpCover(book: Manuscript) {
+  if (typeof document === "undefined" || typeof Image === "undefined") return null;
+  const svg = createPolishedKdpCoverSvg(book);
+  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const objectUrl = URL.createObjectURL(svgBlob);
+  try {
+    const image = await imageFromObjectUrl(objectUrl);
+    const canvas = document.createElement("canvas");
+    canvas.width = 1600;
+    canvas.height = 2560;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.fillStyle = STANDARD_PUBLISHING_PALETTE.navy;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvasJpegBlob(canvas);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export async function exportCover(book: Manuscript, shouldDownload = true) {
   const readiness = getCoverReadiness(book);
   if (!readiness.ready) throw new Error(readiness.errors[0]);
+  const polished = await renderPolishedKdpCover(book).catch(() => null);
   const bytes = dataUriToBytes(book.cover?.imageData ?? "");
-  const blob = new Blob([bytes], { type: "image/jpeg" });
+  const blob = polished && polished.size > 0
+    ? polished
+    : new Blob([bytes], { type: "image/jpeg" });
   if (shouldDownload) downloadBlob(blob, `${exportFilenameStem(book)}-KDP-Cover.jpg`);
   return blob;
 }
@@ -704,11 +1172,17 @@ export async function exportBundle(book: Manuscript, shouldDownload = true) {
 
 function kdpUploadGuide(book: NormalizedBook) {
   const filename = exportFilenameStem(book);
-  return `EB STUDIO PRO — KDP UPLOAD GUIDE
+  return `EB STUDIO PRO - KDP UPLOAD GUIDE
 
 BOOK: ${book.title}
 BOOK TYPE: ${book.mode === "fiction" ? "Fiction" : "Non-Fiction"}
 AUTHOR: ${book.author}
+
+PACKAGE CONTENTS
+- ${filename}-Kindle-Create.docx - Kindle Create source
+- ${filename}.epub - Reflowable ebook alternative
+- ${filename}-KDP-Cover.jpg - 1600 x 2560 marketing cover
+- ${filename}-Reference.pdf - Fixed-layout review copy
 
 RECOMMENDED KINDLE WORKFLOW
 1. Open ${filename}-Kindle-Create.docx in Amazon Kindle Create.
@@ -722,7 +1196,7 @@ EPUB ALTERNATIVE
 You may upload ${filename}.epub instead of KPF. Do not upload KPF and EPUB together; choose one manuscript format.
 
 PDF
-The PDF is a reference copy. It is not the recommended reflowable Kindle manuscript.
+The PDF is a polished reference and proofing copy. It is not the recommended reflowable Kindle manuscript and should not replace the KPF or EPUB upload.
 `;
 }
 
@@ -901,6 +1375,14 @@ function sectionRole(section: NormalizedSection, mode: Mode) {
 
 function sectionTocLabel(section: NormalizedSection, mode: Mode) {
   const role = sectionRole(section, mode);
+  const descriptiveTitle = sectionDescriptiveTitle(section, mode);
+  return normalizeHeading(descriptiveTitle) === normalizeHeading(role)
+    ? role
+    : `${role}: ${descriptiveTitle}`;
+}
+
+function sectionDescriptiveTitle(section: NormalizedSection, mode: Mode) {
+  const role = sectionRole(section, mode);
   if (normalizeHeading(section.title) === normalizeHeading(role)) return role;
   const rolePrefix = new RegExp(
     `^${escapeRegExp(role)}\\s*[:.\\-–—]\\s*`,
@@ -910,7 +1392,7 @@ function sectionTocLabel(section: NormalizedSection, mode: Mode) {
   while (rolePrefix.test(descriptiveTitle)) {
     descriptiveTitle = descriptiveTitle.replace(rolePrefix, "").trim();
   }
-  return descriptiveTitle ? `${role}: ${descriptiveTitle}` : role;
+  return descriptiveTitle || role;
 }
 
 function sectionEpubType(section: NormalizedSection, mode: Mode) {

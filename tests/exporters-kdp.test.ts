@@ -3,6 +3,7 @@ import test from "node:test";
 import JSZip from "jszip";
 import type { Manuscript } from "../app/book-types";
 import {
+  createPolishedKdpCoverSvg,
   exportBundle,
   exportCover,
   exportDocx,
@@ -236,6 +237,9 @@ test("KDP bundle contains every standard publishing deliverable", async () => {
   const guide = await zip.file("KDP-UPLOAD-GUIDE.txt")?.async("string");
   assert.match(guide ?? "", new RegExp(`${filename}-Kindle-Create\\.docx`));
   assert.match(guide ?? "", new RegExp(`${filename}\\.epub`));
+  assert.match(guide ?? "", new RegExp(`${filename}-KDP-Cover\\.jpg`));
+  assert.match(guide ?? "", new RegExp(`${filename}-Reference\\.pdf`));
+  assert.match(guide ?? "", /1600 x 2560 marketing cover/);
 });
 
 const publishingQaBooks = [
@@ -357,6 +361,9 @@ test("long-form reference PDFs produce multipage files without title or section 
     assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");
     assert.ok(blob.size > 20_000);
     assert.ok(pageCount >= book.sections.length + 2, `expected at least ${book.sections.length + 2} PDF pages`);
+    assert.match(source, /\(EB STUDIO PRO \/ REFERENCE EDITION\) Tj/);
+    assert.match(source, /\(Contents\) Tj/);
+    assert.match(source, /\/Creator \(EB Studio Pro\)/);
   }
 });
 
@@ -370,6 +377,31 @@ test("long-title KDP cover exports remain valid JPEG blobs", async () => {
     assert.ok(blob.size > 0);
     assert.deepEqual([...bytes.slice(0, 2)], [0xff, 0xd8]);
     assert.deepEqual([...bytes.slice(-2)], [0xff, 0xd9]);
+  }
+});
+
+test("polished KDP cover layout keeps long metadata complete and readable", () => {
+  for (const createBook of publishingQaBooks) {
+    const book = createBook();
+    const svg = createPolishedKdpCoverSvg(book);
+    assert.match(svg, /width="1600" height="2560"/);
+    assert.match(svg, /#0a3a74/i);
+    assert.match(svg, /#0f5d3b/i);
+    assert.match(svg, /#f7f1e7/i);
+    assert.doesNotMatch(svg, /\.\.\.|…/);
+    for (const word of book.title.split(/\s+/)) {
+      assert.ok(svg.includes(word), `cover should preserve title word: ${word}`);
+    }
+    if (book.subtitle) {
+      for (const word of book.subtitle.split(/\s+/)) {
+        assert.ok(svg.includes(word), `cover should preserve subtitle word: ${word}`);
+      }
+    }
+    assert.ok(svg.includes(book.author.toUpperCase()));
+    const titleSize = Number(
+      svg.match(/font-family="Georgia, 'Times New Roman', serif" font-size="([\d.]+)" font-weight="700"/)?.[1],
+    );
+    assert.ok(titleSize >= 54, `title type should stay readable, received ${titleSize}`);
   }
 });
 
@@ -393,5 +425,7 @@ test("long-form KDP bundles contain readable standard files through the headless
     assert.deepEqual([...cover.slice(0, 2)], [0xff, 0xd8]);
     assert.match(guide, new RegExp(filename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.match(guide, new RegExp(`BOOK TYPE: ${book.mode === "fiction" ? "Fiction" : "Non-Fiction"}`));
+    assert.match(guide, /1600 x 2560 marketing cover/);
+    assert.match(guide, /polished reference and proofing copy/);
   }
 });
