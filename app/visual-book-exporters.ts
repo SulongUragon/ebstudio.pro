@@ -279,9 +279,10 @@ async function drawNotebookReflectionCover(
   }).endY;
   drawScribbleUnderline(c, 88, afterTitle + 24, 390, NOTEBOOK.green);
 
-  if (project.subtitle) {
+  const subtitle = fitCompleteSentenceOnly(project.subtitle, page.body);
+  if (subtitle) {
     c.fillStyle = NOTEBOOK.muted;
-    fitTextWithoutEllipsis(c, project.subtitle, {
+    fitTextWithoutEllipsis(c, subtitle, {
       x: 90,
       y: afterTitle + 78,
       maxWidth: 930,
@@ -297,7 +298,7 @@ async function drawNotebookReflectionCover(
 
   c.fillStyle = NOTEBOOK.navy;
   c.font = "700 22px Arial";
-  c.fillText(project.author.toUpperCase(), 90, H - 92);
+  c.fillText(removeVisibleEllipsis(project.author.toUpperCase()), 90, H - 92);
   drawTapeAccent(c, 970, H - 142, 120, 42, 0.07);
 }
 
@@ -507,9 +508,10 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
     preserveAll: true,
   }).endY;
 
-  if (project.subtitle) {
+  const subtitle = fitCompleteSentenceOnly(project.subtitle, page.body);
+  if (subtitle) {
     c.fillStyle = "rgba(255,248,235,.90)";
-    fitTextWithoutEllipsis(c, project.subtitle, {
+    fitTextWithoutEllipsis(c, subtitle, {
       x: 108,
       y: Math.max(afterTitle + 26, titleY + 245),
       maxWidth: 900,
@@ -524,7 +526,7 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
 
   c.fillStyle = "rgba(255,248,235,.92)";
   c.font = "700 23px Arial";
-  c.fillText(project.author.toUpperCase(), 108, H - 96);
+  c.fillText(removeVisibleEllipsis(project.author.toUpperCase()), 108, H - 96);
 
   drawSmallMark(c, W - 150, 94, THEME.gold);
 }
@@ -1156,20 +1158,66 @@ type TextFitResult = {
   text: string;
 };
 
-export function cleanTruncatedText(source: unknown) {
-  return String(source ?? "")
-    .replace(/\s*(?:\.{3,}|…+)\s*(?=\S)/g, "; ")
-    .replace(/\s*(?:\.{3,}|…+)\s*$/g, ".")
+const VISIBLE_ELLIPSIS = /(?:\.{3,}|…+)/;
+const ELLIPSIS_MARKER = "__VISUAL_ELLIPSIS__";
+
+/**
+ * Ellipsis-bearing trailing fragments are already incomplete source copy. They
+ * are removed instead of being disguised with a period, which previously let
+ * chopped words such as `answe...` survive as `answe.` in the final artwork.
+ */
+export function removeVisibleEllipsis(source: unknown) {
+  const protectedText = String(source ?? "")
+    .replace(/(?:\.{3,}|…+)/g, ` ${ELLIPSIS_MARKER} `)
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!protectedText) return "";
+
+  const fragments = protectedText.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+  const safeFragments = fragments.flatMap((fragment) => {
+    const trimmed = fragment.trim();
+    if (!trimmed.includes(ELLIPSIS_MARKER)) return [trimmed];
+
+    const afterMarker = trimmed.slice(trimmed.lastIndexOf(ELLIPSIS_MARKER) + ELLIPSIS_MARKER.length);
+    if (!afterMarker.replace(/[.!?\s"'”’)\]}]/g, "")) return [];
+
+    return [trimmed.replaceAll(ELLIPSIS_MARKER, " ")];
+  });
+
+  return safeFragments
+    .join(" ")
+    .replaceAll(ELLIPSIS_MARKER, "")
+    .replace(/(?:\.{3,}|…+)/g, "")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/([.!?])(?:\s*[.!?])+/g, "$1")
     .trim();
 }
 
+export function cleanTruncatedText(source: unknown) {
+  return removeVisibleEllipsis(source);
+}
+
+export function fitCompleteSentenceOnly(source: unknown, fallback: unknown = "", maxCharacters = 220) {
+  const clean = removeVisibleEllipsis(source);
+  const fallbackClean = removeVisibleEllipsis(fallback);
+  const candidates = [clean, fallbackClean].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const sentence = sentenceParts(candidate).find((part) => /[.!?]$/.test(part));
+    if (sentence) return shortenToCompletePhrase(sentence, maxCharacters);
+    if (candidate.length <= maxCharacters) return shortenToCompletePhrase(candidate, maxCharacters);
+  }
+
+  return "";
+}
+
 export function shortenToCompletePhrase(source: unknown, maxCharacters = 118) {
-  const clean = cleanTruncatedText(source);
+  const clean = removeVisibleEllipsis(source);
   const limit = Math.max(18, maxCharacters);
-  if (!clean || clean.length <= limit) return clean;
+  if (!clean) return "";
+  if (clean.length <= limit) return /[.!?]$/.test(clean) ? clean : `${clean}.`;
 
   const sentences = sentenceParts(clean);
   const completeSentence = sentences.find((sentence) => sentence.length <= limit && /[.!?]$/.test(sentence));
@@ -1195,8 +1243,8 @@ export function shortenToCompletePhrase(source: unknown, maxCharacters = 118) {
   return /[.!?]$/.test(phrase) ? phrase : `${phrase}.`;
 }
 
-export function extractCleanBullets(source: unknown, maxBullets = 4, maxCharacters = 118) {
-  const clean = cleanTruncatedText(source);
+export function extractShortCompleteBullets(source: unknown, maxBullets = 2, maxCharacters = 118) {
+  const clean = removeVisibleEllipsis(source);
   if (!clean) return [];
 
   const sentences = sentenceParts(clean);
@@ -1223,12 +1271,68 @@ export function extractCleanBullets(source: unknown, maxBullets = 4, maxCharacte
     .slice(0, Math.max(1, maxBullets));
 }
 
+export function extractCleanBullets(source: unknown, maxBullets = 4, maxCharacters = 118) {
+  return extractShortCompleteBullets(source, maxBullets, maxCharacters);
+}
+
+export function fitCompleteWordsOnly(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  maxWidth: number,
+  maxLines: number,
+) {
+  const clean = removeVisibleEllipsis(source);
+  if (!clean) return "";
+
+  const words = clean.split(/\s+/).filter(Boolean);
+  let fitted: string[] = [];
+
+  for (const word of words) {
+    const candidate = [...fitted, word].join(" ");
+    const lines = wrappedLines(c, candidate, maxWidth);
+    if (lines.length > maxLines || lines.some((line) => c.measureText(line).width > maxWidth)) break;
+    fitted.push(word);
+  }
+
+  const danglingEnding = /^(?:a|an|and|as|at|because|but|by|for|from|if|in|of|on|or|that|the|their|these|this|those|to|when|while|with|without|your)$/i;
+  while (fitted.length > 1 && danglingEnding.test(fitted.at(-1) ?? "")) fitted.pop();
+
+  let phrase = fitted.join(" ").replace(/[,:;\-–—\s]+$/, "").trim();
+  if (!phrase) return "";
+  if (fitted.length < words.length && !/[.!?]$/.test(phrase)) phrase = `${phrase.replace(/[.!?]+$/, "")}.`;
+
+  while (phrase) {
+    const lines = wrappedLines(c, phrase, maxWidth);
+    if (lines.length <= maxLines && lines.every((line) => c.measureText(line).width <= maxWidth)) return phrase;
+    fitted.pop();
+    while (fitted.length > 1 && danglingEnding.test(fitted.at(-1) ?? "")) fitted.pop();
+    phrase = fitted.join(" ").replace(/[,:;.!?\-–—\s]+$/, "").trim();
+    if (phrase) phrase = `${phrase}.`;
+  }
+
+  return "";
+}
+
+export function fitLinesWithoutEllipsis(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  maxWidth: number,
+  maxLines: number,
+) {
+  const clean = removeVisibleEllipsis(source);
+  if (!clean) return [];
+
+  const completeSentence = completeSentenceForLineBudget(c, clean, maxWidth, maxLines);
+  const fitted = completeSentence || fitCompleteWordsOnly(c, clean, maxWidth, maxLines);
+  return wrappedLines(c, fitted, maxWidth).slice(0, Math.max(1, maxLines));
+}
+
 export function fitTextWithoutEllipsis(
   c: CanvasRenderingContext2D,
   source: unknown,
   options: TextFitOptions,
 ): TextFitResult {
-  const clean = cleanTruncatedText(source);
+  const clean = removeVisibleEllipsis(source);
   const startSize = Math.max(1, options.fontSize);
   const requestedMinimum = Math.min(startSize, Math.max(1, options.minFontSize ?? startSize));
   const minimum = options.preserveAll ? Math.min(requestedMinimum, 16) : requestedMinimum;
@@ -1249,22 +1353,18 @@ export function fitTextWithoutEllipsis(
     }
   }
 
-  if (!lines.length && options.preserveAll) {
-    fontSize = minimum;
-    lineHeight = Math.max(fontSize * 1.12, options.lineHeight * (fontSize / startSize));
-    setCanvasFont(c, options, fontSize);
-    lines = wrappedLines(c, clean, options.maxWidth);
-  }
-
   if (!lines.length) {
-    fontSize = requestedMinimum;
+    fontSize = options.preserveAll ? minimum : requestedMinimum;
     lineHeight = Math.max(fontSize * 1.12, options.lineHeight * (fontSize / startSize));
     setCanvasFont(c, options, fontSize);
     fittedText = completeTextForLineBudget(c, clean, options.maxWidth, maximumLines);
-    lines = wrappedLines(c, fittedText, options.maxWidth);
+    lines = fitLinesWithoutEllipsis(c, fittedText, options.maxWidth, maximumLines);
   }
 
-  lines.forEach((line, index) => c.fillText(line, options.x, options.y + index * lineHeight));
+  lines.forEach((line, index) => {
+    const safeLine = removeVisibleEllipsis(line);
+    if (safeLine && !VISIBLE_ELLIPSIS.test(safeLine)) c.fillText(safeLine, options.x, options.y + index * lineHeight);
+  });
   return {
     endY: options.y + lines.length * lineHeight,
     fontSize,
@@ -1280,27 +1380,26 @@ function completeTextForLineBudget(
   maxWidth: number,
   maxLines: number,
 ) {
-  const sentences = sentenceParts(clean);
+  return completeSentenceForLineBudget(c, clean, maxWidth, maxLines)
+    || fitCompleteWordsOnly(c, clean, maxWidth, maxLines);
+}
+
+function completeSentenceForLineBudget(
+  c: CanvasRenderingContext2D,
+  source: string,
+  maxWidth: number,
+  maxLines: number,
+) {
   let complete = "";
 
-  for (const sentence of sentences) {
+  for (const sentence of sentenceParts(source).filter((part) => /[.!?]$/.test(part))) {
     const candidate = complete ? `${complete} ${sentence}` : sentence;
-    if (wrappedLines(c, candidate, maxWidth).length > maxLines) break;
+    const lines = wrappedLines(c, candidate, maxWidth);
+    if (lines.length > maxLines || lines.some((line) => c.measureText(line).width > maxWidth)) break;
     complete = candidate;
   }
 
-  if (complete) return complete;
-
-  const averageCharacterWidth = Math.max(1, c.measureText("abcdefghijklmnopqrstuvwxyz").width / 26);
-  let characterBudget = Math.max(18, Math.floor((maxWidth / averageCharacterWidth) * maxLines));
-  let phrase = shortenToCompletePhrase(clean, characterBudget);
-
-  while (characterBudget > 18 && wrappedLines(c, phrase, maxWidth).length > maxLines) {
-    characterBudget -= 6;
-    phrase = shortenToCompletePhrase(clean, characterBudget);
-  }
-
-  return phrase;
+  return complete;
 }
 
 function sentenceParts(source: string) {
@@ -1382,7 +1481,7 @@ export function buildVisualPageSections(source: unknown, title = "") {
   const sentences = sentenceParts(clean);
 
   const fallback = clean || cleanTruncatedText(title);
-  const highlights = extractCleanBullets(fallback, 2, 118);
+  const highlights = extractShortCompleteBullets(fallback, 2, 118);
   const noteSource = sentences[0] || fallback;
 
   return {
