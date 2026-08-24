@@ -25,13 +25,21 @@ export const DEFAULT_VISUAL_PALETTE = {
   ink: "#1d2730",
 };
 
+export const DEFAULT_VISUAL_ACCENT_COLORS = {
+  divider: DEFAULT_VISUAL_PALETTE.green,
+  quote: DEFAULT_VISUAL_PALETTE.green,
+  takeawayLabel: DEFAULT_VISUAL_PALETTE.navy,
+  takeawayBorder: DEFAULT_VISUAL_PALETTE.border,
+  takeawayBullets: [DEFAULT_VISUAL_PALETTE.green, DEFAULT_VISUAL_PALETTE.navy],
+  diamond: DEFAULT_VISUAL_PALETTE.green,
+};
+
 const THEME = {
   paper: "#f7f1e7",
   paperWarm: "#efe5d6",
   ink: DEFAULT_VISUAL_PALETTE.ink,
   muted: "#59636b",
   line: "rgba(10,58,116,.30)",
-  gold: "#a9824a",
   charcoal: "#111111",
   ivory: "#fff8eb",
 };
@@ -308,7 +316,7 @@ async function drawNotebookReflectionCover(
 
   c.fillStyle = NOTEBOOK.navy;
   c.font = "700 22px Arial";
-  c.fillText(removeVisibleEllipsis(project.author.toUpperCase()), 90, H - 92);
+  c.fillText(safeVisualText(project.author.toUpperCase(), "headline"), 90, H - 92);
   drawTapeAccent(c, 970, H - 142, 120, 42, 0.07);
 }
 
@@ -435,7 +443,7 @@ function drawNotebookFooter(c: CanvasRenderingContext2D, project: VisualBookProj
   c.fillStyle = NOTEBOOK.navy;
   c.font = "700 21px Arial";
   c.textAlign = "right";
-  c.fillText(String(page.pageNumber).padStart(2, "0"), W - 76, H - 60);
+  c.fillText(safeVisualText(String(page.pageNumber).padStart(2, "0"), "headline"), W - 76, H - 60);
   c.textAlign = "left";
 }
 
@@ -448,7 +456,7 @@ function drawHandwrittenNoteLabel(
 ) {
   c.fillStyle = color;
   c.font = "italic 700 22px 'Segoe Print', 'Bradley Hand', cursive";
-  c.fillText(label, x, y);
+  c.fillText(safeVisualText(label, "headline"), x, y);
 }
 
 function drawScribbleUnderline(c: CanvasRenderingContext2D, x: number, y: number, w: number, color: string) {
@@ -463,30 +471,21 @@ function drawScribbleUnderline(c: CanvasRenderingContext2D, x: number, y: number
 }
 
 function drawNotebookHighlights(c: CanvasRenderingContext2D, source: string, x: number, y: number, w: number) {
-  const bullets = extractCompleteBullets(c, source, 2, w - 32, 2, {
-    fontSize: 22,
+  drawSafeBulletBlock(c, source, {
+    x: x + 32,
+    y,
+    bulletX: x + 8,
+    maxBullets: 2,
+    maxWidth: w - 32,
+    maxLinesPerBullet: 2,
+    fontSize: 26,
+    minFontSize: 15,
+    lineHeight: 34,
+    maxHeight: 130,
     fontFamily: "Georgia",
-  });
-
-  bullets.forEach((item, index) => {
-    const itemY = y + index * 64;
-    c.fillStyle = index % 2 ? NOTEBOOK.navy : NOTEBOOK.green;
-    c.beginPath();
-    c.arc(x + 8, itemY - 9, 5, 0, Math.PI * 2);
-    c.fill();
-    c.fillStyle = NOTEBOOK.ink;
-    fitTextWithoutEllipsis(c, item, {
-      x: x + 32,
-      y: itemY,
-      maxWidth: w - 32,
-      maxLines: 2,
-      fontSize: 26,
-      minFontSize: 22,
-      lineHeight: 34,
-      fontFamily: "Georgia",
-      preserveAll: true,
-      textRole: "sentence",
-    });
+    bulletGap: 12,
+    textColor: NOTEBOOK.ink,
+    bulletColors: [NOTEBOOK.green, NOTEBOOK.navy],
   });
 }
 
@@ -544,7 +543,7 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
 
   c.fillStyle = "rgba(255,248,235,.92)";
   c.font = "700 23px Arial";
-  c.fillText(removeVisibleEllipsis(project.author.toUpperCase()), 108, H - 96);
+  c.fillText(safeVisualText(project.author.toUpperCase(), "headline"), 108, H - 96);
 
   drawSmallMark(c, W - 150, 94, DEFAULT_VISUAL_PALETTE.green);
 }
@@ -668,7 +667,7 @@ async function drawSplitEditorial(c: CanvasRenderingContext2D, page: VisualBookP
   c.fillStyle = "#302d2a";
   const bodyType = visualBodyTypography(copy.body, true);
   const bodyY = afterTitle + 88;
-  const minimumBodySize = Math.max(20, bodyType.fontSize - 5);
+  const minimumBodySize = Math.max(21, bodyType.fontSize - 5);
   const afterBody = fitTextWithoutEllipsis(c, copy.body, {
     x: textX,
     y: bodyY,
@@ -783,7 +782,7 @@ async function drawCinematicFullBleed(c: CanvasRenderingContext2D, project: Visu
     preserveAll: true,
     textRole: "headline",
   });
-  c.fillText(String(page.pageNumber).padStart(2, "0"), 1040, 1708);
+  c.fillText(safeVisualText(String(page.pageNumber).padStart(2, "0"), "headline"), 1040, 1708);
 }
 
 async function drawQuoteEditorial(c: CanvasRenderingContext2D, page: VisualBookPage) {
@@ -846,7 +845,7 @@ function drawRunningHeader(c: CanvasRenderingContext2D, project: VisualBookProje
   c.fillStyle = THEME.ink;
   c.font = "24px Georgia";
   c.textAlign = "right";
-  c.fillText(`Page ${page.pageNumber}`, W - 76, 78);
+  c.fillText(safeVisualText(`Page ${page.pageNumber}`, "headline"), W - 76, 78);
   c.textAlign = "left";
 
   c.strokeStyle = THEME.line;
@@ -869,20 +868,20 @@ function drawPaper(c: CanvasRenderingContext2D) {
 }
 
 function drawImageFrame(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  c.strokeStyle = "rgba(169,130,74,.55)";
+  c.strokeStyle = "rgba(10,58,116,.46)";
   c.lineWidth = 3;
   c.strokeRect(x, y, w, h);
 }
 
 function drawAccentLine(c: CanvasRenderingContext2D, x: number, y: number, w: number) {
-  c.strokeStyle = DEFAULT_VISUAL_PALETTE.green;
+  c.strokeStyle = DEFAULT_VISUAL_ACCENT_COLORS.divider;
   c.lineWidth = 3;
   c.beginPath();
   c.moveTo(x, y);
   c.lineTo(x + w, y);
   c.stroke();
 
-  drawSmallMark(c, x + w + 24, y - 8, DEFAULT_VISUAL_PALETTE.navy);
+  drawSmallMark(c, x + w + 24, y - 8, DEFAULT_VISUAL_ACCENT_COLORS.diamond);
 }
 
 export function drawPairedQuoteTitle(
@@ -891,7 +890,7 @@ export function drawPairedQuoteTitle(
   options: TextFitOptions,
 ) {
   c.fillStyle = THEME.ink;
-  const result = fitTextWithoutEllipsis(c, title, options);
+  const result = fitTextWithoutEllipsis(c, normalizePairedQuoteTitle(title, false), options);
   if (!result.lines.length) return result;
 
   setCanvasFont(c, options, result.fontSize);
@@ -902,7 +901,7 @@ export function drawPairedQuoteTitle(
   const rightLimit = options.x + options.maxWidth + quoteSize * 0.45;
   if (closingX + quoteSize * 0.32 > rightLimit) return result;
 
-  c.fillStyle = DEFAULT_VISUAL_PALETTE.green;
+  c.fillStyle = DEFAULT_VISUAL_ACCENT_COLORS.quote;
   c.font = `700 ${quoteSize}px Georgia`;
   c.fillText("“", options.x - quoteSize * 0.56, options.y + quoteSize * 0.14);
   c.fillText("”", closingX, closingY);
@@ -917,44 +916,41 @@ function drawTakeawayBox(
   h: number,
   source: string,
 ) {
-  const bullets = extractCompleteBullets(c, source, 2, w - 125, 2, {
-    fontSize: 23,
+  const bulletOptions: AdaptiveBulletOptions = {
+    maxBullets: 2,
+    maxWidth: w - 125,
+    maxLinesPerBullet: 2,
+    fontSize: 26,
+    minFontSize: 16,
+    lineHeight: 34,
+    maxHeight: Math.max(86, Math.min(175, H - y - 150)),
     fontFamily: "Arial",
-  });
-  if (!bullets.length) return;
+    bulletGap: 12,
+  };
+  const fit = fitBulletsAdaptive(c, source, bulletOptions);
+  if (!fit.bullets.length) return;
+  const actualHeight = Math.min(H - y - 118, Math.max(h, fit.requiredHeight + 108));
 
   c.fillStyle = DEFAULT_VISUAL_PALETTE.mint;
-  c.fillRect(x, y, w, h);
-  c.strokeStyle = DEFAULT_VISUAL_PALETTE.border;
+  c.fillRect(x, y, w, actualHeight);
+  c.strokeStyle = DEFAULT_VISUAL_ACCENT_COLORS.takeawayBorder;
   c.lineWidth = 2.4;
-  c.strokeRect(x, y, w, h);
+  c.strokeRect(x, y, w, actualHeight);
 
-  drawSmallMark(c, x + w / 2 - 10, y - 13, DEFAULT_VISUAL_PALETTE.green);
+  drawSmallMark(c, x + w / 2 - 10, y - 13, DEFAULT_VISUAL_ACCENT_COLORS.diamond);
 
-  c.fillStyle = DEFAULT_VISUAL_PALETTE.navy;
+  c.fillStyle = DEFAULT_VISUAL_ACCENT_COLORS.takeawayLabel;
   c.font = "700 18px Arial";
-  c.fillText("KEY TAKEAWAY", x + 42, y + 40);
+  c.fillText(safeVisualText("KEY TAKEAWAY", "headline"), x + 42, y + 40);
 
-  bullets.forEach((item, index) => {
-    const by = y + 88 + index * 64;
-    c.fillStyle = index % 2 ? DEFAULT_VISUAL_PALETTE.navy : DEFAULT_VISUAL_PALETTE.green;
-    c.beginPath();
-    c.arc(x + 52, by - 9, 5, 0, Math.PI * 2);
-    c.fill();
-
-    c.fillStyle = DEFAULT_VISUAL_PALETTE.ink;
-    fitTextWithoutEllipsis(c, item, {
-      x: x + 78,
-      y: by,
-      maxWidth: w - 125,
-      maxLines: 2,
-      fontSize: 28,
-      minFontSize: 23,
-      lineHeight: 35,
-      fontFamily: "Arial",
-      preserveAll: true,
-      textRole: "sentence",
-    });
+  drawSafeBulletBlock(c, source, {
+    ...bulletOptions,
+    x: x + 78,
+    y: y + 88,
+    bulletX: x + 52,
+    maxHeight: actualHeight - 102,
+    textColor: DEFAULT_VISUAL_PALETTE.ink,
+    bulletColors: DEFAULT_VISUAL_ACCENT_COLORS.takeawayBullets,
   });
 }
 
@@ -966,42 +962,39 @@ function drawCompactBox(
   h: number,
   source: string,
 ) {
-  const bullets = extractCompleteBullets(c, source, 2, w - 86, 2, {
-    fontSize: 20,
+  const bulletOptions: AdaptiveBulletOptions = {
+    maxBullets: 2,
+    maxWidth: w - 86,
+    maxLinesPerBullet: 2,
+    fontSize: 23,
+    minFontSize: 16,
+    lineHeight: 31,
+    maxHeight: Math.max(120, Math.min(245, H - y - 160)),
     fontFamily: "Arial",
-  });
-  if (!bullets.length) return;
+    bulletGap: 14,
+  };
+  const fit = fitBulletsAdaptive(c, source, bulletOptions);
+  if (!fit.bullets.length) return;
+  const actualHeight = Math.min(H - y - 118, Math.max(h, fit.requiredHeight + 100));
 
   c.fillStyle = DEFAULT_VISUAL_PALETTE.mint;
-  c.fillRect(x, y, w, h);
-  c.strokeStyle = DEFAULT_VISUAL_PALETTE.border;
+  c.fillRect(x, y, w, actualHeight);
+  c.strokeStyle = DEFAULT_VISUAL_ACCENT_COLORS.takeawayBorder;
   c.lineWidth = 2;
-  c.strokeRect(x, y, w, h);
+  c.strokeRect(x, y, w, actualHeight);
 
-  c.fillStyle = DEFAULT_VISUAL_PALETTE.navy;
+  c.fillStyle = DEFAULT_VISUAL_ACCENT_COLORS.takeawayLabel;
   c.font = "700 17px Arial";
-  c.fillText("TAKEAWAY", x + 28, y + 35);
+  c.fillText(safeVisualText("TAKEAWAY", "headline"), x + 28, y + 35);
 
-  bullets.forEach((item, index) => {
-    const by = y + 82 + index * 76;
-    c.fillStyle = index % 2 ? DEFAULT_VISUAL_PALETTE.navy : DEFAULT_VISUAL_PALETTE.green;
-    c.beginPath();
-    c.arc(x + 34, by - 9, 5, 0, Math.PI * 2);
-    c.fill();
-
-    c.fillStyle = DEFAULT_VISUAL_PALETTE.ink;
-    fitTextWithoutEllipsis(c, item, {
-      x: x + 58,
-      y: by,
-      maxWidth: w - 86,
-      maxLines: 2,
-      fontSize: 25,
-      minFontSize: 20,
-      lineHeight: 32,
-      fontFamily: "Arial",
-      preserveAll: true,
-      textRole: "sentence",
-    });
+  drawSafeBulletBlock(c, source, {
+    ...bulletOptions,
+    x: x + 58,
+    y: y + 82,
+    bulletX: x + 34,
+    maxHeight: actualHeight - 96,
+    textColor: DEFAULT_VISUAL_PALETTE.ink,
+    bulletColors: DEFAULT_VISUAL_ACCENT_COLORS.takeawayBullets,
   });
 }
 
@@ -1009,7 +1002,7 @@ function drawFooter(c: CanvasRenderingContext2D, page: VisualBookPage) {
   c.fillStyle = THEME.muted;
   c.font = "700 22px Arial";
   c.textAlign = "right";
-  c.fillText(String(page.pageNumber).padStart(2, "0"), W - 78, H - 70);
+  c.fillText(safeVisualText(String(page.pageNumber).padStart(2, "0"), "headline"), W - 78, H - 70);
   c.textAlign = "left";
 }
 
@@ -1179,9 +1172,10 @@ function drawImagePlaceholder(
   c.fillRect(x, y, w, h);
 
   const wash = c.createLinearGradient(x, y, x + w, y + h);
+  const comicPlaceholder = fallback === "#17211d" || fallback === "#2e3330";
   wash.addColorStop(0, "rgba(255,248,235,.18)");
-  wash.addColorStop(0.52, "rgba(169,130,74,.10)");
-  wash.addColorStop(1, "rgba(122,20,40,.12)");
+  wash.addColorStop(0.52, comicPlaceholder ? "rgba(169,130,74,.10)" : "rgba(15,93,59,.12)");
+  wash.addColorStop(1, comicPlaceholder ? "rgba(122,20,40,.12)" : "rgba(10,58,116,.14)");
   c.fillStyle = wash;
   c.fillRect(x, y, w, h);
 
@@ -1195,7 +1189,7 @@ function drawImagePlaceholder(
   c.stroke();
 }
 
-type TextFitOptions = {
+export type TextFitOptions = {
   x: number;
   y: number;
   maxWidth: number;
@@ -1210,7 +1204,7 @@ type TextFitOptions = {
   textRole?: "headline" | "sentence" | "paragraph";
 };
 
-type TextFitResult = {
+export type TextFitResult = {
   endY: number;
   fontSize: number;
   lineHeight: number;
@@ -1226,6 +1220,14 @@ type VisualTextFont = {
   fontFamily: string;
   fontWeight?: string;
   fontStyle?: string;
+};
+
+export type AdaptiveBulletFit = {
+  bullets: string[];
+  fontSize: number;
+  lineHeight: number;
+  linesPerBullet: number[];
+  requiredHeight: number;
 };
 
 /**
@@ -1246,6 +1248,37 @@ function sanitizeHeadline(source: unknown) {
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/([.!?])(?:\s*[.!?])+/g, "$1")
     .trim();
+}
+
+export function normalizePairedQuoteTitle(source: unknown, useQuotes = true) {
+  const plain = sanitizeHeadline(source)
+    .replace(/^[\s“”"']+/, "")
+    .replace(/[\s“”"']+$/, "")
+    .trim();
+  if (!plain) return "";
+  return useQuotes ? `“${plain}”` : plain;
+}
+
+export function safeVisualText(
+  source: unknown,
+  textRole: "headline" | "sentence" | "paragraph" = "paragraph",
+) {
+  const original = String(source ?? "").trim();
+  if (!original) return "";
+  if (VISIBLE_ELLIPSIS.test(original)) return removeIncompleteTrailingFragment(original);
+  if (textRole === "headline") return normalizePairedQuoteTitle(original, false);
+  if (textRole === "sentence") return ensureCompleteSemanticSentence(original);
+  return removeIncompleteTrailingFragment(original);
+}
+
+export function validateVisualTextBeforeDraw(
+  source: unknown,
+  textRole: "headline" | "sentence" | "paragraph" = "paragraph",
+) {
+  const safe = safeVisualText(source, textRole);
+  if (!safe || VISIBLE_ELLIPSIS.test(safe)) return "";
+  if (textRole !== "headline" && rejectDanglingSentenceEnding(safe)) return "";
+  return safe;
 }
 
 export function cleanTruncatedText(source: unknown) {
@@ -1271,7 +1304,7 @@ export function rejectDanglingSentenceEnding(source: unknown) {
     .trim();
   if (!clean) return true;
   const danglingEndings = [
-    /\b(?:a|an|and|as|at|because|but|by|for|from|how|if|in|of|on|or|that|the|their|these|this|those|to|when|where|which|while|who|whose|with|without|your)$/i,
+    /\b(?:a|an|and|as|at|because|but|by|for|from|how|if|in|of|on|or|that|the|their|these|this|those|to|what|when|where|which|while|who|whose|with|without|your)$/i,
     /\b(?:about|because of|the cost of|the limits of|with a|with an|with the|about a|about an|about the|as if|as if a|as if an|as if the|and a|and an|and the|or a|or an|or the|but a|but an|but the|where a|where an|where the)$/i,
     /\b(?:about|for|from|of|with)\s+(?:what|which|that)\s+(?:a|an|the)?\s*[a-z][a-z'-]*$/i,
     /\b(?:the shape of|the way)(?:\s+(?:a|an|the))?$/i,
@@ -1367,60 +1400,91 @@ export function fitLinesWithoutEllipsis(
   return fitted ? wrappedLines(c, fitted, maxWidth) : [];
 }
 
-export function fitTextWithoutEllipsis(
+export function fitTextByFontSize(
+  c: CanvasRenderingContext2D,
+  source: string,
+  options: TextFitOptions,
+): TextFitResult {
+  const startSize = Math.max(13, options.fontSize);
+  const roleMinimum = options.textRole === "headline" ? 13 : 15;
+  const minimum = Math.min(startSize, Math.max(roleMinimum, options.minFontSize ?? startSize));
+  const maximumLines = Math.max(1, options.maxLines);
+
+  for (let size = startSize; size >= minimum; size -= 1) {
+    setCanvasFont(c, options, size);
+    const candidateLines = wrappedLines(c, source, options.maxWidth);
+    if (candidateLines.length <= maximumLines && candidateLines.every((line) => c.measureText(line).width <= options.maxWidth)) {
+      const lineHeight = Math.max(size * 1.18, options.lineHeight * (size / startSize));
+      return {
+        endY: options.y + candidateLines.length * lineHeight,
+        fontSize: size,
+        lineHeight,
+        lines: candidateLines,
+        text: source,
+      };
+    }
+  }
+
+  const lineHeight = Math.max(minimum * 1.18, options.lineHeight * (minimum / startSize));
+  return { endY: options.y, fontSize: minimum, lineHeight, lines: [], text: "" };
+}
+
+export function fitCompleteTextAdaptive(
   c: CanvasRenderingContext2D,
   source: unknown,
   options: TextFitOptions,
 ): TextFitResult {
   const textRole = options.textRole ?? "paragraph";
-  const clean = textRole === "headline"
-    ? sanitizeHeadline(source)
-    : removeIncompleteTrailingFragment(source);
-  const startSize = Math.max(1, options.fontSize);
-  const requestedMinimum = Math.min(startSize, Math.max(1, options.minFontSize ?? startSize));
-  const minimum = requestedMinimum;
-  const maximumLines = Math.max(1, options.maxLines);
-  let fontSize = startSize;
-  let lineHeight = options.lineHeight;
-  let lines: string[] = [];
-  let fittedText = clean;
+  const safe = validateVisualTextBeforeDraw(source, textRole);
+  const fullFit = safe ? fitTextByFontSize(c, safe, options) : null;
+  if (fullFit?.lines.length) return fullFit;
 
-  for (let size = startSize; size >= minimum; size -= 1) {
-    setCanvasFont(c, options, size);
-    const candidateLines = wrappedLines(c, clean, options.maxWidth);
-    if (candidateLines.length <= maximumLines && candidateLines.every((line) => c.measureText(line).width <= options.maxWidth)) {
-      fontSize = size;
-      lineHeight = Math.max(size * 1.12, options.lineHeight * (size / startSize));
-      lines = candidateLines;
-      break;
-    }
+  const startSize = Math.max(13, options.fontSize);
+  const roleMinimum = textRole === "headline" ? 13 : 15;
+  const minimum = Math.min(startSize, Math.max(roleMinimum, options.minFontSize ?? startSize));
+  const lineHeight = Math.max(minimum * 1.18, options.lineHeight * (minimum / startSize));
+  if (textRole === "headline" || !safe) {
+    return { endY: options.y, fontSize: minimum, lineHeight, lines: [], text: "" };
   }
 
-  if (!lines.length) {
-    fontSize = minimum;
-    lineHeight = Math.max(fontSize * 1.12, options.lineHeight * (fontSize / startSize));
-    setCanvasFont(c, options, fontSize);
-    fittedText = textRole === "headline"
-      ? ""
-      : fitCompleteParagraphToBox(c, clean, options.maxWidth, maximumLines, {
-        fontSize,
-        fontFamily: options.fontFamily,
-        fontWeight: options.fontWeight,
-        fontStyle: options.fontStyle,
-      });
-    lines = fittedText ? wrappedLines(c, fittedText, options.maxWidth) : [];
-  }
-
-  lines.forEach((line, index) => {
-    if (line && !VISIBLE_ELLIPSIS.test(line)) c.fillText(line, options.x, options.y + index * lineHeight);
+  setCanvasFont(c, options, minimum);
+  const fittedText = fitCompleteParagraphToBox(c, safe, options.maxWidth, Math.max(1, options.maxLines), {
+    fontSize: minimum,
+    fontFamily: options.fontFamily,
+    fontWeight: options.fontWeight,
+    fontStyle: options.fontStyle,
   });
+  const lines = fittedText ? wrappedLines(c, fittedText, options.maxWidth) : [];
   return {
     endY: options.y + lines.length * lineHeight,
-    fontSize,
+    fontSize: minimum,
     lineHeight,
     lines,
     text: fittedText,
   };
+}
+
+export function drawSafeWrappedText(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  options: TextFitOptions,
+) {
+  const result = fitCompleteTextAdaptive(c, source, options);
+  setCanvasFont(c, options, result.fontSize);
+  result.lines.forEach((line, index) => {
+    if (line && !VISIBLE_ELLIPSIS.test(line) && c.measureText(line).width <= options.maxWidth) {
+      c.fillText(line, options.x, options.y + index * result.lineHeight);
+    }
+  });
+  return result;
+}
+
+export function fitTextWithoutEllipsis(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  options: TextFitOptions,
+) {
+  return drawSafeWrappedText(c, source, options);
 }
 
 export function fitCompleteSentencesToLines(
@@ -1499,6 +1563,124 @@ export function extractCompleteBullets(
 
   c.font = previousFont;
   return selected.reverse();
+}
+
+type AdaptiveBulletOptions = {
+  maxBullets: number;
+  maxWidth: number;
+  maxLinesPerBullet: number;
+  fontSize: number;
+  minFontSize: number;
+  lineHeight: number;
+  maxHeight: number;
+  fontFamily: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  bulletGap?: number;
+};
+
+const SAFE_VISUAL_FALLBACKS = [
+  "The page asks the reader to notice what has shifted.",
+  "The scene turns private tension into visible consequence.",
+  "This moment changes what the character is willing to protect.",
+];
+
+export function fitBulletsAdaptive(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  options: AdaptiveBulletOptions,
+): AdaptiveBulletFit {
+  const previousFont = c.font;
+  const sentences = splitIntoCompleteSentences(source);
+  const maximum = Math.max(1, options.maxBullets);
+  const minimumSize = Math.min(options.fontSize, Math.max(15, options.minFontSize));
+  const gap = Math.max(8, options.bulletGap ?? 14);
+
+  const attempt = (bullets: string[]): AdaptiveBulletFit | null => {
+    if (!bullets.length) return null;
+    for (let size = options.fontSize; size >= minimumSize; size -= 1) {
+      setCanvasFont(c, options, size);
+      const lineHeight = Math.max(size * 1.18, options.lineHeight * (size / options.fontSize));
+      const linesPerBullet = bullets.map((bullet) => wrappedLines(c, bullet, options.maxWidth).length);
+      const requiredHeight = linesPerBullet.reduce((sum, count) => sum + count * lineHeight, 0)
+        + Math.max(0, bullets.length - 1) * gap;
+      if (
+        linesPerBullet.every((count) => count > 0 && count <= options.maxLinesPerBullet)
+        && requiredHeight <= options.maxHeight
+      ) {
+        return { bullets, fontSize: size, lineHeight, linesPerBullet, requiredHeight };
+      }
+    }
+    return null;
+  };
+
+  const preferred = sentences.slice(-maximum);
+  let result = attempt(preferred);
+
+  if (!result) {
+    setCanvasFont(c, options, minimumSize);
+    const individuallyFitting = sentences.filter((sentence) => (
+      fitsLineBudget(c, sentence, options.maxWidth, options.maxLinesPerBullet)
+    )).slice(-maximum);
+    result = attempt(individuallyFitting);
+  }
+
+  if (!result) {
+    setCanvasFont(c, options, minimumSize);
+    const shorterSourceBullets = preferred
+      .map((sentence) => completeClauseForLineBudget(c, sentence, options.maxWidth, options.maxLinesPerBullet))
+      .map(ensureCompleteSemanticSentence)
+      .filter(Boolean);
+    result = attempt(shorterSourceBullets);
+  }
+
+  for (let count = Math.min(maximum - 1, sentences.length); !result && count >= 1; count -= 1) {
+    result = attempt(sentences.slice(-count));
+  }
+
+  if (!result) {
+    const fallback = SAFE_VISUAL_FALLBACKS.find((candidate) => attempt([candidate]));
+    if (fallback) result = attempt([fallback]);
+  }
+
+  c.font = previousFont;
+  return result ?? {
+    bullets: [],
+    fontSize: minimumSize,
+    lineHeight: Math.max(minimumSize * 1.18, options.lineHeight * (minimumSize / options.fontSize)),
+    linesPerBullet: [],
+    requiredHeight: 0,
+  };
+}
+
+type SafeBulletDrawOptions = AdaptiveBulletOptions & {
+  x: number;
+  y: number;
+  bulletX: number;
+  textColor: string;
+  bulletColors: string[];
+  bulletRadius?: number;
+};
+
+export function drawSafeBulletBlock(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  options: SafeBulletDrawOptions,
+) {
+  const fit = fitBulletsAdaptive(c, source, options);
+  setCanvasFont(c, options, fit.fontSize);
+  let baseline = options.y;
+  fit.bullets.forEach((bullet, index) => {
+    c.fillStyle = options.bulletColors[index % options.bulletColors.length];
+    c.beginPath();
+    c.arc(options.bulletX, baseline - fit.fontSize * 0.34, options.bulletRadius ?? 5, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = options.textColor;
+    const lines = wrappedLines(c, validateVisualTextBeforeDraw(bullet, "sentence"), options.maxWidth);
+    lines.forEach((line, lineIndex) => c.fillText(line, options.x, baseline + lineIndex * fit.lineHeight));
+    baseline += lines.length * fit.lineHeight + Math.max(8, options.bulletGap ?? 14);
+  });
+  return fit;
 }
 
 function sentenceParts(source: string) {
