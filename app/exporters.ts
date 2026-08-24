@@ -974,6 +974,18 @@ type CoverTextLayout = {
   lineHeight: number;
 };
 
+const INTERNAL_COVER_LABEL =
+  /\b(?:EB\s*Studio\s*Pro(?:\s*\/\s*KDP\s*Edition)?|KDP\s*(?:Edition|Package)|Export\s*(?:Edition|Package))\b/gi;
+
+export function cleanCustomerFacingCoverText(text: string) {
+  return cleanText(text)
+    .replace(INTERNAL_COVER_LABEL, "")
+    .replace(/(?:\.\.\.|…)+/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,:;.!?])/g, "$1")
+    .trim();
+}
+
 function estimatedCoverTextWidth(text: string, size: number) {
   let units = 0;
   for (const character of text) {
@@ -1011,11 +1023,12 @@ function fitCoverText(
   minimumSize: number,
   lineHeightRatio: number,
 ): CoverTextLayout {
+  const safeText = cleanCustomerFacingCoverText(text);
   let size = initialSize;
-  let lines = wrapCoverText(text, maxWidth, size);
+  let lines = wrapCoverText(safeText, maxWidth, size);
   while (lines.length > maxLines && size > minimumSize) {
     size = Math.max(minimumSize, size - 2);
-    lines = wrapCoverText(text, maxWidth, size);
+    lines = wrapCoverText(safeText, maxWidth, size);
   }
   return { lines, size, lineHeight: size * lineHeightRatio };
 }
@@ -1035,103 +1048,83 @@ function svgTextLines(
 export function createPolishedKdpCoverSvg(book: Manuscript) {
   const width = 1600;
   const height = 2560;
-  const title = fitCoverText(book.title, 1260, 8, 118, 54, 1.08);
-  const subtitleCandidate = book.subtitle
-    ? fitCoverText(book.subtitle, 1180, 5, 45, 27, 1.28)
+  const titleText = cleanCustomerFacingCoverText(book.title);
+  const subtitleText = cleanCustomerFacingCoverText(book.subtitle);
+  const authorText = cleanCustomerFacingCoverText(book.author).toUpperCase();
+  const title = fitCoverText(titleText, 1260, 7, 124, 52, 1.08);
+  const subtitleCandidate = subtitleText
+    ? fitCoverText(subtitleText, 1160, 4, 43, 27, 1.3)
     : null;
-  const subtitle = subtitleCandidate && subtitleCandidate.lines.length <= 5
+  const subtitle = subtitleCandidate && subtitleCandidate.lines.length <= 4
     ? subtitleCandidate
     : null;
-  const author = fitCoverText(book.author.toUpperCase(), 1160, 2, 48, 30, 1.2);
+  const author = fitCoverText(authorText, 1160, 2, 48, 28, 1.2);
   const titleHeight = title.lines.length * title.lineHeight;
   const subtitleHeight = subtitle ? subtitle.lines.length * subtitle.lineHeight : 0;
+  const subtitleStart = subtitle ? 300 : 0;
   const titleStart = subtitle
-    ? Math.max(325, 735 - (titleHeight + subtitleHeight + 90) / 2)
-    : Math.max(390, 790 - titleHeight / 2);
-  const subtitleStart = titleStart + titleHeight + 70;
-  const authorStart = 2350 - (author.lines.length - 1) * author.lineHeight;
-  const artwork = book.cover?.sourceImageData || book.cover?.imageData || "";
-  const image = artwork
-    ? `<image href="${escapeXml(artwork)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice"/>`
-    : "";
+    ? Math.max(590, subtitleStart + subtitleHeight + 120)
+    : Math.max(520, 930 - titleHeight / 2);
+  const authorStart = 2355 - (author.lines.length - 1) * author.lineHeight;
+  const fallbackAtmosphere = `<g id="fallback-atmosphere" aria-hidden="true">
+    <circle cx="1230" cy="420" r="520" fill="#0b4f8a" fill-opacity="0.2"/>
+    <path d="M330 1810 L800 1260 L1270 1810 Z" fill="#041827" fill-opacity="0.82"/>
+    <rect x="535" y="1440" width="530" height="570" fill="#061724"/>
+    <path d="M485 1450 L800 1190 L1115 1450 Z" fill="#07131d"/>
+    <rect x="735" y="1545" width="130" height="190" rx="3" fill="#e4b86b" fill-opacity="0.88"/>
+    <line x1="800" y1="1545" x2="800" y2="1735" stroke="#f7f1e7" stroke-opacity="0.5" stroke-width="5"/>
+    <line x1="735" y1="1640" x2="865" y2="1640" stroke="#f7f1e7" stroke-opacity="0.5" stroke-width="5"/>
+    <g stroke="#9dc9cf" stroke-opacity="0.2" stroke-width="4">
+      <line x1="170" y1="180" x2="60" y2="520"/><line x1="430" y1="80" x2="290" y2="510"/>
+      <line x1="730" y1="130" x2="575" y2="610"/><line x1="1040" y1="70" x2="880" y2="565"/>
+      <line x1="1370" y1="160" x2="1220" y2="625"/><line x1="1540" y1="510" x2="1370" y2="1035"/>
+      <line x1="300" y1="1140" x2="115" y2="1710"/><line x1="1280" y1="1120" x2="1065" y2="1780"/>
+    </g>
+  </g>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
     <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#061d34"/>
-      <stop offset="0.58" stop-color="#0a3a74"/>
+      <stop offset="0" stop-color="#03111f"/>
+      <stop offset="0.55" stop-color="#0a3a74"/>
       <stop offset="1" stop-color="#0f5d3b"/>
     </linearGradient>
-    <linearGradient id="title-panel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#071d32" stop-opacity="0.985"/>
-      <stop offset="1" stop-color="#0a3a74" stop-opacity="0.94"/>
+    <linearGradient id="full-cover-shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#020b13" stop-opacity="0.82"/>
+      <stop offset="0.22" stop-color="#061d34" stop-opacity="0.56"/>
+      <stop offset="0.55" stop-color="#061d34" stop-opacity="0.16"/>
+      <stop offset="0.78" stop-color="#05231d" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#020b13" stop-opacity="0.88"/>
     </linearGradient>
-    <linearGradient id="art-shade" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0a3a74" stop-opacity="0.3"/>
-      <stop offset="1" stop-color="#0f5d3b" stop-opacity="0.42"/>
+    <linearGradient id="title-readability" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#03111f" stop-opacity="0"/>
+      <stop offset="0.22" stop-color="#03111f" stop-opacity="0.7"/>
+      <stop offset="0.78" stop-color="#03111f" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#03111f" stop-opacity="0"/>
     </linearGradient>
   </defs>
   <rect width="${width}" height="${height}" fill="url(#base)"/>
-  ${image}
-  <rect width="${width}" height="${height}" fill="url(#art-shade)"/>
-  <rect x="0" y="0" width="${width}" height="1680" fill="url(#title-panel)"/>
-  <rect x="0" y="2200" width="${width}" height="360" fill="#071d32" fill-opacity="0.95"/>
-  <rect x="72" y="72" width="1456" height="2416" rx="4" fill="none" stroke="#f7f1e7" stroke-opacity="0.72" stroke-width="3"/>
-  <rect x="72" y="72" width="210" height="12" fill="#0f5d3b"/>
-  <rect x="1318" y="2476" width="210" height="12" fill="#0f5d3b"/>
-  <text x="800" y="220" text-anchor="middle" fill="#9ccbb7" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="700" letter-spacing="5">EB STUDIO PRO / KDP EDITION</text>
-  <line x1="680" y1="266" x2="920" y2="266" stroke="#0f5d3b" stroke-width="8"/>
-  ${svgTextLines(title.lines, 800, titleStart, title.lineHeight, `text-anchor="middle" fill="#f7f1e7" font-family="Georgia, 'Times New Roman', serif" font-size="${title.size}" font-weight="700"`)}
-  ${subtitle ? svgTextLines(subtitle.lines, 800, subtitleStart, subtitle.lineHeight, `text-anchor="middle" fill="#d7e6df" font-family="Georgia, 'Times New Roman', serif" font-size="${subtitle.size}" font-style="italic"`) : ""}
-  <line x1="610" y1="2280" x2="990" y2="2280" stroke="#0f5d3b" stroke-width="5"/>
-  ${svgTextLines(author.lines, 800, authorStart, author.lineHeight, `text-anchor="middle" fill="#f7f1e7" font-family="Arial, Helvetica, sans-serif" font-size="${author.size}" font-weight="700" letter-spacing="3"`)}
+  ${fallbackAtmosphere}
+  <rect width="${width}" height="${height}" fill="url(#full-cover-shade)"/>
+  <rect x="120" y="${Math.max(430, titleStart - 150)}" width="1360" height="${Math.min(1100, titleHeight + subtitleHeight + 330)}" rx="20" fill="url(#title-readability)"/>
+  <path d="M104 96 H310 M104 96 V302 M1290 2464 H1496 M1496 2258 V2464" fill="none" stroke="#9ccbb7" stroke-opacity="0.72" stroke-width="4"/>
+  <line x1="690" y1="${titleStart - 72}" x2="910" y2="${titleStart - 72}" stroke="#0f5d3b" stroke-width="7"/>
+  ${subtitle ? `<g id="official-subtitle">${svgTextLines(subtitle.lines, 800, subtitleStart, subtitle.lineHeight, `text-anchor="middle" fill="#e4e8df" font-family="Georgia, 'Times New Roman', serif" font-size="${subtitle.size}" font-style="italic"`)}</g>` : ""}
+  <g id="official-title">${svgTextLines(title.lines, 800, titleStart, title.lineHeight, `text-anchor="middle" fill="#f7f1e7" font-family="Georgia, 'Times New Roman', serif" font-size="${title.size}" font-weight="700"`)}</g>
+  <line x1="650" y1="2265" x2="950" y2="2265" stroke="#0f5d3b" stroke-width="5"/>
+  <g id="official-author">${svgTextLines(author.lines, 800, authorStart, author.lineHeight, `text-anchor="middle" fill="#f7f1e7" font-family="Arial, Helvetica, sans-serif" font-size="${author.size}" font-weight="700" letter-spacing="3"`)}</g>
 </svg>`;
-}
-
-function imageFromObjectUrl(url: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("The KDP cover layout could not be rendered."));
-    image.src = url;
-  });
-}
-
-function canvasJpegBlob(canvas: HTMLCanvasElement) {
-  return new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", 0.94);
-  });
-}
-
-async function renderPolishedKdpCover(book: Manuscript) {
-  if (typeof document === "undefined" || typeof Image === "undefined") return null;
-  const svg = createPolishedKdpCoverSvg(book);
-  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-  const objectUrl = URL.createObjectURL(svgBlob);
-  try {
-    const image = await imageFromObjectUrl(objectUrl);
-    const canvas = document.createElement("canvas");
-    canvas.width = 1600;
-    canvas.height = 2560;
-    const context = canvas.getContext("2d");
-    if (!context) return null;
-    context.fillStyle = STANDARD_PUBLISHING_PALETTE.navy;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvasJpegBlob(canvas);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
 }
 
 export async function exportCover(book: Manuscript, shouldDownload = true) {
   const readiness = getCoverReadiness(book);
   if (!readiness.ready) throw new Error(readiness.errors[0]);
-  const polished = await renderPolishedKdpCover(book).catch(() => null);
+  // Cover Studio's imageData is already the completed customer-facing cover.
+  // Passing it through preserves the full-bleed artwork and its single title
+  // hierarchy. Re-compositing it here previously added an internal label,
+  // redrew the title, and hid most of the artwork behind package-style bands.
   const bytes = dataUriToBytes(book.cover?.imageData ?? "");
-  const blob = polished && polished.size > 0
-    ? polished
-    : new Blob([bytes], { type: "image/jpeg" });
+  const blob = new Blob([bytes], { type: "image/jpeg" });
   if (shouldDownload) downloadBlob(blob, `${exportFilenameStem(book)}-KDP-Cover.jpg`);
   return blob;
 }
