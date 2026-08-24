@@ -3,6 +3,7 @@
 import { Check, LoaderCircle, MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import type { AIProvider } from "./book-types";
+import { resolveVisualBookKindId, resolveVisualStyleId } from "./creative-direction";
 import type { ComicPanel, VisualBookBrief, VisualBookPage, VisualBookProject } from "./visual-book-types";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -90,6 +91,7 @@ export default function VisualCreativeAssistant({
           manuscript: null,
           activeSection: 0,
           creationMode: "single",
+          visualProject: brief,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -130,6 +132,14 @@ export default function VisualCreativeAssistant({
       else if (["audience", "targetreader", "targetaudience", "reader"].includes(key)) briefPatch.audience = value;
       else if (["characterbible", "characterworldlock", "characterandworldlock", "worldlock"].includes(key)) briefPatch.characterBible = value;
       else if (["palette", "paletteandlightinglock", "lightinglock"].includes(key)) briefPatch.palette = value;
+      else if (["visualdirection", "visualstyle", "style"].includes(key)) {
+        const visualStyle = resolveVisualStyleId(value);
+        if (visualStyle) briefPatch.visualStyle = visualStyle;
+      }
+      else if (["minibooktype", "booktype", "contenttype"].includes(key)) {
+        const kind = resolveVisualBookKindId(value);
+        if (kind) briefPatch.kind = kind;
+      }
       else if (["pageheading", "heading", "pagetitle"].includes(key)) pagePatch.title = value;
       else if (["pagecopy", "body", "pagenote"].includes(key)) pagePatch.body = value;
       else if (["artdirection", "imageprompt", "visualprompt"].includes(key)) pagePatch.imagePrompt = value;
@@ -233,7 +243,7 @@ function assistantBrief(brief: VisualBookBrief) {
 
 function visualInstruction(question: string, brief: VisualBookBrief, project: VisualBookProject | null, page: VisualBookPage | null) {
   const panelContext = page?.panels?.length ? page.panels.map((panel: ComicPanel, index) => `Panel ${index + 1}: scene=${panel.scene}; camera=${panel.camera}; caption=${panel.caption}; dialogue=${panel.dialogue.map(d => `${d.speaker}: ${d.text}`).join(" | ")}`).join("\n") : "";
-  return `${question}\n\nYou are Ask EB inside EBStudio.Pro Visuals & Comics. Be a senior book editor, comic director, visual storyteller, and publishing strategist. Do not merely agree: identify omissions, weak logic, continuity issues, and stronger choices.\n\nReturn fieldSuggestions using these exact field labels whenever they should be filled or improved: Title, Subtitle, Author, Story idea and conflict, Target reader, Character & world lock, Palette and lighting lock, Page heading, Page copy, Art direction. Do not invent unrelated form fields. Prefer suggestions that can be applied directly.\n\nCURRENT VISUAL BRIEF:\n${JSON.stringify(brief)}\n\nCURRENT PROJECT:\n${project ? JSON.stringify({ title: project.title, mode: project.mode, visualStyle: project.visualStyle, pages: project.pages.map(p => ({ pageNumber: p.pageNumber, role: p.role, title: p.title })) }) : "Not created yet"}\n\nCURRENT PAGE:\n${page ? JSON.stringify({ pageNumber: page.pageNumber, role: page.role, title: page.title, body: page.body, imagePrompt: page.imagePrompt }) : "None"}\n${panelContext ? `\nPANELS:\n${panelContext}` : ""}`;
+  return `${question}\n\nYou are Ask EB inside EBStudio.Pro Visuals & Comics. Be a senior book editor, comic director, visual storyteller, copy chief, and publishing strategist. Do not merely agree: identify omissions, weak logic, continuity issues, generic phrasing, and stronger choices. Infer the most precise genre or subgenre supported by the title and premise before choosing copy or art direction.\n\nReturn fieldSuggestions using these exact field labels whenever they should be filled or improved: Title, Subtitle, Author, Mini book type, Story idea and conflict, Target reader, Visual direction, Character & world lock, Palette and lighting lock, Page heading, Page copy, Art direction. Do not invent unrelated form fields. Prefer suggestions that can be applied directly. For Mini book type, return exactly one existing label: Illustrated Story, Children's Story, Visual How-To, Motivational, Recipe / Activity, Book Teaser, Lead Magnet, or Product Guide. For Visual direction, return exactly one existing label: Cinematic Editorial, Warm Storybook, Dark Luxury, Clean Modern, Bold Color, Ink Noir, or Notebook Reflection. Premium directions such as Gothic Literary or Cinematic Mystery map to Cinematic Editorial; Emotional Memoir maps to Cinematic Editorial or Notebook Reflection; Premium Nonfiction and Founder/Business Authority map to Clean Modern.\n\nFiction subtitles must be atmospheric, emotionally specific, cover-readable, and must not repeat the title. Non-fiction subtitles must name the intended reader, credible outcome, and practical method. Avoid generic phrases such as a story about, a journey of discovery, unlock your potential, and transform your life. Strengthen the story idea or core promise with concrete stakes, change, or reader value. Art direction must name one focal subject, foreground, midground, background, motivated lighting, restrained palette, and what to avoid. Never request duplicate title text, fake readable text, internal labels, watermarks, publisher marks, random crop bands, or visual clutter.\n\nCURRENT VISUAL BRIEF:\n${JSON.stringify(brief)}\n\nCURRENT PROJECT:\n${project ? JSON.stringify({ title: project.title, mode: project.mode, kind: project.kind, visualStyle: project.visualStyle, pages: project.pages.map(p => ({ pageNumber: p.pageNumber, role: p.role, title: p.title })) }) : "Not created yet"}\n\nCURRENT PAGE:\n${page ? JSON.stringify({ pageNumber: page.pageNumber, role: page.role, title: page.title, body: page.body, imagePrompt: page.imagePrompt }) : "None"}\n${panelContext ? `\nPANELS:\n${panelContext}` : ""}`;
 }
 
 function normalizeSuggestions(value: unknown): FieldSuggestion[] {

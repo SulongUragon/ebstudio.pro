@@ -6,6 +6,11 @@ import type {
   Mode,
   SectionPlan,
 } from "../../book-types";
+import {
+  buildAskEBCreativeGuidance,
+  buildCopywritingGuidance,
+  buildVisualArtworkDirection,
+} from "../../creative-direction";
 import type { VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 
 type RequestBody = {
@@ -93,6 +98,32 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+
+function bookCreativeContext(mode: Mode, brief: BookBrief) {
+  return {
+    mode,
+    title: brief.title,
+    subtitle: brief.subtitle,
+    genre: brief.genre,
+    topic: brief.topic,
+    premise: brief.premise,
+    audience: brief.audience,
+    keyPoints: brief.keyPoints,
+  } as const;
+}
+
+function visualCreativeContext(project: VisualBookBrief) {
+  return {
+    mode: ["illustrated-story", "children-story", "book-teaser"].includes(project.kind)
+      ? "fiction" as const
+      : "nonfiction" as const,
+    title: project.title,
+    subtitle: project.subtitle,
+    premise: project.premise,
+    audience: project.audience,
+    kind: project.kind,
+  };
+}
 
 const visualPageSchema = {
   type: "object", additionalProperties: false,
@@ -238,6 +269,7 @@ async function createAssistantResponse(body: RequestBody) {
     dualContext = null,
   } = body;
   const isDual = creationMode === "dual";
+  const visualAssistant = Boolean(body.visualProject);
   const romance = isRomanceBrief(mode, brief);
   const selected = manuscript?.sections?.[activeSection];
   const modeContext = isDual
@@ -269,6 +301,14 @@ ${String(selected.content ?? "").slice(0, 14000)}`
     ?.slice(0, 40)
     .map((section, index) => `${index + 1}. ${section.title}: ${section.summary ?? ""}`)
     .join("\n");
+  const assistantCreativeGuidance = buildAskEBCreativeGuidance(
+    body.visualProject
+      ? visualCreativeContext(body.visualProject)
+      : bookCreativeContext(mode, brief),
+  );
+  const visualAssistantGuidance = visualAssistant
+    ? "This is a visual mini-book setup or page request. The visual field contract overrides the standard fiction and non-fiction brief field contract. Use only these exact visual field names when relevant: Title, Subtitle, Author, Mini book type, Story idea and conflict, Target reader, Visual direction, Character & world lock, Palette and lighting lock, Page heading, Page copy, and Art direction. For a broad fill request, include every missing setup field."
+    : "";
 
   const generated = await generateJson(
     {
@@ -308,9 +348,9 @@ ${String(selected.content ?? "").slice(0, 14000)}`
         ],
       },
       instructions:
-        "You are EB Creative Assistant, a senior ebook editor, fiction and non-fiction book developer, article strategist, and repurposing specialist. Preserve this response order: first comments, then verdict, then the direct help. Comments must briefly assess what is strong, weak, missing, or unclear in the user's current idea. Verdict must be one decisive sentence stating whether the concept works and what direction to take. Answer must be a short transition or recommendation that follows the verdict. When the user asks for help creating, strengthening, filling in, or completing a book concept or brief, organize every ready-to-paste suggestion in fieldSuggestions instead of blending fields into one paragraph. For fiction use the exact field names Genre, Main Characters, and Plot Premise. When the genre names romance, apply the romance brief rules supplied in the input: the love story must be the main plot, subgenre labels must match what the premise actually contains, both leads need a wound and a blocking belief, and the ending must put the couple together on the page. If the premise the user gives you is not actually romance, say that directly in the verdict instead of accepting it. Any time you touch a romance brief, include Genre in fieldSuggestions alongside whatever else you changed, written as a specific subgenre rather than the bare word Romance. For non-fiction use the exact field names Topic, Target Audience, and Key Points. For a dual book project use the exact field names Shared Concept, Shared Audience, Fiction Subtitle, and Non-Fiction Subtitle, and make sure the fiction and non-fiction sides express the same core theme through different framing: the novel delivers the emotional experience through story, the guide delivers the practical transformation through instruction. When advising on a dual project, always consider both books together and flag any drift between them. Include only the fields relevant to the request; include all of them when the user asks for broad concept help. Each value must stand alone and be ready to paste into its matching form field. Use Book Title only when the user asks for title help. For section editing, manuscript analysis, and article requests, return an empty fieldSuggestions array. When the user asks for cover art help, ideas, or direction, return the art direction in fieldSuggestions using the exact field name Cover Direction, or for a dual book project use the two exact field names Fiction Cover Direction and Non-Fiction Cover Direction. Each cover value must be one paste-ready paragraph written as a literal scene description: the setting, the single focal subject, the lighting and mood, the color feel, and an explicit list of what to avoid. Prefer a photographic scene over graphic symbols. Never suggest hearts, broken hearts, wedding rings, roses, or other worn relationship cliches. Keep the composition simple enough to stay readable at thumbnail size, which means one clear focal point and no crowded scenes. Do not describe the title text, typography, or author name, because those are added separately by the app. For a dual project, the two cover directions must share the same photographic treatment, lighting, and palette so the pair is visually recognizable as one series, and differ only in the subject of the scene. When the user asks for a deliverable, provide publication-ready copy in draft. Never claim guaranteed virality, invent research, imitate a living author, or use the em dash character. Keep every response concise. Use target title only when draft is a replacement title, section only when draft is a full replacement for the selected manuscript section, article for a standalone article, and none otherwise. If target is none, draft may contain other ready-to-use copy or be empty.",
+        "You are EB Creative Assistant, a senior ebook editor, fiction and non-fiction book developer, article strategist, and repurposing specialist. Preserve this response order: first comments, then verdict, then the direct help. Comments must briefly assess what is strong, weak, missing, or unclear in the user's current idea. Verdict must be one decisive sentence stating whether the concept works and what direction to take. Answer must be a short transition or recommendation that follows the verdict. When the user asks for help creating, strengthening, filling in, or completing a book concept or brief, organize every ready-to-paste suggestion in fieldSuggestions instead of blending fields into one paragraph. For fiction use the exact field names Genre, Main Characters, and Plot Premise. When the genre names romance, apply the romance brief rules supplied in the input: the love story must be the main plot, subgenre labels must match what the premise actually contains, both leads need a wound and a blocking belief, and the ending must put the couple together on the page. If the premise the user gives you is not actually romance, say that directly in the verdict instead of accepting it. Any time you touch a romance brief, include Genre in fieldSuggestions alongside whatever else you changed, written as a specific subgenre rather than the bare word Romance. For non-fiction use the exact field names Topic, Target Audience, and Key Points. For a dual book project use the exact field names Shared Concept, Shared Audience, Fiction Subtitle, and Non-Fiction Subtitle, and make sure the fiction and non-fiction sides express the same core theme through different framing: the novel delivers the emotional experience through story, the guide delivers the practical transformation through instruction. When advising on a dual project, always consider both books together and flag any drift between them. Include only the fields relevant to the request; include all of them when the user asks for broad concept help. Each value must stand alone and be ready to paste into its matching form field. Use Book Title only when the user asks for title help. For section editing, manuscript analysis, and article requests, return an empty fieldSuggestions array. When the user asks for cover art help, ideas, or direction, return the art direction in fieldSuggestions using the exact field name Cover Direction, or for a dual book project use the two exact field names Fiction Cover Direction and Non-Fiction Cover Direction. Each cover value must be one paste-ready paragraph written as a literal scene description: the setting, the single focal subject, the lighting and mood, the color feel, the typography direction, and an explicit list of what to avoid. Prefer a photographic scene over graphic symbols. Never suggest hearts, broken hearts, wedding rings, roses, or other worn relationship cliches. Keep the composition simple enough to stay readable at thumbnail size, which means one clear focal point and no crowded scenes. Describe the typography style and safe title zone, but do not invent, repeat, or alter the exact title, subtitle, or author name because the app controls that copy. For a dual project, the two cover directions must share the same photographic treatment, lighting, and palette so the pair is visually recognizable as one series, and differ only in the subject of the scene. When the user asks for a deliverable, provide publication-ready copy in draft. Never claim guaranteed virality, invent research, imitate a living author, or use the em dash character. Keep every response concise. Use target title only when draft is a replacement title, section only when draft is a full replacement for the selected manuscript section, article for a standalone article, and none otherwise. If target is none, draft may contain other ready-to-use copy or be empty.\n\n" + assistantCreativeGuidance + "\n\n" + visualAssistantGuidance,
       input: `Current book context:
-Mode: ${isDual ? "dual book project (fiction + non-fiction together)" : mode}
+Mode: ${visualAssistant ? "visual mini ebook" : isDual ? "dual book project (fiction + non-fiction together)" : mode}
 Title: ${brief.title || "Not set"}
 Author: ${brief.author || "Not set"}
 ${modeContext}
@@ -327,8 +367,10 @@ ${history || "No earlier messages."}
 User request:
 ${assistantPrompt.trim()}
 
-${romance ? `${ROMANCE_BRIEF_RULES}\n\n` : ""}Response pattern for this ${isDual ? "dual book project" : mode === "fiction" ? "fiction" : "non-fiction"} book:${
-  isDual
+${romance ? `${ROMANCE_BRIEF_RULES}\n\n` : ""}Response pattern for this ${visualAssistant ? "visual mini ebook" : isDual ? "dual book project" : mode === "fiction" ? "fiction" : "non-fiction"} book:${
+  visualAssistant
+    ? "Title, Subtitle, Author, Mini book type, Story idea and conflict, Target reader, Visual direction, Character & world lock, Palette and lighting lock, Page heading, Page copy, Art direction"
+    : isDual
     ? "Shared Concept, Shared Audience, Fiction Subtitle, Non-Fiction Subtitle"
     : mode === "fiction"
       ? "Genre, Main Characters, Plot Premise"
@@ -357,6 +399,7 @@ Return a brief editorial assessment in comments, followed by one decisive senten
 async function createExistingEbookAudit(body: RequestBody) {
   const source = body.existingBook;
   if (!source?.text) throw new Error("Missing ebook text.");
+  const creativeGuidance = buildCopywritingGuidance(bookCreativeContext(body.mode, body.brief));
   const generated = await generateJson(
     {
       name: "existing_ebook_audit",
@@ -383,7 +426,7 @@ async function createExistingEbookAudit(body: RequestBody) {
         required: ["audit"],
       },
       instructions:
-        "You are the senior acquisition editor and commercial book strategist inside EB Studio Pro. Audit the uploaded manuscript honestly. Improve market positioning without misleading clickbait, invented claims, or guaranteed virality. Preserve the author's core intent and voice. Never use the em dash character.",
+        `You are the senior acquisition editor and commercial book strategist inside EB Studio Pro. Audit the uploaded manuscript honestly. Improve market positioning without misleading clickbait, invented claims, or guaranteed virality. Preserve the author's core intent and voice. Never use the em dash character. ${creativeGuidance}`,
       input: `Audit this existing ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook for a ${source.optimizationMode ?? "relaunch"} optimization.
 
 Current title: ${body.brief.title}
@@ -462,13 +505,18 @@ async function createVisualStoryboard(body: RequestBody) {
   if (!project) throw new Error("Missing visual book details.");
   const pageCount = [5, 7, 10].includes(Number(project.pageCount)) ? Number(project.pageCount) : 7;
   const comic = project.mode === "comic";
+  const visualDirectionGuidance = comic
+    ? ""
+    : `${buildCopywritingGuidance(visualCreativeContext(project))} ${buildVisualArtworkDirection(visualCreativeContext(project), project.visualStyle)}`;
   const generated = await generateJson({
     name: comic ? "comic_short_storyboard" : "visual_mini_ebook_storyboard",
     schema: { type: "object", additionalProperties: false, properties: { refined_subtitle: { type: "string" }, character_bible: { type: "string" }, palette: { type: "string" }, pages: { type: "array", items: visualPageSchema } }, required: ["refined_subtitle", "character_bible", "palette", "pages"] },
     instructions: comic
       ? "You are the graphic-story director inside EB Studio Pro. Create concise, visually clear, original comic storyboards with consistent characters, deliberate panel rhythm, readable dialogue, and a complete emotional arc. Never imitate a living artist or copyrighted franchise. Never use the em dash character."
-      : "You are the visual publishing director inside EB Studio Pro. Create premium, content-rich mini ebooks where every page has one clear job, substantial publication-ready copy, and art direction that materially supports the text. Every page must earn its place and give the reader real narrative, emotional, practical, or reflective value. Never pad pages with generic slogans, repeated ideas, invented facts, research, credentials, or statistics. Never use the em dash character.",
+      : `You are the visual publishing director inside EB Studio Pro. Create premium, content-rich mini ebooks where every page has one clear job, substantial publication-ready copy, and art direction that materially supports the text. Every page must earn its place and give the reader real narrative, emotional, practical, or reflective value. Never pad pages with generic slogans, repeated ideas, invented facts, research, credentials, or statistics. Never use the em dash character. ${visualDirectionGuidance}`,
     input: `${visualProjectContext(project)}
+
+${comic ? "" : `Creative and copy direction:\n${visualDirectionGuidance}\n`}
 
 Create exactly ${pageCount} total pages, including the cover. Page 1 is the cover. The final page must provide a satisfying resolution for a story, or a focused takeaway and call to action for a guide, teaser, lead magnet, or product book.
 
@@ -490,13 +538,18 @@ async function rewriteVisualPage(body: RequestBody) {
   if (!project || !page) throw new Error("Missing visual page details.");
   const comic = project.mode === "comic";
   const pageMap = (project.pages ?? []).map((item) => `${item.pageNumber}. ${item.title}: ${item.body}`).join("\n");
+  const visualDirectionGuidance = comic
+    ? ""
+    : `${buildCopywritingGuidance(visualCreativeContext(project))} ${buildVisualArtworkDirection(visualCreativeContext(project), project.visualStyle)}`;
   const generated = await generateJson({
     name: comic ? "rewrite_comic_page" : "rewrite_visual_ebook_page",
     schema: { type: "object", additionalProperties: false, properties: { page: visualPageSchema }, required: ["page"] },
     instructions: comic
       ? "You are the graphic-story editor inside EB Studio Pro. Rewrite one comic page while preserving continuity, character identity, reading order, and the story's ending. Keep dialogue short and natural. Never use the em dash character."
-      : "You are the visual mini-book editor inside EB Studio Pro. Rewrite one page for clarity, emotional force, and visual rhythm without changing the book's central promise. Never invent factual claims. Never use the em dash character.",
+      : `You are the visual mini-book editor inside EB Studio Pro. Rewrite one page for clarity, emotional force, and visual rhythm without changing the book's central promise. Never invent factual claims. Never use the em dash character. ${visualDirectionGuidance}`,
     input: `${visualProjectContext(project)}
+
+${comic ? "" : `Creative and copy direction:\n${visualDirectionGuidance}\n`}
 
 Full page map:
 ${pageMap || "Only one page is available."}
@@ -532,6 +585,7 @@ async function createTitleSuggestions(
   title: string,
   provider: AIProvider,
 ) {
+  const creativeGuidance = buildCopywritingGuidance({ mode, title });
   const generated = await generateJson(
     {
       name: "ebook_title_suggestions",
@@ -547,7 +601,7 @@ async function createTitleSuggestions(
         required: ["suggestions"],
       },
       instructions:
-        "You are the senior book title strategist inside EB Studio Pro. Create commercially strong, original titles with clear reader appeal. Never promise virality, use misleading clickbait, copy a famous title, invent claims, or use the em dash character.",
+        `You are the senior book title strategist inside EB Studio Pro. Create commercially strong, original titles with clear reader appeal. Never promise virality, use misleading clickbait, copy a famous title, invent claims, or use the em dash character. ${creativeGuidance}`,
       input:
         mode === "fiction"
           ? `Improve this fiction book title:
@@ -602,6 +656,7 @@ async function createBookBrief(
    * genre, that choice wins and the rest of the brief is built to serve it.
    */
   const requestedGenre = mode === "fiction" ? String(brief.genre ?? "").trim() : "";
+  const creativeGuidance = buildCopywritingGuidance(bookCreativeContext(mode, brief));
   const romance = requestedGenre.length > 0 && /romance|romantic|romantasy/i.test(requestedGenre);
   const genreDirection = requestedGenre
     ? `The author has already chosen the genre: ${requestedGenre}
@@ -646,7 +701,7 @@ Return that genre, or a more precise subgenre of it if one fits the title better
         required,
       },
       instructions:
-        "You are the senior book development editor inside EB Studio Pro. Turn a title into a specific, commercially promising, original book brief. Make every field immediately useful to a long-form writer. Never use the em dash character. Do not change or repeat the supplied title.",
+        `You are the senior book development editor inside EB Studio Pro. Turn a title into a specific, commercially promising, original book brief. Make every field immediately useful to a long-form writer. Never use the em dash character. Do not change or repeat the supplied title. ${creativeGuidance}`,
       input:
         mode === "fiction"
           ? `Create an editable fiction book brief for this title:
@@ -687,6 +742,15 @@ Define a focused topic, a specific target audience including their needs or leve
 }
 
 async function createDualBookSeed(body: RequestBody) {
+  const fictionGuidance = buildCopywritingGuidance({
+    mode: "fiction",
+    title: body.brief.title,
+  });
+  const nonfictionGuidance = buildCopywritingGuidance({
+    mode: "nonfiction",
+    title: body.brief.title,
+    audience: body.brief.audience,
+  });
   const generated = await generateJson(
     {
       name: "dual_book_seed",
@@ -709,7 +773,7 @@ async function createDualBookSeed(body: RequestBody) {
         ],
       },
       instructions:
-        "You are the dual-book strategist inside EB Studio Pro. Turn one title into a commercially coherent fiction and non-fiction companion-pair direction. Both books must share a central theme, audience connection, and transformation while remaining original and standalone. Write distinct subtitles that clearly identify the fiction experience and practical non-fiction promise. Never use the em dash character. Never invent research, statistics, credentials, or clinical claims.",
+        `You are the dual-book strategist inside EB Studio Pro. Turn one title into a commercially coherent fiction and non-fiction companion-pair direction. Both books must share a central theme, audience connection, and transformation while remaining original and standalone. Write distinct subtitles that clearly identify the fiction experience and practical non-fiction promise. Never use the em dash character. Never invent research, statistics, credentials, or clinical claims. Fiction copy direction: ${fictionGuidance} Non-fiction copy direction: ${nonfictionGuidance}`,
       input: `Create editable starting details for a fiction and non-fiction companion pair.
 
 Shared main title: ${body.brief.title.trim()}
@@ -763,6 +827,7 @@ async function createCompanionBrief(body: RequestBody) {
       ? "Create an original fiction companion that dramatizes the source book's central principles through specific characters, conflict, stakes, and a complete story engine. It must stand alone as a novel and must not read like lessons disguised as dialogue."
       : "Create a practical non-fiction companion that transforms the source story's central emotional themes and conflicts into a clear learning journey. It must stand alone as a useful guide, must not retell the plot chapter by chapter, and must not invent research, statistics, credentials, or clinical claims.";
   const properties = body.mode === "fiction" ? fictionProperties : nonfictionProperties;
+  const creativeGuidance = buildCopywritingGuidance(bookCreativeContext(body.mode, body.brief));
   const required =
     body.mode === "fiction"
       ? ["genre", "characters", "premise", "chapter_count"]
@@ -778,7 +843,7 @@ async function createCompanionBrief(body: RequestBody) {
         required,
       },
       instructions:
-        "You are the companion-book architect inside EB Studio Pro. Build a commercially coherent companion in the opposite format while preserving the source book's core theme, emotional promise, audience connection, and premium tone. The companion must be original, standalone, and non-duplicative. Never use the em dash character. Do not return or change the supplied title.",
+        `You are the companion-book architect inside EB Studio Pro. Build a commercially coherent companion in the opposite format while preserving the source book's core theme, emotional promise, audience connection, and premium tone. The companion must be original, standalone, and non-duplicative. Never use the em dash character. Do not return or change the supplied title. ${creativeGuidance}`,
       input: `Create an editable ${body.mode === "fiction" ? "fiction" : "non-fiction"} companion brief for this completed ${sourceMode === "fiction" ? "fiction" : "non-fiction"} book.
 
 Shared main title: ${body.manuscript?.title ?? body.brief.title}
@@ -816,6 +881,18 @@ async function createDualBookBrief(body: RequestBody) {
   if (!concept || !audience) {
     throw new Error("Add the shared concept and target audience for the dual book pair.");
   }
+  const fictionGuidance = buildCopywritingGuidance({
+    mode: "fiction",
+    title: body.brief.title,
+    premise: concept,
+    audience,
+  });
+  const nonfictionGuidance = buildCopywritingGuidance({
+    mode: "nonfiction",
+    title: body.brief.title,
+    topic: concept,
+    audience,
+  });
 
   const generated = await generateJson(
     {
@@ -848,7 +925,7 @@ async function createDualBookBrief(body: RequestBody) {
         required: ["fiction", "nonfiction"],
       },
       instructions:
-        "You are the dual-book architect inside EB Studio Pro. Build two original, commercially coherent books from one shared concept: one fiction and one non-fiction. They must share the same central theme, emotional promise, audience connection, and premium tone while remaining standalone and non-duplicative. The fiction must dramatize rather than teach. The non-fiction must teach rather than retell the plot. Never use the em dash character. Never invent research, statistics, credentials, or clinical claims.",
+        `You are the dual-book architect inside EB Studio Pro. Build two original, commercially coherent books from one shared concept: one fiction and one non-fiction. They must share the same central theme, emotional promise, audience connection, and premium tone while remaining standalone and non-duplicative. The fiction must dramatize rather than teach. The non-fiction must teach rather than retell the plot. Never use the em dash character. Never invent research, statistics, credentials, or clinical claims. Fiction copy direction: ${fictionGuidance} Non-fiction copy direction: ${nonfictionGuidance}`,
       input: `Create aligned briefs for a fiction and non-fiction companion pair.
 
 Shared main title: ${body.brief.title}
@@ -972,6 +1049,7 @@ async function createOutline(
 ) {
   const requestedSubtitle = String(brief.subtitle ?? "").trim();
   const romance = isRomanceBrief(mode, brief);
+  const creativeGuidance = buildCopywritingGuidance(bookCreativeContext(mode, brief));
   const modeContext =
     mode === "fiction"
       ? `Genre: ${brief.genre}
@@ -1031,7 +1109,7 @@ Key points: ${brief.keyPoints}`;
         ],
       },
       instructions:
-        "You are the senior book architect inside EB Studio Pro. Design commercially strong, coherent full-length ebooks. Use precise titles, avoid generic filler, and never use the em dash character.",
+        `You are the senior book architect inside EB Studio Pro. Design commercially strong, coherent full-length ebooks. Use precise titles, avoid generic filler, and never use the em dash character. ${creativeGuidance}`,
       input: `Create the complete structure for a ${mode === "fiction" ? "fiction" : "non-fiction"} ebook.
 
 Title: ${brief.title}
@@ -1041,7 +1119,7 @@ Requested main chapters: exactly ${brief.chapterCount}
 ${modeContext}
 ${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n\n${ROMANCE_POV_RULES}\n` : "\nThis book does not use assigned chapter viewpoints. Return an empty pov_leads array and an empty pov string for every chapter.\n"}
 
-Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : "Create a subtitle that makes the promise or story tension sharper."}${avoidanceRules(avoidNames)}`,
+Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : mode === "fiction" ? "Create one atmospheric, emotionally specific, cover-readable subtitle that does not repeat the title." : "Create one credible cover-readable subtitle that states the intended reader, useful outcome, and practical approach."}${avoidanceRules(avoidNames)}`,
       maxOutputTokens: outlineTokenBudget(brief.chapterCount),
     },
     provider,
