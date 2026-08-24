@@ -2,10 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import JSZip from "jszip";
 import type { Manuscript } from "../app/book-types";
-import { exportCover, exportDocx, exportEpub, exportFilenameStem, getCoverReadiness, getKdpReadiness } from "../app/exporters";
+import {
+  exportBundle,
+  exportCover,
+  exportDocx,
+  exportEpub,
+  exportFilenameStem,
+  exportPdf,
+  getCoverReadiness,
+  getKdpReadiness,
+} from "../app/exporters";
 
 const onePixelJpeg =
   "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=";
+
+function completeFixtureSection(opening: string) {
+  const paragraphs = Array.from({ length: 9 }, (_, index) =>
+    `Mara followed the quiet evidence through the house, testing each detail before she trusted it. The ${index + 1} clue changed how she understood the door, the letter, and the choice waiting beyond the hallway. She recorded what she knew, separated it from what she feared, and continued only when the next action was clear.`,
+  );
+  return `${opening}\n\n${paragraphs.join("\n\n")}`;
+}
 
 function sampleBook(): Manuscript {
   return {
@@ -36,7 +52,9 @@ function sampleBook(): Manuscript {
         kind: "introduction",
         title: "Prologue",
         purpose: "Open",
-        content: "# Prologue\n\n*Listen,* she told herself.\n\nThe hallway answered.",
+        content: completeFixtureSection(
+          "# Prologue\n\n*Listen,* she told herself.\n\nThe hallway answered.",
+        ),
         summary: "Mara listens.",
       },
       {
@@ -44,15 +62,18 @@ function sampleBook(): Manuscript {
         number: 1,
         title: "The Door",
         purpose: "Escalate",
-        content:
+        content: completeFixtureSection(
           "# The Door\n\nThe key **turned**.\n\n***\n\n### What She Found\n\n- A photograph\n- A sealed letter\n\n1. Breathe\n2. Open it",
+        ),
         summary: "The door opens.",
       },
       {
         kind: "conclusion",
         title: "Epilogue",
         purpose: "Resolve",
-        content: "# Epilogue\n\nShe finally *felt* the morning.",
+        content: completeFixtureSection(
+          "# Epilogue\n\nShe finally *felt* the morning.",
+        ),
         summary: "Morning arrives.",
       },
     ],
@@ -125,6 +146,16 @@ test("DOCX export uses semantic headings, links, and true italics", async () => 
   assert.match(stylesXml, /KdpFictionBody/);
 });
 
+test("PDF export produces a non-empty reference PDF", async () => {
+  const blob = await exportPdf(sampleBook(), false);
+  const signature = new TextDecoder().decode(
+    new Uint8Array(await blob.slice(0, 5).arrayBuffer()),
+  );
+  assert.equal(blob.type, "application/pdf");
+  assert.equal(signature, "%PDF-");
+  assert.ok(blob.size > 1_000);
+});
+
 test("EPUB export includes EPUB3 navigation, NCX fallback, cover metadata, and rich text", async () => {
   const blob = await exportEpub(sampleBook(), false);
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
@@ -164,7 +195,9 @@ test("EPUB export includes EPUB3 navigation, NCX fallback, cover metadata, and r
 test("EPUB normalizes repeated structural labels in section titles", async () => {
   const book = sampleBook();
   book.sections[0].title = "Prologue: Prologue: The Last Binding";
-  book.sections[0].content = "# Prologue: The Last Binding\n\nThe ink moved.";
+  book.sections[0].content = completeFixtureSection(
+    "# Prologue: The Last Binding\n\nThe ink moved.",
+  );
   book.sections[1].title = "Chapter 1: The Door";
   book.sections[2].title = "Epilogue: Epilogue: Morning";
 
@@ -182,4 +215,20 @@ test("EPUB normalizes repeated structural labels in section titles", async () =>
   assert.doesNotMatch(nav, /Prologue: Prologue:/);
   assert.doesNotMatch(nav, /Chapter 1: Chapter 1:/);
   assert.doesNotMatch(nav, /Epilogue: Epilogue:/);
+});
+
+test("KDP bundle contains every standard publishing deliverable", async () => {
+  const book = sampleBook();
+  const filename = exportFilenameStem(book);
+  const blob = await exportBundle(book, false);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+
+  assert.equal(blob.type, "application/zip");
+  assert.ok(zip.file(`${filename}-Kindle-Create.docx`));
+  assert.ok(zip.file(`${filename}.epub`));
+  assert.ok(zip.file(`${filename}-KDP-Cover.jpg`));
+  assert.ok(zip.file(`${filename}-Reference.pdf`));
+  const guide = await zip.file("KDP-UPLOAD-GUIDE.txt")?.async("string");
+  assert.match(guide ?? "", new RegExp(`${filename}-Kindle-Create\\.docx`));
+  assert.match(guide ?? "", new RegExp(`${filename}\\.epub`));
 });

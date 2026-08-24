@@ -668,7 +668,7 @@ export async function exportCover(book: Manuscript, shouldDownload = true) {
   return blob;
 }
 
-export async function exportBundle(book: Manuscript) {
+export async function exportBundle(book: Manuscript, shouldDownload = true) {
   const readiness = getKdpReadiness(book);
   if (!readiness.ready) throw new Error(readiness.errors[0]);
   const exportBook = normalizeExportBook(book);
@@ -679,12 +679,18 @@ export async function exportBundle(book: Manuscript) {
     exportEpub(book, false),
     exportCover(book, false),
   ]);
+  const [docxData, pdfData, epubData, coverData] = await Promise.all([
+    docxBlob.arrayBuffer(),
+    pdfBlob.arrayBuffer(),
+    epubBlob.arrayBuffer(),
+    coverBlob.arrayBuffer(),
+  ]);
   const filename = exportFilenameStem(exportBook);
   const bundle = new JSZip();
-  bundle.file(`${filename}-Kindle-Create.docx`, docxBlob);
-  bundle.file(`${filename}.epub`, epubBlob);
-  bundle.file(`${filename}-KDP-Cover.jpg`, coverBlob);
-  bundle.file(`${filename}-Reference.pdf`, pdfBlob);
+  bundle.file(`${filename}-Kindle-Create.docx`, docxData);
+  bundle.file(`${filename}.epub`, epubData);
+  bundle.file(`${filename}-KDP-Cover.jpg`, coverData);
+  bundle.file(`${filename}-Reference.pdf`, pdfData);
   bundle.file("KDP-UPLOAD-GUIDE.txt", kdpUploadGuide(exportBook));
   const zipBlob = await bundle.generateAsync({
     type: "blob",
@@ -692,7 +698,8 @@ export async function exportBundle(book: Manuscript) {
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });
-  downloadBlob(zipBlob, `${filename}-KDP-Package.zip`);
+  if (shouldDownload) downloadBlob(zipBlob, `${filename}-KDP-Package.zip`);
+  return zipBlob;
 }
 
 function kdpUploadGuide(book: NormalizedBook) {
