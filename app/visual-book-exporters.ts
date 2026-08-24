@@ -109,10 +109,19 @@ export async function renderVisualPage(project: VisualBookProject, page: VisualB
 
   if (isComicProject(project)) {
     await drawComic(c, project, page);
-  } else if (isNotebookReflectionProject(project)) {
-    await drawNotebookReflectionPage(c, project, page);
   } else {
-    await drawEditorialVisual(c, project, page);
+    beginVisualTextAudit(c);
+    try {
+      if (isNotebookReflectionProject(project)) {
+        await drawNotebookReflectionPage(c, project, page);
+      } else {
+        await drawEditorialVisual(c, project, page);
+      }
+      finishVisualTextAudit(c);
+    } catch (error) {
+      cancelVisualTextAudit(c);
+      throw error;
+    }
   }
 
   return canvas.toDataURL("image/jpeg", 0.94);
@@ -316,7 +325,7 @@ async function drawNotebookReflectionCover(
 
   c.fillStyle = NOTEBOOK.navy;
   c.font = "700 22px Arial";
-  c.fillText(safeVisualText(project.author.toUpperCase(), "headline"), 90, H - 92);
+  drawSafeTextLine(c, project.author.toUpperCase(), 90, H - 92, "headline");
   drawTapeAccent(c, 970, H - 142, 120, 42, 0.07);
 }
 
@@ -443,7 +452,7 @@ function drawNotebookFooter(c: CanvasRenderingContext2D, project: VisualBookProj
   c.fillStyle = NOTEBOOK.navy;
   c.font = "700 21px Arial";
   c.textAlign = "right";
-  c.fillText(safeVisualText(String(page.pageNumber).padStart(2, "0"), "headline"), W - 76, H - 60);
+  drawSafeTextLine(c, String(page.pageNumber).padStart(2, "0"), W - 76, H - 60, "headline");
   c.textAlign = "left";
 }
 
@@ -456,7 +465,7 @@ function drawHandwrittenNoteLabel(
 ) {
   c.fillStyle = color;
   c.font = "italic 700 22px 'Segoe Print', 'Bradley Hand', cursive";
-  c.fillText(safeVisualText(label, "headline"), x, y);
+  drawSafeTextLine(c, label, x, y, "headline");
 }
 
 function drawScribbleUnderline(c: CanvasRenderingContext2D, x: number, y: number, w: number, color: string) {
@@ -470,7 +479,7 @@ function drawScribbleUnderline(c: CanvasRenderingContext2D, x: number, y: number
   c.lineCap = "butt";
 }
 
-function drawNotebookHighlights(c: CanvasRenderingContext2D, source: string, x: number, y: number, w: number) {
+export function drawNotebookHighlights(c: CanvasRenderingContext2D, source: string, x: number, y: number, w: number) {
   drawSafeBulletBlock(c, source, {
     x: x + 32,
     y,
@@ -543,7 +552,7 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
 
   c.fillStyle = "rgba(255,248,235,.92)";
   c.font = "700 23px Arial";
-  c.fillText(safeVisualText(project.author.toUpperCase(), "headline"), 108, H - 96);
+  drawSafeTextLine(c, project.author.toUpperCase(), 108, H - 96, "headline");
 
   drawSmallMark(c, W - 150, 94, DEFAULT_VISUAL_PALETTE.green);
 }
@@ -756,17 +765,7 @@ async function drawCinematicFullBleed(c: CanvasRenderingContext2D, project: Visu
   const copy = buildVisualPageSections(page.body, page.title);
   const bodyType = visualBodyTypography(copy.body);
   const bodyY = afterTitle + 50;
-  const minimumBodySize = 21;
-  fitTextWithoutEllipsis(c, copy.body, {
-    x: 90,
-    y: bodyY,
-    maxWidth: 930,
-    maxLines: lineBudgetBefore(bodyY, 1650, bodyType, minimumBodySize, 7),
-    fontSize: bodyType.fontSize,
-    minFontSize: minimumBodySize,
-    lineHeight: bodyType.lineHeight,
-    fontFamily: "Arial",
-  });
+  drawFullBleedBodyOverlay(c, copy.body, bodyY, bodyType);
 
   c.fillStyle = "rgba(255,248,235,.78)";
   fitTextWithoutEllipsis(c, project.title, {
@@ -782,7 +781,26 @@ async function drawCinematicFullBleed(c: CanvasRenderingContext2D, project: Visu
     preserveAll: true,
     textRole: "headline",
   });
-  c.fillText(safeVisualText(String(page.pageNumber).padStart(2, "0"), "headline"), 1040, 1708);
+  drawSafeTextLine(c, String(page.pageNumber).padStart(2, "0"), 1040, 1708, "headline");
+}
+
+export function drawFullBleedBodyOverlay(
+  c: CanvasRenderingContext2D,
+  source: string,
+  bodyY: number,
+  bodyType = visualBodyTypography(source),
+) {
+  const minimumBodySize = 21;
+  return fitTextWithoutEllipsis(c, source, {
+    x: 90,
+    y: bodyY,
+    maxWidth: 930,
+    maxLines: lineBudgetBefore(bodyY, 1650, bodyType, minimumBodySize, 7),
+    fontSize: bodyType.fontSize,
+    minFontSize: minimumBodySize,
+    lineHeight: bodyType.lineHeight,
+    fontFamily: "Arial",
+  });
 }
 
 async function drawQuoteEditorial(c: CanvasRenderingContext2D, page: VisualBookPage) {
@@ -845,7 +863,7 @@ function drawRunningHeader(c: CanvasRenderingContext2D, project: VisualBookProje
   c.fillStyle = THEME.ink;
   c.font = "24px Georgia";
   c.textAlign = "right";
-  c.fillText(safeVisualText(`Page ${page.pageNumber}`, "headline"), W - 76, 78);
+  drawSafeTextLine(c, `Page ${page.pageNumber}`, W - 76, 78, "headline");
   c.textAlign = "left";
 
   c.strokeStyle = THEME.line;
@@ -903,12 +921,11 @@ export function drawPairedQuoteTitle(
 
   c.fillStyle = DEFAULT_VISUAL_ACCENT_COLORS.quote;
   c.font = `700 ${quoteSize}px Georgia`;
-  c.fillText("“", options.x - quoteSize * 0.56, options.y + quoteSize * 0.14);
-  c.fillText("”", closingX, closingY);
+  drawSafeQuotePair(c, options.x - quoteSize * 0.56, options.y + quoteSize * 0.14, closingX, closingY);
   return result;
 }
 
-function drawTakeawayBox(
+export function drawTakeawayBox(
   c: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -941,7 +958,7 @@ function drawTakeawayBox(
 
   c.fillStyle = DEFAULT_VISUAL_ACCENT_COLORS.takeawayLabel;
   c.font = "700 18px Arial";
-  c.fillText(safeVisualText("KEY TAKEAWAY", "headline"), x + 42, y + 40);
+  drawSafeTextLine(c, "KEY TAKEAWAY", x + 42, y + 40, "headline");
 
   drawSafeBulletBlock(c, source, {
     ...bulletOptions,
@@ -985,7 +1002,7 @@ function drawCompactBox(
 
   c.fillStyle = DEFAULT_VISUAL_ACCENT_COLORS.takeawayLabel;
   c.font = "700 17px Arial";
-  c.fillText(safeVisualText("TAKEAWAY", "headline"), x + 28, y + 35);
+  drawSafeTextLine(c, "TAKEAWAY", x + 28, y + 35, "headline");
 
   drawSafeBulletBlock(c, source, {
     ...bulletOptions,
@@ -1002,7 +1019,7 @@ function drawFooter(c: CanvasRenderingContext2D, page: VisualBookPage) {
   c.fillStyle = THEME.muted;
   c.font = "700 22px Arial";
   c.textAlign = "right";
-  c.fillText(safeVisualText(String(page.pageNumber).padStart(2, "0"), "headline"), W - 78, H - 70);
+  drawSafeTextLine(c, String(page.pageNumber).padStart(2, "0"), W - 78, H - 70, "headline");
   c.textAlign = "left";
 }
 
@@ -1215,6 +1232,100 @@ export type TextFitResult = {
 const VISIBLE_ELLIPSIS = /(?:\.{3,}|…+)/;
 const SENTENCE_ENDING = /[.!?]["'”’)}\]]*$/;
 
+type VisualTextRole = "headline" | "sentence" | "paragraph";
+
+export type VisualTextAuditReport = {
+  drawnStrings: string[];
+  logicalBlocks: string[];
+  violations: string[];
+};
+
+type VisualTextAuditState = VisualTextAuditReport & {
+  originalFillText: CanvasRenderingContext2D["fillText"];
+  approvedDrawDepth: number;
+  openingQuoteGlyphs: number;
+  closingQuoteGlyphs: number;
+};
+
+const VISUAL_TEXT_AUDITS = new WeakMap<CanvasRenderingContext2D, VisualTextAuditState>();
+
+/**
+ * Installs the final visual-only canvas guard. Comic pages deliberately never
+ * install it, so the comic renderer and its legacy lettering remain untouched.
+ */
+export function beginVisualTextAudit(c: CanvasRenderingContext2D) {
+  if (VISUAL_TEXT_AUDITS.has(c)) throw new Error("A visual text audit is already active for this canvas.");
+
+  const originalFillText = c.fillText;
+  const state: VisualTextAuditState = {
+    originalFillText,
+    approvedDrawDepth: 0,
+    openingQuoteGlyphs: 0,
+    closingQuoteGlyphs: 0,
+    drawnStrings: [],
+    logicalBlocks: [],
+    violations: [],
+  };
+
+  const guardedFillText: CanvasRenderingContext2D["fillText"] = function guardedFillText(
+    text: string,
+    x: number,
+    y: number,
+    maxWidth?: number,
+  ) {
+    const visible = String(text ?? "");
+    if (state.approvedDrawDepth < 1) {
+      const violation = `Visual text bypassed validateVisualTextBeforeDraw: ${visible}`;
+      state.violations.push(violation);
+      throw new Error(violation);
+    }
+    if (VISIBLE_ELLIPSIS.test(visible)) {
+      const violation = `Visual text contained a forbidden ellipsis: ${visible}`;
+      state.violations.push(violation);
+      throw new Error(violation);
+    }
+    if (canvasFont(c).fontSize < 13) {
+      const violation = `Visual text used an unsafe font size: ${c.font}`;
+      state.violations.push(violation);
+      throw new Error(violation);
+    }
+
+    state.drawnStrings.push(visible);
+    if (visible === "“") state.openingQuoteGlyphs += 1;
+    if (visible === "”") state.closingQuoteGlyphs += 1;
+    if (typeof maxWidth === "number") return originalFillText.call(c, visible, x, y, maxWidth);
+    return originalFillText.call(c, visible, x, y);
+  };
+
+  c.fillText = guardedFillText;
+  VISUAL_TEXT_AUDITS.set(c, state);
+}
+
+export function finishVisualTextAudit(c: CanvasRenderingContext2D): VisualTextAuditReport {
+  const state = VISUAL_TEXT_AUDITS.get(c);
+  if (!state) throw new Error("No visual text audit is active for this canvas.");
+  if (state.openingQuoteGlyphs !== state.closingQuoteGlyphs) {
+    state.violations.push("Visual quote-title glyphs were not emitted as a complete pair.");
+  }
+
+  c.fillText = state.originalFillText;
+  VISUAL_TEXT_AUDITS.delete(c);
+  const report = {
+    drawnStrings: [...state.drawnStrings],
+    logicalBlocks: [...state.logicalBlocks],
+    violations: [...state.violations],
+  };
+  if (report.violations.length) throw new Error(report.violations.join("\n"));
+  return report;
+}
+
+export function cancelVisualTextAudit(c: CanvasRenderingContext2D) {
+  const state = VISUAL_TEXT_AUDITS.get(c);
+  if (!state) return;
+  c.fillText = state.originalFillText;
+  VISUAL_TEXT_AUDITS.delete(c);
+}
+
 type VisualTextFont = {
   fontSize: number;
   fontFamily: string;
@@ -1273,12 +1384,70 @@ export function safeVisualText(
 
 export function validateVisualTextBeforeDraw(
   source: unknown,
-  textRole: "headline" | "sentence" | "paragraph" = "paragraph",
+  textRole: VisualTextRole = "paragraph",
 ) {
   const safe = safeVisualText(source, textRole);
   if (!safe || VISIBLE_ELLIPSIS.test(safe)) return "";
   if (textRole !== "headline" && rejectDanglingSentenceEnding(safe)) return "";
   return safe;
+}
+
+function auditVisualTextBlock(c: CanvasRenderingContext2D, source: unknown, textRole: VisualTextRole) {
+  const safe = validateVisualTextBeforeDraw(source, textRole);
+  if (!safe) return "";
+  const state = VISUAL_TEXT_AUDITS.get(c);
+  if (state) state.logicalBlocks.push(safe);
+  return safe;
+}
+
+function drawAuditedCanvasText(
+  c: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth?: number,
+) {
+  if (!text || VISIBLE_ELLIPSIS.test(text)) return;
+  const state = VISUAL_TEXT_AUDITS.get(c);
+  if (!state) {
+    if (typeof maxWidth === "number") c.fillText(text, x, y, maxWidth);
+    else c.fillText(text, x, y);
+    return;
+  }
+
+  state.approvedDrawDepth += 1;
+  try {
+    if (typeof maxWidth === "number") c.fillText(text, x, y, maxWidth);
+    else c.fillText(text, x, y);
+  } finally {
+    state.approvedDrawDepth -= 1;
+  }
+}
+
+export function drawSafeTextLine(
+  c: CanvasRenderingContext2D,
+  source: unknown,
+  x: number,
+  y: number,
+  textRole: VisualTextRole = "headline",
+  maxWidth?: number,
+) {
+  const safe = auditVisualTextBlock(c, source, textRole);
+  if (safe) drawAuditedCanvasText(c, safe, x, y, maxWidth);
+  return safe;
+}
+
+function drawSafeQuotePair(
+  c: CanvasRenderingContext2D,
+  openingX: number,
+  openingY: number,
+  closingX: number,
+  closingY: number,
+) {
+  // These two decorative glyphs are emitted atomically; the title text itself
+  // has already passed normalizePairedQuoteTitle and the logical-text audit.
+  drawAuditedCanvasText(c, "“", openingX, openingY);
+  drawAuditedCanvasText(c, "”", closingX, closingY);
 }
 
 export function cleanTruncatedText(source: unknown) {
@@ -1470,10 +1639,15 @@ export function drawSafeWrappedText(
   options: TextFitOptions,
 ) {
   const result = fitCompleteTextAdaptive(c, source, options);
+  const textRole = options.textRole ?? "paragraph";
+  const auditedText = auditVisualTextBlock(c, result.text, textRole);
+  if (!auditedText) {
+    return { ...result, endY: options.y, lines: [], text: "" };
+  }
   setCanvasFont(c, options, result.fontSize);
   result.lines.forEach((line, index) => {
     if (line && !VISIBLE_ELLIPSIS.test(line) && c.measureText(line).width <= options.maxWidth) {
-      c.fillText(line, options.x, options.y + index * result.lineHeight);
+      drawAuditedCanvasText(c, line, options.x, options.y + index * result.lineHeight);
     }
   });
   return result;
@@ -1676,8 +1850,11 @@ export function drawSafeBulletBlock(
     c.arc(options.bulletX, baseline - fit.fontSize * 0.34, options.bulletRadius ?? 5, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = options.textColor;
-    const lines = wrappedLines(c, validateVisualTextBeforeDraw(bullet, "sentence"), options.maxWidth);
-    lines.forEach((line, lineIndex) => c.fillText(line, options.x, baseline + lineIndex * fit.lineHeight));
+    const safeBullet = auditVisualTextBlock(c, bullet, "sentence");
+    const lines = wrappedLines(c, safeBullet, options.maxWidth);
+    lines.forEach((line, lineIndex) => (
+      drawAuditedCanvasText(c, line, options.x, baseline + lineIndex * fit.lineHeight)
+    ));
     baseline += lines.length * fit.lineHeight + Math.max(8, options.bulletGap ?? 14);
   });
   return fit;

@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  beginVisualTextAudit,
   buildVisualPageSections,
+  cancelVisualTextAudit,
   cleanTruncatedText,
   DEFAULT_VISUAL_ACCENT_COLORS,
   DEFAULT_VISUAL_PALETTE,
+  drawFullBleedBodyOverlay,
+  drawNotebookHighlights,
   drawPairedQuoteTitle,
+  drawTakeawayBox,
   ensureCompleteSemanticSentence,
   extractCleanBullets,
   extractCompleteBullets,
@@ -18,6 +23,7 @@ import {
   fitCompleteWordsOnly,
   fitLinesWithoutEllipsis,
   fitTextWithoutEllipsis,
+  finishVisualTextAudit,
   getVisualTemplate,
   isComicProject,
   isCompleteSentence,
@@ -35,6 +41,37 @@ import {
   visualBodyTypography,
 } from "../app/visual-book-exporters";
 import { normalizeVisualPages } from "../app/visual-book-utils";
+
+function visualRenderContext() {
+  const drawn: string[] = [];
+  const colors: string[] = [];
+  let fillStyle = "";
+  let strokeStyle = "";
+  const context = {
+    font: "26px Arial",
+    textAlign: "left",
+    lineWidth: 1,
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value: string) { fillStyle = value; colors.push(value); },
+    get strokeStyle() { return strokeStyle; },
+    set strokeStyle(value: string) { strokeStyle = value; colors.push(value); },
+    measureText(this: { font: string }, value: string) {
+      const size = Number(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1] || 16);
+      return { width: value.length * size * 0.48 };
+    },
+    fillText(value: string) { drawn.push(value); },
+    fillRect() {},
+    strokeRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    closePath() {},
+    arc() {},
+    fill() {},
+  } as unknown as CanvasRenderingContext2D;
+  return { context, drawn, colors };
+}
+
 test("visual storyboard normalization enforces the requested page count and roles",()=>{const p=normalizeVisualPages([{title:"Cover",body:"Hook",image_prompt:"A door",layout:"full-bleed"}],5,"visual");assert.equal(p.length,5);assert.equal(p[0].role,"cover");assert.equal(p[4].role,"cta");assert.deepEqual(p.map(x=>x.pageNumber),[1,2,3,4,5]);assert.equal(p[0].panels.length,0)});
 test("comic storyboard normalization creates bounded editable panels",()=>{const p=normalizeVisualPages([{title:"Cover",panel_count:1,panels:[{scene:"Two rivals",dialogue:[]}]},{title:"Impact",panel_count:8,panels:[{scene:"A glass falls",camera:"Close-up",dialogue:[{speaker:"Mara",text:"Don't move."}],caption:"Too late.",sound_effect:"CRASH!"}]}],5,"comic");assert.equal(p[0].panels.length,1);assert.equal(p[1].panels.length,4);assert.equal(p[1].panels[0].dialogue[0].speaker,"Mara");assert.equal(p[1].panels[0].soundEffect,"CRASH!")});
 test("visual export routing uses only the explicit project mode",()=>{assert.equal(isComicProject({mode:"comic"}),true);assert.equal(isComicProject({mode:"visual"}),false);assert.equal(isEditorialVisualProject({mode:"visual"}),true)});
@@ -64,3 +101,9 @@ test("adaptive paragraph fitting never crosses its readable minimum",()=>{const 
 test("adaptive bullets reduce readable type before deleting complete meaning",()=>{const context={font:"",measureText(this:{font:string},value:string){const size=Number(/(\d+)px/.exec(this.font)?.[1]||24);return{width:value.length*size*.45}}} as unknown as CanvasRenderingContext2D;const source="Patience keeps the difficult truth visible. Courage gives the difficult truth a future.";const result=fitBulletsAdaptive(context,source,{maxBullets:2,maxWidth:190,maxLinesPerBullet:2,fontSize:24,minFontSize:16,lineHeight:31,maxHeight:100,fontFamily:"Arial",bulletGap:10});assert.equal(result.bullets.length,2);assert.ok(result.fontSize<24);assert.ok(result.fontSize>=16);for(const bullet of result.bullets)assert.equal(isCompleteSentence(bullet),true)});
 test("adaptive bullets reduce count only after the full set cannot fit",()=>{const context={font:"",measureText(this:{font:string},value:string){const size=Number(/(\d+)px/.exec(this.font)?.[1]||20);return{width:value.length*size*.4}}} as unknown as CanvasRenderingContext2D;const source="Patience protects meaning. Courage protects truth.";const roomy=fitBulletsAdaptive(context,source,{maxBullets:2,maxWidth:250,maxLinesPerBullet:1,fontSize:20,minFontSize:16,lineHeight:26,maxHeight:60,fontFamily:"Arial",bulletGap:8});const tight=fitBulletsAdaptive(context,source,{maxBullets:2,maxWidth:250,maxLinesPerBullet:1,fontSize:20,minFontSize:16,lineHeight:26,maxHeight:30,fontFamily:"Arial",bulletGap:8});assert.equal(roomy.bullets.length,2);assert.equal(tight.bullets.length,1);assert.equal(isCompleteSentence(tight.bullets[0]),true)});
 test("default editorial accent map contains only app green and blue colors",()=>{const serialized=JSON.stringify(DEFAULT_VISUAL_ACCENT_COLORS).toLowerCase();assert.doesNotMatch(serialized,/(?:#7a1428|#a9824a|wine|red|gold)/);assert.equal(DEFAULT_VISUAL_ACCENT_COLORS.divider,DEFAULT_VISUAL_PALETTE.green);assert.equal(DEFAULT_VISUAL_ACCENT_COLORS.quote,DEFAULT_VISUAL_PALETTE.green);assert.equal(DEFAULT_VISUAL_ACCENT_COLORS.takeawayLabel,DEFAULT_VISUAL_PALETTE.navy);assert.deepEqual(DEFAULT_VISUAL_ACCENT_COLORS.takeawayBullets,[DEFAULT_VISUAL_PALETTE.green,DEFAULT_VISUAL_PALETTE.navy])});
+test("render-level audit rejects every observed ellipsis and semantic failure",()=>{const failures=["wonders what...","between...","immediately...","sudden...","the...","and...","sometimes...","as...","light...","hard...","deciding,...","are...","memories...","He allows...","disguised...","negotiations...","insi...","de...","both...","In the end the argument is not a win or loss but a negotiation about future moons and the limits of what the garden."];for(const failure of failures){assert.equal(safeVisualText(failure,"sentence"),"",failure);assert.equal(validateVisualTextBeforeDraw(failure,"sentence"),"",failure)}assert.equal(normalizePairedQuoteTitle("“Rules of Risk"),"“Rules of Risk”")});
+test("final canvas guard blocks any visual text draw that bypasses validation",()=>{const{context}=visualRenderContext();beginVisualTextAudit(context);assert.throws(()=>context.fillText("wonders what...",0,0),/bypassed validateVisualTextBeforeDraw/);cancelVisualTextAudit(context)});
+test("Notebook field-note render path draws only audited complete bullets",()=>{const{context,drawn}=visualRenderContext();const source="Patience gives the difficult truth enough room to become useful. He allows... Courage keeps the honest answer visible. memories...";beginVisualTextAudit(context);drawNotebookHighlights(context,source,116,1435,940);const report=finishVisualTextAudit(context);assert.ok(drawn.length>=1);assert.equal(report.violations.length,0);assert.doesNotMatch(drawn.join(" "),/(?:\.{3}|…)/);for(const block of report.logicalBlocks)assert.equal(validateVisualTextBeforeDraw(block,block.includes(".")?"sentence":"headline"),block)});
+test("Default takeaway render path audits text and uses only green/navy accents",()=>{const{context,drawn,colors}=visualRenderContext();const source="Patience changes the conversation. negotiations... Presence protects the meaning beneath the argument. deciding,...";beginVisualTextAudit(context);drawTakeawayBox(context,78,1430,1044,220,source);const report=finishVisualTextAudit(context);assert.equal(report.violations.length,0);assert.doesNotMatch(drawn.join(" "),/(?:\.{3}|…)/);assert.ok(drawn.some(value=>value.includes("Patience changes")));assert.doesNotMatch(colors.join(" ").toLowerCase(),/(?:#7a1428|#a9824a|rgba\(122,20,40|rgba\(169,130,74|wine|red|gold)/)});
+test("Default full-bleed overlay renders fewer complete sentences instead of ellipsis",()=>{const{context,drawn}=visualRenderContext();const source="The first complete thought remains visible. The second complete thought gives the scene its meaning. In the end the argument is not a win or loss but a negotiation about future moons and the limits of what the garden.";beginVisualTextAudit(context);const result=drawFullBleedBodyOverlay(context,source,1420,{fontSize:30,lineHeight:47,maxLines:8});const report=finishVisualTextAudit(context);assert.equal(report.violations.length,0);assert.ok(result.text);assert.equal(isCompleteSentence(result.text),true);assert.doesNotMatch(drawn.join(" "),/(?:\.{3}|…)/);assert.doesNotMatch(result.text,/limits of what the garden\.$/)});
+test("quote-title render path emits a complete pair or no quote glyphs",()=>{const{context,drawn}=visualRenderContext();beginVisualTextAudit(context);drawPairedQuoteTitle(context,"“Rules of Risk",{x:154,y:700,maxWidth:880,maxLines:2,fontSize:72,minFontSize:44,lineHeight:82,fontFamily:"Georgia",fontWeight:"700",preserveAll:true,textRole:"headline"});const report=finishVisualTextAudit(context);assert.equal(report.violations.length,0);assert.equal(drawn.filter(value=>value==="“").length,1);assert.equal(drawn.filter(value=>value==="”").length,1);assert.doesNotMatch(drawn.join(" "),/(?:\.{3}|…)/)});
