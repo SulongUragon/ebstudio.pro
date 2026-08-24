@@ -11,7 +11,12 @@ import {
   exportPdf,
   getCoverReadiness,
   getKdpReadiness,
+  MIN_SECTION_CHARACTERS,
 } from "../app/exporters";
+import {
+  createLongFictionManuscript,
+  createLongNonfictionManuscript,
+} from "./fixtures/publishing-manuscripts";
 
 const onePixelJpeg =
   "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=";
@@ -231,4 +236,162 @@ test("KDP bundle contains every standard publishing deliverable", async () => {
   const guide = await zip.file("KDP-UPLOAD-GUIDE.txt")?.async("string");
   assert.match(guide ?? "", new RegExp(`${filename}-Kindle-Create\\.docx`));
   assert.match(guide ?? "", new RegExp(`${filename}\\.epub`));
+});
+
+const publishingQaBooks = [
+  createLongFictionManuscript,
+  createLongNonfictionManuscript,
+] as const;
+
+function xmlText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+async function blobBytes(blob: Blob) {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+test("realistic fiction and nonfiction fixtures satisfy KDP readiness without weakening its floor", () => {
+  for (const createBook of publishingQaBooks) {
+    const book = createBook();
+    assert.equal(book.sections.length, 10);
+    assert.equal(book.plan.length, book.sections.length);
+    assert.ok(book.author.trim());
+    assert.ok(book.sections.every((section) => section.content.length >= MIN_SECTION_CHARACTERS));
+    assert.equal(getCoverReadiness(book).ready, true);
+    assert.equal(getKdpReadiness(book).ready, true);
+  }
+
+  const fiction = createLongFictionManuscript();
+  assert.equal(fiction.subtitle, "");
+  const truncated = {
+    ...fiction,
+    sections: fiction.sections.map((section, index) =>
+      index === 4 ? { ...section, content: "A short fragment." } : section,
+    ),
+  };
+  const readiness = getKdpReadiness(truncated);
+  assert.equal(readiness.ready, false);
+  assert.match(readiness.errors.join(" "), /stopped early/i);
+
+  const nonfiction = createLongNonfictionManuscript();
+  assert.ok(nonfiction.title.length > 180);
+  assert.match(getKdpReadiness(nonfiction).warnings.join(" "), /title is unusually long/i);
+});
+
+test("long-form DOCX exports preserve every section, navigation link, and special character", async () => {
+  for (const createBook of publishingQaBooks) {
+    const book = createBook();
+    const blob = await exportDocx(book, false);
+    assert.ok(blob instanceof Blob);
+    assert.ok(blob.size > 10_000);
+
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const documentXml = await zip.file("word/document.xml")?.async("string");
+    const stylesXml = await zip.file("word/styles.xml")?.async("string");
+    const coreXml = await zip.file("docProps/core.xml")?.async("string");
+    assert.ok(documentXml && stylesXml && coreXml);
+    assert.match(coreXml, new RegExp(xmlText(book.title).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(coreXml, new RegExp(xmlText(book.author).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.equal(documentXml.match(/w:anchor="chapter-\d+-\d+"/g)?.length, book.sections.length);
+    assert.equal(documentXml.match(/w:pStyle w:val="Heading1"/g)?.length, book.sections.length);
+    assert.match(documentXml, /&lt;(?:Left Open|Unverified Claims)&gt;/);
+    assert.match(documentXml, /&amp;/);
+    assert.match(stylesXml, book.mode === "fiction" ? /KdpFictionBody/ : /KdpNonfictionBody/);
+  }
+});
+
+test("long-form EPUB exports preserve complete navigation, safe XML, and readable section flow", async () => {
+  for (const createBook of publishingQaBooks) {
+    const book = createBook();
+    const blob = await exportEpub(book, false);
+    assert.ok(blob instanceof Blob);
+    assert.equal(blob.type, "application/epub+zip");
+    assert.ok(blob.size > 5_000);
+
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const entries = Object.keys(zip.files);
+    const opf = await zip.file("OEBPS/content.opf")?.async("string");
+    const nav = await zip.file("OEBPS/nav.xhtml")?.async("string");
+    const container = await zip.file("META-INF/container.xml")?.async("string");
+    const titlePage = await zip.file("OEBPS/title.xhtml")?.async("string");
+    assert.equal(await zip.file("mimetype")?.async("string"), "application/epub+zip");
+    assert.ok(opf && nav && container && titlePage);
+    assert.equal(entries.filter((name) => /^OEBPS\/section-\d+\.xhtml$/.test(name)).length, book.sections.length);
+    assert.match(container, /full-path="OEBPS\/content\.opf"/);
+    assert.match(opf, /properties="nav"/);
+    assert.match(opf, /properties="cover-image"/);
+
+    for (let index = 0; index < book.sections.length; index += 1) {
+      const sectionName = `section-${index + 1}.xhtml`;
+      const section = await zip.file(`OEBPS/${sectionName}`)?.async("string");
+      assert.ok(section, sectionName);
+      assert.match(nav, new RegExp(`${sectionName}#section-title`));
+      assert.match(opf, new RegExp(`idref="section-${index + 1}"`));
+      assert.ok((section.match(/<p(?:\s|>)/g) ?? []).length >= 7, `${sectionName} should keep paragraph flow`);
+    }
+
+    const specialSection = await zip.file("OEBPS/section-4.xhtml")?.async("string");
+    assert.match(specialSection ?? "", /&lt;(?:Left Open|Unverified Claims)&gt;/);
+    assert.match(specialSection ?? "", /&amp;/);
+    assert.doesNotMatch(specialSection ?? "", /<(?:Left Open|Unverified Claims)>/);
+    if (book.subtitle) assert.match(titlePage, new RegExp(xmlText(book.subtitle).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    else assert.doesNotMatch(titlePage, /<em><\/em>/);
+  }
+});
+
+test("long-form reference PDFs produce multipage files without title or section crashes", async () => {
+  for (const createBook of publishingQaBooks) {
+    const book = createBook();
+    const blob = await exportPdf(book, false);
+    const bytes = await blobBytes(blob);
+    const source = new TextDecoder("latin1").decode(bytes);
+    const pageCount = source.match(/\/Type \/Page\b/g)?.length ?? 0;
+    assert.ok(blob instanceof Blob);
+    assert.equal(blob.type, "application/pdf");
+    assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");
+    assert.ok(blob.size > 20_000);
+    assert.ok(pageCount >= book.sections.length + 2, `expected at least ${book.sections.length + 2} PDF pages`);
+  }
+});
+
+test("long-title KDP cover exports remain valid JPEG blobs", async () => {
+  for (const createBook of publishingQaBooks) {
+    const book = createBook();
+    const blob = await exportCover(book, false);
+    const bytes = await blobBytes(blob);
+    assert.ok(blob instanceof Blob);
+    assert.equal(blob.type, "image/jpeg");
+    assert.ok(blob.size > 0);
+    assert.deepEqual([...bytes.slice(0, 2)], [0xff, 0xd8]);
+    assert.deepEqual([...bytes.slice(-2)], [0xff, 0xd9]);
+  }
+});
+
+test("long-form KDP bundles contain readable standard files through the headless-safe path", async () => {
+  for (const createBook of publishingQaBooks) {
+    const book = createBook();
+    const filename = exportFilenameStem(book);
+    const blob = await exportBundle(book, false);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const docx = await zip.file(`${filename}-Kindle-Create.docx`)?.async("uint8array");
+    const epub = await zip.file(`${filename}.epub`)?.async("uint8array");
+    const pdf = await zip.file(`${filename}-Reference.pdf`)?.async("uint8array");
+    const cover = await zip.file(`${filename}-KDP-Cover.jpg`)?.async("uint8array");
+    const guide = await zip.file("KDP-UPLOAD-GUIDE.txt")?.async("string");
+
+    assert.equal(blob.type, "application/zip");
+    assert.ok(docx && epub && pdf && cover && guide);
+    assert.deepEqual([...docx.slice(0, 2)], [0x50, 0x4b]);
+    assert.deepEqual([...epub.slice(0, 2)], [0x50, 0x4b]);
+    assert.equal(new TextDecoder().decode(pdf.slice(0, 5)), "%PDF-");
+    assert.deepEqual([...cover.slice(0, 2)], [0xff, 0xd8]);
+    assert.match(guide, new RegExp(filename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(guide, new RegExp(`BOOK TYPE: ${book.mode === "fiction" ? "Fiction" : "Non-Fiction"}`));
+  }
 });
