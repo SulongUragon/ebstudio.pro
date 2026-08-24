@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { BookBrief, Mode } from "../../book-types";
+import { buildCoverPrompt } from "../../creative-direction";
 
 export const maxDuration = 300;
 
@@ -21,22 +22,15 @@ const FINISH_DIRECTIONS: Record<string, string> = {
     "premium glossy cover finish, rich deep blacks, luminous color depth, controlled specular highlights, subtle metallic sheen on copper and gold accents, luxurious polished appearance without plastic glare",
 };
 
-const STYLE_DIRECTIONS: Record<string, string> = {
-  cinematic:
-    "cinematic editorial realism, premium dramatic lighting, sophisticated depth, rich color grading, high-end publishing aesthetic",
-  minimalist:
-    "minimalist conceptual editorial art, one powerful symbolic focal point, refined negative space, premium modern publishing aesthetic",
-  illustrated:
-    "detailed contemporary book illustration, expressive atmosphere, layered visual storytelling, polished commercial publishing aesthetic",
-  "photoreal-title":
-    "high-end photorealistic editorial photography featuring a believable real human subject relevant to the story or topic, natural skin texture, anatomically correct face and hands, authentic expression, cinematic lighting, premium commercial book-cover art direction",
-  "minimal-real-title":
-    "minimalist photorealistic still-life photography using one or two real physical objects meaningfully connected to the story or topic, refined negative space, precise lighting, tactile natural materials, premium contemporary book-cover art direction",
-  "fully-loaded-title":
-    "maximalist cinematic book-cover design packed with layered story-specific scenes, characters, symbolic objects, environmental details, dramatic atmosphere, premium depth, and high-impact commercial publishing art direction",
-  "eb-signature":
-    "concept-led editorial artwork derived directly from the book title and subject, emotionally specific and immediately relevant to the book, using the EB Studio Pro signature palette: dark forest green, deep navy blue, burnished copper and rust, warm parchment and muted gold, anchored by charcoal black; premium restrained color harmony, sophisticated depth, memorable focal symbolism, high-end publishing aesthetic",
-};
+const COVER_STYLES = new Set([
+  "cinematic",
+  "minimalist",
+  "illustrated",
+  "photoreal-title",
+  "minimal-real-title",
+  "fully-loaded-title",
+  "eb-signature",
+]);
 
 export async function POST(request: Request) {
   try {
@@ -52,55 +46,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Complete the book title first." }, { status: 400 });
     }
 
-    const style = STYLE_DIRECTIONS[body.style ?? "cinematic"]
+    const style = COVER_STYLES.has(body.style ?? "cinematic")
       ? body.style ?? "cinematic"
       : "cinematic";
-    const direction = STYLE_DIRECTIONS[style];
     const finish = FINISH_DIRECTIONS[body.finish ?? "satin"]
       ? body.finish ?? "satin"
       : "satin";
     const finishDirection = FINISH_DIRECTIONS[finish];
-    const bookContext =
-      body.mode === "fiction"
-        ? `Genre: ${body.brief.genre || "fiction"}. Premise: ${body.brief.premise || body.brief.title}. Main characters: ${body.brief.characters || "not specified"}.`
-        : `Topic: ${body.brief.topic || body.brief.title}. Target audience: ${body.brief.audience || "general readers"}. Key ideas: ${body.brief.keyPoints || body.subtitle || "not specified"}.`;
-
-    const paletteGuard =
-      style === "eb-signature"
-        ? "Palette requirement: use dark forest green, deep navy, burnished copper or rust, warm parchment or muted gold, and charcoal as the dominant and nearly exclusive color system. Preserve natural tonal variation within those hues. Do not introduce neon colors, rainbow palettes, bright candy colors, or unrelated dominant hues."
-        : "";
-
-    const subjectDirection =
-      style === "minimal-real-title"
-        ? "Use one or two convincingly real physical objects as the sole visual subject. Choose objects that symbolize this specific book, with tactile material detail, restrained shadows, clean negative space, and a deliberate minimalist composition. Do not include people, faces, hands, silhouettes, crowds, or human figures. Avoid decorative clutter and generic stock-photo props."
-        : style === "fully-loaded-title"
-          ? "Build a visually crowded, fully loaded, maximalist cover using multiple layered scenes, relevant characters when appropriate, symbolic objects, environmental storytelling, foreground and background details, dramatic light, atmosphere, and controlled depth. Every element must connect directly to this specific book. Make it dense, immersive, cinematic, and high-impact without becoming random or unreadable. Keep a deliberate visual hierarchy and preserve a strong title zone."
-          : style === "photoreal-title"
-            ? "Feature a convincingly real human subject whose identity, emotion, wardrobe, environment, and pose are meaningfully connected to this specific book. Preserve natural skin texture, realistic eyes, anatomically correct hands, believable proportions, and cinematic editorial lighting. Avoid plastic skin, uncanny faces, extra fingers, malformed anatomy, and generic stock-photo posing."
-            : "";
-    const customDirection = String(body.customDirection ?? "")
-      .trim()
-      .slice(0, 900);
-    const customBlock = customDirection
-      ? `AUTHOR SCENE REQUEST (HIGHEST PRIORITY): ${customDirection}
-
-This scene request overrides the visual direction preset wherever the two disagree. Follow it literally. Include every element the author asked for, and exclude every element the author asked to avoid. Keep the requested subject as the single clear focal point.`
-      : "";
-    const prompt = `Create original front-cover artwork for a premium ${body.mode === "fiction" ? "fiction" : "non-fiction"} ebook.
-
-Exact book title to render once: ${body.brief.title}
-${bookContext}
-Visual direction: ${direction}.
-Cover finish: ${finishDirection}.
-${paletteGuard}
-${subjectDirection}
-${customBlock}
-
-The cover finish should be expressed through lighting, tonal depth, surface character, and color treatment while keeping the artwork clean and readable. The central visual concept must be meaningfully derived from this specific book title, premise or topic—not a generic genre image. Compose for a 5:8 portrait book cover, keeping all important subjects inside the central 85% safe area so the source can be cropped cleanly. Render the exact book title once, with every word spelled exactly as supplied, using distinctive premium genre-appropriate typography that feels intentionally integrated into this specific composition rather than a generic default font.
-
-MANDATORY TITLE SAFE ZONE: Keep every title letter completely inside the central 76% of the image width, leaving at least 12% clear space on both the left and right. Keep the title below the top 7% and outside the bottom 12% author-safe area. The source will be center-cropped slightly to a 5:8 export, so this title-safe zone is non-negotiable. No letter, serif, flourish, shadow, or outline may touch or approach any edge. If the title is long, reduce its size or stack it into additional balanced lines instead of widening it. Before finalizing, visually verify that the leftmost and rightmost title letters have generous breathing room after cropping.
-
-The title may use a varied artistic arrangement, but it must remain clear at thumbnail size. Edge-to-edge artwork, commercially polished, emotionally specific to the book, and visually balanced. Do not render a subtitle, author name, extra words, extra letters, numbers, logos, watermarks, borders, mockups, books, devices, or publisher marks. Avoid generic stock-photo composition and visual clutter.`;
+    const prompt = buildCoverPrompt({
+      mode: body.mode,
+      title: body.brief.title,
+      subtitle: body.subtitle ?? body.brief.subtitle,
+      genre: body.brief.genre,
+      topic: body.brief.topic,
+      premise: body.brief.premise,
+      audience: body.brief.audience,
+      keyPoints: body.brief.keyPoints,
+      style,
+      finishDirection,
+      customDirection: body.customDirection,
+    });
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",

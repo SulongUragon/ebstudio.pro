@@ -1,18 +1,11 @@
 import { NextResponse } from "next/server";
+import { buildVisualArtworkDirection } from "../../creative-direction";
 import type { ComicPanel, VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 export const maxDuration = 300;
 type VisualImageRequest = { project: VisualBookBrief; page: VisualBookPage; panel?: ComicPanel };
 type ImageResponsePayload = { data?: Array<{ b64_json?: string }>; error?: { message?: string; code?: string } };
 const IMAGE_RETRY_DELAYS_MS = [15_000, 30_000, 60_000];
 const QUOTA_ERROR_CODES = new Set(["billing_hard_limit_reached", "insufficient_quota"]);
-const VISUAL_STYLE_DIRECTIONS: Record<string, string> = {
-  "cinematic-editorial": "cinematic editorial illustration, premium dramatic lighting, sophisticated depth, restrained filmic color grading",
-  "warm-storybook": "warm contemporary storybook illustration, tactile brush texture, expressive faces, gentle dimensional lighting",
-  "dark-luxury": "dark luxury graphic illustration, deep blacks, burnished metallic accents, elegant controlled contrast, premium finish",
-  "clean-modern": "clean modern editorial illustration, precise shapes, generous negative space, crisp commercial composition",
-  "bold-color": "bold color-driven commercial illustration, confident graphic shapes, saturated but controlled palette, strong silhouette",
-  "ink-noir": "ink noir illustration, expressive linework, deep shadow, selective highlights, dramatic high-contrast atmosphere",
-};
 const COMIC_STYLE_DIRECTIONS: Record<string, string> = {
   classic: "polished contemporary comic-book art, confident ink contours, dimensional color, clear action staging",
   "graphic-novel": "mature cinematic graphic-novel art, sophisticated composition, textured shadow, restrained premium color",
@@ -72,7 +65,21 @@ export async function POST(request: Request) {
     if (!project?.title || !page) return NextResponse.json({ error: "Complete the visual project and storyboard first." }, { status: 400 });
     const comic = project.mode === "comic";
     if (comic && !panel) return NextResponse.json({ error: "Choose a comic panel to illustrate." }, { status: 400 });
-    const style = comic ? COMIC_STYLE_DIRECTIONS[project.comicFormat] ?? COMIC_STYLE_DIRECTIONS["graphic-novel"] : VISUAL_STYLE_DIRECTIONS[project.visualStyle] ?? VISUAL_STYLE_DIRECTIONS["cinematic-editorial"];
+    const style = comic
+      ? COMIC_STYLE_DIRECTIONS[project.comicFormat] ?? COMIC_STYLE_DIRECTIONS["graphic-novel"]
+      : buildVisualArtworkDirection(
+          {
+            mode: ["illustrated-story", "children-story", "book-teaser"].includes(project.kind)
+              ? "fiction"
+              : "nonfiction",
+            title: project.title,
+            subtitle: project.subtitle,
+            premise: project.premise,
+            audience: project.audience,
+            kind: project.kind,
+          },
+          project.visualStyle,
+        );
     const scene = comic ? panel?.scene : page.imagePrompt;
     const camera = comic ? panel?.camera : "portrait editorial composition";
     const size = comic && project.comicFormat !== "webtoon" ? "1024x1024" : "1024x1536";
