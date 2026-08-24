@@ -16,14 +16,22 @@ const EDITORIAL_LAYOUTS: EditorialLayout[] = [
 
 const EDITORIAL_DEFAULTS: EditorialLayout[] = ["image-top", "image-left", "image-right"];
 
+export const DEFAULT_VISUAL_PALETTE = {
+  green: "#0f5d3b",
+  navy: "#0a3a74",
+  blue: "#0b4f8a",
+  mint: "rgba(15,93,59,.045)",
+  border: "rgba(10,58,116,.72)",
+  ink: "#1d2730",
+};
+
 const THEME = {
   paper: "#f7f1e7",
   paperWarm: "#efe5d6",
-  ink: "#17131c",
-  muted: "#625a52",
-  line: "#b7a487",
+  ink: DEFAULT_VISUAL_PALETTE.ink,
+  muted: "#59636b",
+  line: "rgba(10,58,116,.30)",
   gold: "#a9824a",
-  wine: "#7a1428",
   charcoal: "#111111",
   ivory: "#fff8eb",
 };
@@ -538,7 +546,7 @@ async function drawCover(c: CanvasRenderingContext2D, project: VisualBookProject
   c.font = "700 23px Arial";
   c.fillText(removeVisibleEllipsis(project.author.toUpperCase()), 108, H - 96);
 
-  drawSmallMark(c, W - 150, 94, THEME.gold);
+  drawSmallMark(c, W - 150, 94, DEFAULT_VISUAL_PALETTE.green);
 }
 
 async function drawOpeningEditorial(c: CanvasRenderingContext2D, page: VisualBookPage) {
@@ -784,12 +792,7 @@ async function drawQuoteEditorial(c: CanvasRenderingContext2D, page: VisualBookP
   await imageCover(c, page.imageData, 80, 150, 1040, imageH, THEME.paperWarm);
   drawImageFrame(c, 80, 150, 1040, imageH);
 
-  c.fillStyle = THEME.wine;
-  c.font = "700 112px Georgia";
-  c.fillText("“", 94, imageH + 335);
-
-  c.fillStyle = THEME.ink;
-  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+  const afterTitle = drawPairedQuoteTitle(c, page.title, {
     x: 154,
     y: imageH + 320,
     maxWidth: 880,
@@ -872,14 +875,38 @@ function drawImageFrame(c: CanvasRenderingContext2D, x: number, y: number, w: nu
 }
 
 function drawAccentLine(c: CanvasRenderingContext2D, x: number, y: number, w: number) {
-  c.strokeStyle = THEME.wine;
+  c.strokeStyle = DEFAULT_VISUAL_PALETTE.green;
   c.lineWidth = 3;
   c.beginPath();
   c.moveTo(x, y);
   c.lineTo(x + w, y);
   c.stroke();
 
-  drawSmallMark(c, x + w + 24, y - 8, THEME.gold);
+  drawSmallMark(c, x + w + 24, y - 8, DEFAULT_VISUAL_PALETTE.navy);
+}
+
+export function drawPairedQuoteTitle(
+  c: CanvasRenderingContext2D,
+  title: string,
+  options: TextFitOptions,
+) {
+  c.fillStyle = THEME.ink;
+  const result = fitTextWithoutEllipsis(c, title, options);
+  if (!result.lines.length) return result;
+
+  setCanvasFont(c, options, result.fontSize);
+  const lastLine = result.lines[result.lines.length - 1];
+  const closingX = options.x + c.measureText(lastLine).width + 12;
+  const closingY = options.y + (result.lines.length - 1) * result.lineHeight + result.fontSize * 0.2;
+  const quoteSize = Math.min(112, Math.max(72, result.fontSize * 1.55));
+  const rightLimit = options.x + options.maxWidth + quoteSize * 0.45;
+  if (closingX + quoteSize * 0.32 > rightLimit) return result;
+
+  c.fillStyle = DEFAULT_VISUAL_PALETTE.green;
+  c.font = `700 ${quoteSize}px Georgia`;
+  c.fillText("“", options.x - quoteSize * 0.56, options.y + quoteSize * 0.14);
+  c.fillText("”", closingX, closingY);
+  return result;
 }
 
 function drawTakeawayBox(
@@ -896,24 +923,26 @@ function drawTakeawayBox(
   });
   if (!bullets.length) return;
 
-  c.strokeStyle = "rgba(169,130,74,.78)";
+  c.fillStyle = DEFAULT_VISUAL_PALETTE.mint;
+  c.fillRect(x, y, w, h);
+  c.strokeStyle = DEFAULT_VISUAL_PALETTE.border;
   c.lineWidth = 2.4;
   c.strokeRect(x, y, w, h);
 
-  drawSmallMark(c, x + w / 2 - 10, y - 13, THEME.wine);
+  drawSmallMark(c, x + w / 2 - 10, y - 13, DEFAULT_VISUAL_PALETTE.green);
 
-  c.fillStyle = THEME.wine;
+  c.fillStyle = DEFAULT_VISUAL_PALETTE.navy;
   c.font = "700 18px Arial";
   c.fillText("KEY TAKEAWAY", x + 42, y + 40);
 
   bullets.forEach((item, index) => {
     const by = y + 88 + index * 64;
-    c.fillStyle = THEME.gold;
+    c.fillStyle = index % 2 ? DEFAULT_VISUAL_PALETTE.navy : DEFAULT_VISUAL_PALETTE.green;
     c.beginPath();
     c.arc(x + 52, by - 9, 5, 0, Math.PI * 2);
     c.fill();
 
-    c.fillStyle = "#3a342f";
+    c.fillStyle = DEFAULT_VISUAL_PALETTE.ink;
     fitTextWithoutEllipsis(c, item, {
       x: x + 78,
       y: by,
@@ -943,22 +972,24 @@ function drawCompactBox(
   });
   if (!bullets.length) return;
 
-  c.strokeStyle = "rgba(169,130,74,.70)";
+  c.fillStyle = DEFAULT_VISUAL_PALETTE.mint;
+  c.fillRect(x, y, w, h);
+  c.strokeStyle = DEFAULT_VISUAL_PALETTE.border;
   c.lineWidth = 2;
   c.strokeRect(x, y, w, h);
 
-  c.fillStyle = THEME.wine;
+  c.fillStyle = DEFAULT_VISUAL_PALETTE.navy;
   c.font = "700 17px Arial";
   c.fillText("TAKEAWAY", x + 28, y + 35);
 
   bullets.forEach((item, index) => {
     const by = y + 82 + index * 76;
-    c.fillStyle = THEME.gold;
+    c.fillStyle = index % 2 ? DEFAULT_VISUAL_PALETTE.navy : DEFAULT_VISUAL_PALETTE.green;
     c.beginPath();
     c.arc(x + 34, by - 9, 5, 0, Math.PI * 2);
     c.fill();
 
-    c.fillStyle = "#3a342f";
+    c.fillStyle = DEFAULT_VISUAL_PALETTE.ink;
     fitTextWithoutEllipsis(c, item, {
       x: x + 58,
       y: by,
@@ -1224,7 +1255,33 @@ export function cleanTruncatedText(source: unknown) {
 export function isCompleteSentence(source: unknown) {
   const clean = String(source ?? "").trim();
   const beginsNaturally = /^[“"'([{]*[A-Z0-9]/.test(clean);
-  return Boolean(clean && beginsNaturally && !VISIBLE_ELLIPSIS.test(clean) && SENTENCE_ENDING.test(clean));
+  return Boolean(
+    clean
+    && beginsNaturally
+    && !VISIBLE_ELLIPSIS.test(clean)
+    && SENTENCE_ENDING.test(clean)
+    && !rejectDanglingSentenceEnding(clean),
+  );
+}
+
+/** Rejects punctuated fragments that look finished typographically but not semantically. */
+export function rejectDanglingSentenceEnding(source: unknown) {
+  const clean = String(source ?? "")
+    .replace(/[.!?]+["'”’)}\]]*$/, "")
+    .trim();
+  if (!clean) return true;
+  const danglingEndings = [
+    /\b(?:a|an|and|as|at|because|but|by|for|from|how|if|in|of|on|or|that|the|their|these|this|those|to|when|where|which|while|who|whose|with|without|your)$/i,
+    /\b(?:about|because of|the cost of|the limits of|with a|with an|with the|about a|about an|about the|as if|as if a|as if an|as if the|and a|and an|and the|or a|or an|or the|but a|but an|but the|where a|where an|where the)$/i,
+    /\b(?:about|for|from|of|with)\s+(?:what|which|that)\s+(?:a|an|the)?\s*[a-z][a-z'-]*$/i,
+    /\b(?:the shape of|the way)(?:\s+(?:a|an|the))?$/i,
+  ];
+  return danglingEndings.some((pattern) => pattern.test(clean));
+}
+
+export function ensureCompleteSemanticSentence(source: unknown) {
+  const clean = sanitizeHeadline(source);
+  return isCompleteSentence(clean) ? clean : "";
 }
 
 export function splitIntoCompleteSentences(source: unknown) {
@@ -1418,13 +1475,26 @@ export function extractCompleteBullets(
   const selected: string[] = [];
 
   for (const sentence of splitIntoCompleteSentences(source).slice().reverse()) {
-    const candidate = fitsLineBudget(c, sentence, maxWidth, maxLinesPerBullet)
+    const fittedCandidate = fitsLineBudget(c, sentence, maxWidth, maxLinesPerBullet)
       ? sentence
       : completeClauseForLineBudget(c, sentence, maxWidth, maxLinesPerBullet);
+    const candidate = ensureCompleteSemanticSentence(fittedCandidate);
     if (candidate && !selected.some((item) => item.toLowerCase() === candidate.toLowerCase())) {
       selected.push(candidate);
     }
     if (selected.length >= Math.max(1, maxBullets)) break;
+  }
+
+  if (!selected.length) {
+    const safeFallbacks = [
+      "The page asks the reader to notice what has shifted.",
+      "The scene turns private tension into visible consequence.",
+      "This moment changes what the character is willing to protect.",
+    ];
+    const fallback = safeFallbacks.find((candidate) => (
+      fitsLineBudget(c, candidate, maxWidth, maxLinesPerBullet)
+    ));
+    if (fallback) selected.push(fallback);
   }
 
   c.font = previousFont;
@@ -1465,7 +1535,7 @@ function isStandaloneClause(source: string) {
   const clean = source.replace(/^[“"'([{]+/, "").replace(/[”"')\]}]+$/, "").trim();
   if (clean.split(/\s+/).length < 4) return false;
   if (/^(?:although|as|because|if|since|that|though|unless|until|when|whenever|where|whether|which|while|who|whose)\b/i.test(clean)) return false;
-  return !/\b(?:a|an|and|as|at|because|but|by|for|from|if|in|of|on|or|that|the|their|these|this|those|to|when|while|with|without|your)$/i.test(clean);
+  return !rejectDanglingSentenceEnding(`${clean}.`);
 }
 
 function fitsLineBudget(c: CanvasRenderingContext2D, source: string, maxWidth: number, maxLines: number) {
