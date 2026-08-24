@@ -1,4 +1,10 @@
 import type { Mode } from "./book-types";
+import {
+  getCoverTitlePlacementPreset,
+  getCoverTypographyPreset,
+  resolveCoverTitlePlacement,
+  resolveCoverTitleTypography,
+} from "./cover-utils";
 import type { VisualBookKind, VisualStyle } from "./visual-book-types";
 
 export type CreativeGenre =
@@ -800,17 +806,44 @@ function subjectDirection(context: CreativeContext, genre: CreativeGenre) {
 
 export function buildCoverTypographyLayout(input: CreativeContext & {
   creativeFinish?: string;
+  style?: string;
+  titleTypography?: string;
+  titlePlacement?: string;
 }) {
   const preset = getCreativeCoverFinishPreset(input.creativeFinish, input);
+  const directionContext = {
+    mode: input.mode,
+    title: input.title,
+    genre: input.genre,
+    premise: input.premise,
+    topic: input.topic,
+    creativeFinish: preset.id,
+    style: input.style,
+  };
+  const titleTypography = resolveCoverTitleTypography(
+    input.titleTypography,
+    directionContext,
+  );
+  const typography = getCoverTypographyPreset(titleTypography);
+  const titlePlacement = resolveCoverTitlePlacement(
+    input.titlePlacement,
+    directionContext,
+  );
+  const placement = getCoverTitlePlacementPreset(
+    titlePlacement,
+    directionContext,
+  );
   const title = stripCoverPlaceholderText(input.title);
   const subtitle = stripCoverPlaceholderText(input.subtitle);
   const author = formatPremiumCoverAuthor(input.author ?? "", preset.id, input);
   return [
     "APP TYPOGRAPHY LAYER ONLY. Never send these instructions to the artwork image model.",
-    title ? `Official title: “${title}”. Render once using ${preset.typography}.` : "Omit the title because no valid title was supplied.",
+    `Title typography preset: ${typography.label}. ${typography.description ?? preset.typography}`,
+    `Title placement preset: ${placement.label}. ${placement.description}`,
+    title ? `Official title: “${title}”. Render it once with balanced complete lines, refined tracking, readable contrast, and no ellipsis or cropping.` : "Omit the title because no valid title was supplied.",
     subtitle ? `Official subtitle: “${subtitle}”. Keep it complete, readable, and separate from the title.` : "Omit the subtitle.",
     author ? `Official author: “${author}”. Render once using ${preset.authorTypography}.` : "Omit the author line.",
-    "Keep title, subtitle, and author in separate safe zones with no overlap, duplication, cropping, or placeholder text.",
+    "Keep title, subtitle, and author in separate safe zones with no overlap, duplication, cropping, or placeholder text. Preserve trim-safe margins and move text to the nearest safe zone if the selected layout would collide.",
   ].join(" ");
 }
 
@@ -873,7 +906,15 @@ export function buildVisualArtworkDirection(context: CreativeContext, style: str
 
 export function buildAskEBCreativeGuidance(context: CreativeContext) {
   const recommendedFinish = getCreativeCoverFinishPreset("auto", context);
-  return `${buildCopywritingGuidance(context)} Infer the most precise genre or subgenre supported by the title and premise. For fiction subtitles, write one atmospheric, emotionally specific, cover-readable sentence fragment or sentence without repeating the title. For non-fiction subtitles, state the outcome, intended reader, and credible method in one cover-readable line. When writing a blurb, follow the genre framework above instead of producing a generic summary. When suggesting a cover, recommend a Cover Style, surface Cover Finish, and Creative Cover Finish; the current best-fit Creative Cover Finish is ${recommendedFinish.label}. Specify one focal subject, foreground, midground, background, motivated lighting, restrained palette, title typography, author treatment, and explicit negative constraints. For gothic or cinematic fiction, recommend premium spaced small caps for the author; for nonfiction or business, recommend a clean authority treatment; for children's stories, recommend a simple warm readable author line. For a visual mini-book setup, recommend one existing mini-book type and one existing visual direction that can be applied immediately. Prefer fewer decisive fields over generic filler.`;
+  const titleTypography = getCoverTypographyPreset(resolveCoverTitleTypography("auto", {
+    mode: context.mode,
+    title: context.title,
+    genre: context.genre,
+    premise: context.premise,
+    topic: context.topic,
+    creativeFinish: recommendedFinish.id,
+  }));
+  return `${buildCopywritingGuidance(context)} Infer the most precise genre or subgenre supported by the title and premise. For fiction subtitles, write one atmospheric, emotionally specific, cover-readable sentence fragment or sentence without repeating the title. For non-fiction subtitles, state the outcome, intended reader, and credible method in one cover-readable line. When writing a blurb, follow the genre framework above instead of producing a generic summary. When suggesting a cover, recommend a Cover Style, surface Cover Finish, Creative Cover Finish, Title Typography, and Title Placement; the current best-fit Creative Cover Finish is ${recommendedFinish.label}, with ${titleTypography.label} as the title treatment. Specify one focal subject, foreground, midground, background, motivated lighting, restrained palette, title typography, title placement, author treatment, and explicit negative constraints. For gothic or cinematic fiction, recommend premium spaced small caps for the author; for nonfiction or business, recommend a clean authority treatment; for children's stories, recommend a simple warm readable author line. For a visual mini-book setup, recommend one existing mini-book type and one existing visual direction that can be applied immediately. Prefer fewer decisive fields over generic filler.`;
 }
 
 export function resolveVisualStyleId(value: string): VisualStyle | null {

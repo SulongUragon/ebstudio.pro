@@ -65,6 +65,8 @@ export type CoverDesign = {
   authorColor?: string;
   authorStyle?: AuthorStyle;
   typographyPreset?: string;
+  titleTypography?: string;
+  titlePlacement?: string;
   createdAt: string;
 };
 

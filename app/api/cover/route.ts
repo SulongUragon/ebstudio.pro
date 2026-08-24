@@ -19,6 +19,8 @@ type CoverRequest = {
   style?: string;
   finish?: string;
   creativeFinish?: string;
+  titleTypography?: string;
+  titlePlacement?: string;
   customDirection?: string;
 };
 
@@ -89,7 +91,10 @@ export async function POST(request: Request) {
       premise: body.brief.premise,
       audience: body.brief.audience,
       keyPoints: body.brief.keyPoints,
+      style,
       creativeFinish,
+      titleTypography: body.titleTypography,
+      titlePlacement: body.titlePlacement,
     });
     if (
       !validateCoverArtworkPrompt(prompt) ||
