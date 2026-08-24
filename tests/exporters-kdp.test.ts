@@ -3,6 +3,7 @@ import test from "node:test";
 import JSZip from "jszip";
 import type { Manuscript } from "../app/book-types";
 import {
+  cleanCustomerFacingCoverText,
   createPolishedKdpCoverSvg,
   exportBundle,
   exportCover,
@@ -380,6 +381,15 @@ test("long-title KDP cover exports remain valid JPEG blobs", async () => {
   }
 });
 
+test("KDP cover export preserves the finalized full-cover JPEG without rebuilding it", async () => {
+  const book = sampleBook();
+  const expected = Buffer.from(book.cover!.imageData.split(",")[1], "base64");
+  const blob = await exportCover(book, false);
+  const bytes = await blobBytes(blob);
+  assert.equal(blob.type, "image/jpeg");
+  assert.deepEqual(bytes, new Uint8Array(expected));
+});
+
 test("polished KDP cover layout keeps long metadata complete and readable", () => {
   for (const createBook of publishingQaBooks) {
     const book = createBook();
@@ -403,6 +413,45 @@ test("polished KDP cover layout keeps long metadata complete and readable", () =
     );
     assert.ok(titleSize >= 54, `title type should stay readable, received ${titleSize}`);
   }
+});
+
+test("customer-facing KDP fallback removes internal labels and renders one official title layer", () => {
+  const book = sampleBook();
+  book.title = "The Window That Waited for Thunder";
+  book.subtitle = "A gothic novel about inheritance, silence, and the storm a family refused to name.";
+  book.author = "Sulong Uragon";
+  book.cover = {
+    ...book.cover!,
+    imageData: "data:image/jpeg;base64,Q09NUE9TRUQtV0lUSC1USVRMRQ==",
+    sourceImageData: "data:image/jpeg;base64,U09VUkNFLUFSVC1PTkxZ",
+    displayTitle: book.title,
+    displaySubtitle: book.subtitle,
+  };
+
+  const svg = createPolishedKdpCoverSvg(book);
+  assert.match(svg, /id="fallback-atmosphere"/);
+  assert.match(svg, /id="official-title"/);
+  assert.equal(svg.match(/id="official-title"/g)?.length, 1);
+  assert.equal(svg.match(/id="official-subtitle"/g)?.length, 1);
+  assert.equal(svg.match(/id="official-author"/g)?.length, 1);
+  assert.doesNotMatch(svg, /EB\s*STUDIO\s*PRO/i);
+  assert.doesNotMatch(svg, /KDP\s*EDITION/i);
+  assert.doesNotMatch(svg, /title-panel|height="1680"|cropped-title|ghost-title/i);
+  assert.doesNotMatch(svg, /<image /);
+});
+
+test("cover safety strips platform artifacts without ellipsis", () => {
+  const book = sampleBook();
+  assert.equal(
+    cleanCustomerFacingCoverText("EB Studio Pro / KDP Edition ... The Storm"),
+    "The Storm",
+  );
+  assert.equal(cleanCustomerFacingCoverText("KDP Package … Author"), "Author");
+
+  const svg = createPolishedKdpCoverSvg(book);
+  assert.match(svg, /id="fallback-atmosphere"/);
+  assert.doesNotMatch(svg, /<image /);
+  assert.doesNotMatch(svg, /\.\.\.|…/);
 });
 
 test("long-form KDP bundles contain readable standard files through the headless-safe path", async () => {
