@@ -49,6 +49,8 @@ export type CoverDesign = {
   style: string;
   finish?: string;
   creativeFinish?: string;
+  coverTextMode?: "auto" | "app-typography" | "integrated-typography";
+  resolvedCoverTextMode?: "app-typography" | "integrated-typography";
   displayTitle?: string;
   displaySubtitle?: string;
   showTitle?: boolean;

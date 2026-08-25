@@ -4,10 +4,13 @@ import { Check, ImageIcon, LoaderCircle, RefreshCw, Sparkles } from "lucide-reac
 import { useEffect, useRef, useState } from "react";
 import type { AuthorStyle, CoverDesign, Manuscript } from "./book-types";
 import {
+  COVER_TEXT_MODE_OPTIONS,
   CREATIVE_COVER_FINISH_OPTIONS,
   formatPremiumCoverAuthor,
   getCreativeCoverFinishPreset,
+  resolveCoverTextMode,
   stripCoverPlaceholderText,
+  type CoverTextModeId,
 } from "./creative-direction";
 import {
   TITLE_PLACEMENT_OPTIONS,
@@ -120,6 +123,9 @@ export default function CoverStudio({
   const [creativeFinish, setCreativeFinish] = useState(
     manuscript.cover?.creativeFinish ?? "auto",
   );
+  const [coverTextMode, setCoverTextMode] = useState<CoverTextModeId>(
+    manuscript.cover?.coverTextMode ?? "auto",
+  );
   const [titleTypography, setTitleTypography] = useState(
     manuscript.cover?.titleTypography ?? "auto",
   );
@@ -157,6 +163,23 @@ export default function CoverStudio({
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
+  const resolvedTextMode = resolveCoverTextMode({
+    mode: manuscript.mode,
+    title: manuscript.title,
+    subtitle: coverSubtitle,
+    author: manuscript.author,
+    genre: manuscript.brief.genre,
+    topic: manuscript.brief.topic,
+    premise: manuscript.brief.premise,
+    audience: manuscript.brief.audience,
+    keyPoints: manuscript.brief.keyPoints,
+    creativeFinish,
+    coverTextMode,
+    customDirection,
+  });
+  const appTypographyEnabled = resolvedTextMode === "app-typography";
+  const currentCoverSupportsAppTypography =
+    manuscript.cover?.resolvedCoverTextMode !== "integrated-typography";
   const onSaveRef = useRef(onSave);
   const manuscriptRef = useRef(manuscript);
   const coverRef = useRef(manuscript.cover);
@@ -179,6 +202,10 @@ export default function CoverStudio({
     }
     const currentCover = coverRef.current;
     if (!currentCover?.sourceImageData || loading) return;
+    if (
+      currentCover.resolvedCoverTextMode === "integrated-typography" ||
+      resolvedTextMode === "integrated-typography"
+    ) return;
     const sequence = ++autoApplySequence.current;
     const timeout = window.setTimeout(() => {
       void (async () => {
@@ -227,6 +254,8 @@ export default function CoverStudio({
             style,
             finish,
             creativeFinish,
+            coverTextMode,
+            resolvedCoverTextMode: "app-typography",
             displayTitle: exactTitle,
             displaySubtitle: coverSubtitle.trim(),
             showTitle: true,
@@ -263,12 +292,14 @@ export default function CoverStudio({
     autoFitText,
     coverSubtitle,
     coverTitle,
+    coverTextMode,
     creativeFinish,
     finish,
     loading,
     manuscript.author,
     manuscript.brief.title,
     manuscript.title,
+    resolvedTextMode,
     style,
     subtitleAlignment,
     subtitleColor,
@@ -299,6 +330,7 @@ export default function CoverStudio({
           style,
           finish,
           creativeFinish,
+          coverTextMode,
           titleTypography,
           titlePlacement,
           customDirection: customDirection.trim(),
@@ -309,6 +341,11 @@ export default function CoverStudio({
         throw new Error(String(data.error ?? "The AI cover could not be generated."));
       }
       const sourceImageData = String(data.imageData);
+      const resolvedGeneratedTextMode = data.resolvedCoverTextMode === "integrated-typography"
+        ? "integrated-typography"
+        : "app-typography";
+      const shouldOverlayText =
+        resolvedGeneratedTextMode === "app-typography" && data.shouldOverlayText === true;
       const directions = resolveTitleDirections(
         manuscript,
         exactSubtitle,
@@ -321,31 +358,35 @@ export default function CoverStudio({
       const nextSubtitleAlignment = typography.titleAlignment;
       const nextSubtitleColor = typography.subtitleColor;
       const nextAuthorColor = typography.authorColor;
-      const imageData = await composeCover(
-        sourceImageData,
-        exactTitle,
-        exactSubtitle,
-        formattedCoverAuthor(
-          manuscript,
+      const imageData = shouldOverlayText
+        ? await composeCover(
+          sourceImageData,
+          exactTitle,
           exactSubtitle,
-          creativeFinish,
+          formattedCoverAuthor(
+            manuscript,
+            exactSubtitle,
+            creativeFinish,
+            authorStyle,
+          ),
+          finish,
+          style,
+          autoFitText,
+          subtitleFontSize,
+          subtitlePosition,
+          nextSubtitleAlignment,
+          nextSubtitleColor,
+          nextAuthorColor,
           authorStyle,
-        ),
-        finish,
-        style,
-        autoFitText,
-        subtitleFontSize,
-        subtitlePosition,
-        nextSubtitleAlignment,
-        nextSubtitleColor,
-        nextAuthorColor,
-        authorStyle,
-        directions.typographyPreset,
-        directions.placementPreset,
-      );
-      setSubtitleAlignment(nextSubtitleAlignment);
-      setSubtitleColor(nextSubtitleColor);
-      setAuthorColor(nextAuthorColor);
+          directions.typographyPreset,
+          directions.placementPreset,
+        )
+        : sourceImageData;
+      if (shouldOverlayText) {
+        setSubtitleAlignment(nextSubtitleAlignment);
+        setSubtitleColor(nextSubtitleColor);
+        setAuthorColor(nextAuthorColor);
+      }
       onSave({
         imageData,
         width: 1600,
@@ -354,9 +395,11 @@ export default function CoverStudio({
         style,
         finish,
         creativeFinish,
+        coverTextMode,
+        resolvedCoverTextMode: resolvedGeneratedTextMode,
         displayTitle: exactTitle,
         displaySubtitle: exactSubtitle,
-        showTitle: true,
+        showTitle: shouldOverlayText,
         autoFitText,
         subtitleFontSize,
         subtitlePosition,
@@ -384,6 +427,10 @@ export default function CoverStudio({
     const exactTitle = resolveExactCoverTitle(manuscript, coverTitle);
     if (!exactTitle) {
       setError("Add a complete book title before applying typography.");
+      return;
+    }
+    if (!appTypographyEnabled || !currentCoverSupportsAppTypography) {
+      setError("Integrated Typography already owns the final cover text. Generate a new App Typography cover before applying an app text layout.");
       return;
     }
     const sourceImageData = manuscript.cover?.sourceImageData;
@@ -433,6 +480,8 @@ export default function CoverStudio({
         style,
         finish,
         creativeFinish,
+        coverTextMode,
+        resolvedCoverTextMode: "app-typography",
         displayTitle: exactTitle,
         displaySubtitle: coverSubtitle.trim(),
         showTitle: true,
@@ -465,7 +514,7 @@ export default function CoverStudio({
         <div>
           <span><Sparkles size={15} /> AI Book Cover Studio</span>
           <h3>Give your finished book a cover.</h3>
-          <p>AI creates text-free artwork. EB Studio Pro adds your exact title, subtitle, and author separately.</p>
+          <p>Choose safe app-rendered text or cinematic typography integrated into the finished cover.</p>
         </div>
         {manuscript.cover ? <small><Check size={14} /> Cover selected</small> : null}
       </div>
@@ -525,7 +574,7 @@ export default function CoverStudio({
                   type="checkbox"
                   checked={autoFitText}
                   onChange={(event) => setAutoFitText(event.target.checked)}
-                  disabled={loading}
+                  disabled={loading || !appTypographyEnabled}
                 />
                 <span>Auto Fit subtitle</span>
               </label>
@@ -538,7 +587,7 @@ export default function CoverStudio({
                   step="2"
                   value={subtitleFontSize}
                   onChange={(event) => setSubtitleFontSize(Number(event.target.value))}
-                  disabled={loading}
+                  disabled={loading || !appTypographyEnabled}
                 />
               </label>
               <label>
@@ -550,7 +599,7 @@ export default function CoverStudio({
                   step="1"
                   value={subtitlePosition}
                   onChange={(event) => setSubtitlePosition(Number(event.target.value))}
-                  disabled={loading}
+                  disabled={loading || !appTypographyEnabled}
                 />
               </label>
               <div className="cover-layout-row">
@@ -563,7 +612,7 @@ export default function CoverStudio({
                       event.target.value as "left" | "center" | "right",
                     )
                   }
-                  disabled={loading}
+                  disabled={loading || !appTypographyEnabled}
                 >
                   <option value="left">Left</option>
                   <option value="center">Center</option>
@@ -575,7 +624,7 @@ export default function CoverStudio({
                     type="color"
                     value={subtitleColor}
                     onChange={(event) => setSubtitleColor(event.target.value)}
-                    disabled={loading}
+                    disabled={loading || !appTypographyEnabled}
                   />
                 </label>
               </div>
@@ -585,7 +634,7 @@ export default function CoverStudio({
                   type="color"
                   value={authorColor}
                   onChange={(event) => setAuthorColor(event.target.value)}
-                  disabled={loading}
+                  disabled={loading || !appTypographyEnabled}
                 />
                 <strong>{authorColor.toUpperCase()}</strong>
               </label>
@@ -598,7 +647,7 @@ export default function CoverStudio({
                       type="button"
                       className={authorStyle === option.id ? "selected" : ""}
                       onClick={() => setAuthorStyle(option.id)}
-                      disabled={loading}
+                      disabled={loading || !appTypographyEnabled}
                     >
                       {option.label}
                     </button>
@@ -609,7 +658,13 @@ export default function CoverStudio({
                 className="cover-apply-type"
                 type="button"
                 onClick={applyTypography}
-                disabled={loading || applying || !manuscript.cover?.sourceImageData}
+                disabled={
+                  loading ||
+                  applying ||
+                  !manuscript.cover?.sourceImageData ||
+                  !appTypographyEnabled ||
+                  !currentCoverSupportsAppTypography
+                }
               >
                 {applying ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}
                 {applying ? "Applying typography…" : "Apply text layout"}
@@ -617,7 +672,11 @@ export default function CoverStudio({
               </div>
             </details>
             <p>
-              {applying
+              {!appTypographyEnabled
+                ? "Integrated Typography owns the final text, so the app overlay controls stay off."
+                : !currentCoverSupportsAppTypography
+                  ? "Generate a new App Typography cover before applying app-rendered text."
+                  : applying
                 ? "Updating the cover preview…"
                 : autoFitText
                   ? "Subtitle and author changes update the cover automatically."
@@ -647,7 +706,9 @@ export default function CoverStudio({
             </select>
           </label>
           <p>
-            AI creates the selected artwork direction without text. Cover Studio adds the exact title separately.
+            {appTypographyEnabled
+              ? "AI creates the selected artwork direction without text. Cover Studio adds the exact title separately."
+              : "AI creates one complete cover with the exact supplied typography integrated into the artwork."}
           </p>
           <label className="cover-select-control cover-direction-label">
             <span>Describe your cover (optional)</span>
@@ -702,6 +763,23 @@ export default function CoverStudio({
           </label>
           <small className="cover-finish-note">
             Controls the market and design direction, such as Rain-Soaked Gothic or Premium Nonfiction. Auto chooses from your book context.
+          </small>
+          <label className="cover-select-control cover-finish-label">
+            <span>Cover Text Mode</span>
+            <select
+              value={coverTextMode}
+              onChange={(event) => setCoverTextMode(event.target.value as CoverTextModeId)}
+              disabled={loading}
+            >
+              {COVER_TEXT_MODE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <small className="cover-finish-note">
+            Choose whether the app overlays cover text or asks AI to integrate the exact typography into the artwork.
           </small>
           <label className="cover-select-control cover-finish-label">
             <span>Title Typography</span>
