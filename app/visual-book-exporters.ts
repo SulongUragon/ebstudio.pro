@@ -492,6 +492,7 @@ export function drawNotebookHighlights(c: CanvasRenderingContext2D, source: stri
     lineHeight: 34,
     maxHeight: 130,
     fontFamily: "Georgia",
+    fontStyle: "italic",
     bulletGap: 12,
     textColor: NOTEBOOK.ink,
     bulletColors: [NOTEBOOK.green, NOTEBOOK.navy],
@@ -942,6 +943,7 @@ export function drawTakeawayBox(
     lineHeight: 34,
     maxHeight: Math.max(86, Math.min(175, H - y - 150)),
     fontFamily: "Arial",
+    fontStyle: "italic",
     bulletGap: 12,
   };
   const fit = fitBulletsAdaptive(c, source, bulletOptions);
@@ -988,6 +990,7 @@ function drawCompactBox(
     lineHeight: 31,
     maxHeight: Math.max(120, Math.min(245, H - y - 160)),
     fontFamily: "Arial",
+    fontStyle: "italic",
     bulletGap: 14,
   };
   const fit = fitBulletsAdaptive(c, source, bulletOptions);
