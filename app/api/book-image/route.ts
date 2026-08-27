@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sanitizeChapterOpenerMetadata } from "../../longform-chapter-openers";
 
 export const maxDuration = 300;
 
@@ -8,7 +9,15 @@ const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504]);
 
 type RequestBody = {
   manuscript?: { mode?: string; title?: string; genre?: string; premise?: string; characters?: string; topic?: string };
-  section?: { title?: string; purpose?: string; summary?: string; content?: string };
+  section?: {
+    title?: string;
+    purpose?: string;
+    summary?: string;
+    content?: string;
+    openerDeck?: string;
+    openerImagePrompt?: string;
+    openerVisualMood?: string;
+  };
 };
 
 type OpenAIImageResponse = { data?: Array<{ b64_json?: string }>; error?: { message?: string; code?: string; type?: string } };
@@ -56,6 +65,8 @@ export async function POST(request: Request) {
       ? `Genre: ${body.manuscript.genre || "fiction"}. Premise: ${body.manuscript.premise || ""}. Characters: ${body.manuscript.characters || ""}.`
       : `Topic: ${body.manuscript.topic || body.manuscript.title}.`;
     const visualBible = `VISUAL CONTINUITY BIBLE: cinematic editorial realism; dark, restrained, moody atmosphere; deep charcoal, midnight blue, muted forest green and weathered brown palette; low-key directional lighting with subtle cool highlights; natural skin tones; realistic photographic texture; shallow controlled depth of field; understated film grain; emotionally intimate rather than theatrical; premium literary-fiction publishing aesthetic. Avoid bright golden-hour warmth, cheerful sunrise imagery, pastel colors, high-key interiors, generic inspirational stock imagery, painterly storybook rendering, or sudden stylistic shifts.`;
+    const openerDirection = sanitizeChapterOpenerMetadata(body.section.openerImagePrompt);
+    const openerMood = sanitizeChapterOpenerMetadata(body.section.openerVisualMood);
 
     const prompt = `Create one premium interior illustration for the long-form book "${body.manuscript.title}".
 ${context}
@@ -63,9 +74,11 @@ Section: ${body.section.title}
 Section purpose: ${body.section.purpose || ""}
 Section summary: ${body.section.summary || ""}
 Scene context: ${(body.section.content || "").slice(0, 5000)}
+${openerDirection ? `Chapter opener scene direction: ${openerDirection}` : ""}
+${openerMood ? `Chapter opener visual mood: ${openerMood}` : ""}
 
 ${visualBible}
-Choose the single strongest visually specific moment from this section. Preserve character identity, age, wardrobe logic, setting, mood, and story continuity implied by the supplied book context. Sophisticated composition, believable anatomy, controlled depth, premium publishing quality, emotionally specific rather than generic. Portrait interior-book illustration with a clear focal subject and clean negative space. No title, captions, speech bubbles, letters, logos, watermark, border, mockup, or unrelated decorative text.`;
+Choose the single strongest visually specific moment from this section. Preserve character identity, age, wardrobe logic, setting, mood, and story continuity implied by the supplied book context. Sophisticated composition, believable anatomy, controlled depth, premium publishing quality, emotionally specific rather than generic. Portrait interior-book illustration with a clear focal subject positioned away from the lower-third text-safe area when possible. Preserve clean lower-third or left-side negative space for app-rendered chapter typography. No title, captions, speech bubbles, words, letters, typography, readable signage, logos, watermark, border, mockup, or unrelated decorative text.`;
 
     let result = await requestImage(prompt);
     let usedPrompt = prompt;

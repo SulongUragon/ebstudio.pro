@@ -1,4 +1,8 @@
 import type { Manuscript } from "../book-types";
+import {
+  drawLongFormChapterOpenerPage,
+  getLongFormChapterOpeners,
+} from "../longform-chapter-openers";
 
 export async function exportIllustratedPdf(book: Manuscript) {
   const { jsPDF } = await import("jspdf");
@@ -9,6 +13,9 @@ export async function exportIllustratedPdf(book: Manuscript) {
   const usableWidth = pageWidth - margin * 2;
   const expectedImages = (book.images ?? []).filter((image) => Boolean(image?.imageData)).length;
   const imageBySection = new Map((book.images ?? []).map((image) => [Number(image.sectionIndex), image]));
+  const openerBySection = new Map(
+    getLongFormChapterOpeners(book).map((opener) => [opener.sectionIndex, opener]),
+  );
   let embeddedImages = 0;
 
   if (book.cover?.imageData) {
@@ -38,7 +45,12 @@ export async function exportIllustratedPdf(book: Manuscript) {
   for (let index = 0; index < book.sections.length; index += 1) {
     const section = book.sections[index];
     const illustration = imageBySection.get(index);
-    if (illustration?.imageData) {
+    const opener = openerBySection.get(index);
+    if (opener) {
+      pdf.addPage();
+      const result = drawLongFormChapterOpenerPage(pdf, opener, pageWidth, pageHeight);
+      if (result.usedImage) embeddedImages += 1;
+    } else if (illustration?.imageData) {
       pdf.addPage();
       const format = imageFormat(illustration.imageData);
       const props = pdf.getImageProperties(illustration.imageData);
@@ -54,11 +66,13 @@ export async function exportIllustratedPdf(book: Manuscript) {
 
     pdf.addPage();
     let y = 76;
-    pdf.setFont("times", "bold");
-    pdf.setFontSize(22);
-    const headingLines = pdf.splitTextToSize(sectionLabel(book, section, index), usableWidth);
-    pdf.text(headingLines, margin, y);
-    y += headingLines.length * 27 + 20;
+    if (!opener) {
+      pdf.setFont("times", "bold");
+      pdf.setFontSize(22);
+      const headingLines = pdf.splitTextToSize(sectionLabel(book, section, index), usableWidth);
+      pdf.text(headingLines, margin, y);
+      y += headingLines.length * 27 + 20;
+    }
     pdf.setFont("times", "normal");
     pdf.setFontSize(11.5);
     const paragraphs = cleanBody(section.content).split(/\n\s*\n/).map((value) => value.trim()).filter(Boolean);

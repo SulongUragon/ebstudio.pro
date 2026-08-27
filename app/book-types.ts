@@ -26,6 +26,9 @@ export type SectionPlan = {
   title: string;
   purpose: string;
   pov?: string;
+  openerDeck?: string;
+  openerImagePrompt?: string;
+  openerVisualMood?: string;
 };
 
 export type SectionContent = SectionPlan & {
