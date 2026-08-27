@@ -36,7 +36,15 @@ export default function BookImagesStudio({ manuscript, onSave }: { manuscript: M
             characters: manuscript.brief.characters,
             topic: manuscript.brief.topic,
           },
-          section: { title: plan.title, purpose: plan.purpose, summary: section.summary, content: section.content.slice(0, 7000) },
+          section: {
+            title: plan.title,
+            purpose: plan.purpose,
+            summary: section.summary,
+            content: section.content.slice(0, 7000),
+            openerDeck: plan.openerDeck,
+            openerImagePrompt: plan.openerImagePrompt,
+            openerVisualMood: plan.openerVisualMood,
+          },
         }),
       });
       const data = await response.json().catch(() => ({}));

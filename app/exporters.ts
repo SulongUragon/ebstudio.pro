@@ -1,6 +1,11 @@
 import type { Manuscript, Mode, SectionKind } from "./book-types";
 import type { ParagraphChild, TextRun as DocxTextRun } from "docx";
 import type { jsPDF as JsPdfDocument } from "jspdf";
+import {
+  chapterImageAsset,
+  drawLongFormChapterOpenerPage,
+  getLongFormChapterOpeners,
+} from "./longform-chapter-openers";
 
 type InlineToken = {
   text: string;
@@ -16,6 +21,7 @@ type RichBlock =
   | { type: "scene-break" };
 
 type NormalizedSection = {
+  sourceIndex: number;
   kind: SectionKind;
   number: number;
   title: string;
@@ -501,6 +507,7 @@ const STANDARD_PUBLISHING_PALETTE = {
 type ReferencePdfPageMeta =
   | { kind: "title" }
   | { kind: "contents" }
+  | { kind: "opener"; label: string }
   | { kind: "section"; label: string };
 
 function drawReferencePaper(
@@ -653,7 +660,7 @@ function drawReferenceRunningElements(
   const pageCount = pdf.getNumberOfPages();
   for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
     const meta = pageMeta.get(pageNumber);
-    if (!meta) continue;
+    if (!meta || meta.kind === "opener") continue;
     pdf.setPage(pageNumber);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
@@ -677,6 +684,9 @@ function drawReferenceRunningElements(
 
 export async function exportPdf(book: Manuscript, shouldDownload = true) {
   const exportBook = normalizeExportBook(book);
+  const openerBySection = new Map(
+    getLongFormChapterOpeners(book).map((opener) => [opener.sectionIndex, opener]),
+  );
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ unit: "pt", format: "letter" });
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -695,10 +705,10 @@ export async function exportPdf(book: Manuscript, shouldDownload = true) {
   });
   drawReferenceTitlePage(pdf, exportBook, pageWidth, pageHeight, margin);
 
-  const addReferencePage = (meta: ReferencePdfPageMeta) => {
+  const addReferencePage = (meta: ReferencePdfPageMeta, drawPaper = true) => {
     pdf.addPage();
     pageMeta.set(pdf.getNumberOfPages(), meta);
-    drawReferencePaper(pdf, pageWidth, pageHeight);
+    if (drawPaper) drawReferencePaper(pdf, pageWidth, pageHeight);
   };
 
   let contentsY = 0;
@@ -752,12 +762,17 @@ export async function exportPdf(book: Manuscript, shouldDownload = true) {
     const role = sectionRole(section, exportBook.mode);
     const title = sectionDescriptiveTitle(section, exportBook.mode);
     const pageLabel = sectionTocLabel(section, exportBook.mode);
+    const opener = openerBySection.get(section.sourceIndex);
+    if (opener) {
+      addReferencePage({ kind: "opener", label: opener.label }, false);
+      drawLongFormChapterOpenerPage(pdf, opener, pageWidth, pageHeight);
+    }
     const addSectionPage = (continuation: boolean) => {
       addReferencePage({ kind: "section", label: role });
       if (continuation) return 72;
       return drawReferenceSectionHeading(pdf, role.toUpperCase(), title, margin, usableWidth, 78);
     };
-    let y = addSectionPage(false);
+    let y = addSectionPage(Boolean(opener));
 
     const moveToNextSectionPage = () => {
       y = addSectionPage(true);
@@ -861,10 +876,20 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
   const readiness = getKdpReadiness(book);
   if (!readiness.ready) throw new Error(readiness.errors[0]);
   const exportBook = normalizeExportBook(book);
+  const openerBySection = new Map(
+    getLongFormChapterOpeners(book).map((opener) => [opener.sectionIndex, opener]),
+  );
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   const identifier = `urn:uuid:${exportBook.id}`;
   const sectionFiles = exportBook.sections.map((_, index) => `section-${index + 1}.xhtml`);
+  const openerAssets = exportBook.sections.map((section, index) => {
+    const opener = openerBySection.get(section.sourceIndex);
+    const asset = chapterImageAsset(opener?.imageData);
+    return asset
+      ? { asset, fileName: `chapter-opener-${index + 1}.${asset.extension}` }
+      : null;
+  });
   const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 
   zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
@@ -876,9 +901,12 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
 </container>`,
   );
   zip.file("OEBPS/cover.jpg", dataUriToBase64(exportBook.coverImage), { base64: true });
+  openerAssets.forEach((entry) => {
+    if (entry) zip.file(`OEBPS/${entry.fileName}`, entry.asset.base64, { base64: true });
+  });
   zip.file(
     "OEBPS/style.css",
-    `html{margin:0;padding:0;max-width:100%;}body{box-sizing:border-box;width:100%;max-width:100%;margin:0;padding:5%;overflow-x:hidden;font-family:serif;line-height:1.45;}main,p,h1,h2,h3,li{max-width:100%;overflow-wrap:break-word;word-wrap:break-word;-webkit-hyphens:auto;hyphens:auto;}h1{font-size:1.55em;line-height:1.18;margin:1.25em 0 .85em;}h2{font-size:1.3em;margin:1.4em 0 .7em;}h3{font-size:1.12em;margin:1.3em 0 .6em;}p{margin:.35em 0;}p.fiction{text-indent:1.2em;margin:0;}p.first,p.scene-break{text-indent:0;}p.scene-break{text-align:center;margin:1.25em 0;}nav ol{padding-left:1.4em;}li{margin:.45em 0;}.title-page{text-align:center;margin-top:25%;}.title-page h1{font-size:2.2em}.copyright{text-align:center;margin-top:16%;}.copyright-notice{margin-bottom:.55em;}code{font-family:monospace;}`,
+    `html{margin:0;padding:0;max-width:100%;}body{box-sizing:border-box;width:100%;max-width:100%;margin:0;padding:5%;overflow-x:hidden;font-family:serif;line-height:1.45;}main,p,h1,h2,h3,li,figure,img{max-width:100%;overflow-wrap:break-word;word-wrap:break-word;-webkit-hyphens:auto;hyphens:auto;}h1{font-size:1.55em;line-height:1.18;margin:1.25em 0 .85em;}h2{font-size:1.3em;margin:1.4em 0 .7em;}h3{font-size:1.12em;margin:1.3em 0 .6em;}p{margin:.35em 0;}p.fiction{text-indent:1.2em;margin:0;}p.first,p.scene-break{text-indent:0;}p.scene-break{text-align:center;margin:1.25em 0;}nav ol{padding-left:1.4em;}li{margin:.45em 0;}.chapter-opener{margin:0 0 1.25em;page-break-inside:avoid;break-inside:avoid;}.chapter-opener img{display:block;width:100%;height:auto;max-height:75vh;object-fit:contain;margin:0 auto;}.title-page{text-align:center;margin-top:25%;}.title-page h1{font-size:2.2em}.copyright{text-align:center;margin-top:16%;}.copyright-notice{margin-bottom:.55em;}code{font-family:monospace;}`,
   );
   zip.file(
     "OEBPS/title.xhtml",
@@ -899,9 +927,13 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
     const label = sectionTocLabel(section, exportBook.mode);
     const epubType = sectionEpubType(section, exportBook.mode);
     const blocks = epubBlocks(parseRichBlocks(section.content, section.title, label), exportBook.mode);
+    const openerAsset = openerAssets[index];
+    const openerImage = openerAsset
+      ? `<figure class="chapter-opener"><img src="${openerAsset.fileName}" alt="${escapeXml(`Chapter opener for ${label}`)}"/></figure>`
+      : "";
     zip.file(
       `OEBPS/${sectionFiles[index]}`,
-      xhtmlPage(section.title, `<main epub:type="${epubType}"><h1 id="section-title">${escapeXml(label)}</h1>${blocks}</main>`),
+      xhtmlPage(section.title, `<main epub:type="${epubType}">${openerImage}<h1 id="section-title">${escapeXml(label)}</h1>${blocks}</main>`),
     );
   });
 
@@ -931,6 +963,11 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
   const manifestItems = sectionFiles
     .map((file, index) => `<item id="section-${index + 1}" href="${file}" media-type="application/xhtml+xml"/>`)
     .join("");
+  const openerManifestItems = openerAssets
+    .map((entry, index) => entry
+      ? `<item id="chapter-opener-${index + 1}" href="${entry.fileName}" media-type="${entry.asset.mediaType}"/>`
+      : "")
+    .join("");
   const spineItems = sectionFiles.map((_, index) => `<itemref idref="section-${index + 1}"/>`).join("");
   zip.file(
     "OEBPS/content.opf",
@@ -952,7 +989,7 @@ export async function exportEpub(book: Manuscript, shouldDownload = true) {
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
     <item id="style" href="style.css" media-type="text/css"/>
-    ${manifestItems}
+    ${manifestItems}${openerManifestItems}
   </manifest>
   <spine toc="ncx"><itemref idref="title"/><itemref idref="copyright"/><itemref idref="nav"/>${spineItems}</spine>
 </package>`,
@@ -1439,7 +1476,13 @@ function normalizeExportBook(book: Manuscript): NormalizedBook {
     const parsedNumber = Number(section?.number);
     const number = Number.isFinite(parsedNumber) && parsedNumber > 0 ? parsedNumber : index + 1;
     const fallbackTitle = kind === "introduction" ? (book.mode === "fiction" ? "Prologue" : "Introduction") : kind === "conclusion" ? (book.mode === "fiction" ? "Epilogue" : "Conclusion") : `Chapter ${number}`;
-    return { kind, number, title: cleanText(section?.title).trim() || fallbackTitle, content: cleanText(section?.content) };
+    return {
+      sourceIndex: index,
+      kind,
+      number,
+      title: cleanText(section?.title).trim() || fallbackTitle,
+      content: cleanText(section?.content),
+    };
   });
   return {
     id: cleanText(book?.id).trim() || `eb-studio-pro-${Date.now()}`,

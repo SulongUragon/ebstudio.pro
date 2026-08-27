@@ -83,6 +83,13 @@ function makeSections(
     ...(index > 0 && index < titles.length - 1 ? { number: index } : {}),
     title,
     purpose: index === 0 ? "Orient the reader" : index === titles.length - 1 ? "Resolve the promise" : `Advance section ${index}`,
+    ...(index > 0 && index < titles.length - 1
+      ? {
+          openerDeck: `A precise turning point changes the meaning of chapter ${index} without repeating its title.`,
+          openerImagePrompt: `A chapter-specific cinematic scene for section ${index} with clean lower-third negative space and no readable text.`,
+          openerVisualMood: "Deep navy, muted forest green, low-key light, and restrained emotional tension.",
+        }
+      : {}),
     content: content(title, index),
     summary: `Section ${index + 1} completes its assigned publishing role.`,
   }));

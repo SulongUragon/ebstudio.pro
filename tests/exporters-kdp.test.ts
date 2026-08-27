@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import JSZip from "jszip";
 import type { Manuscript } from "../app/book-types";
@@ -19,6 +20,10 @@ import {
   createLongFictionManuscript,
   createLongNonfictionManuscript,
 } from "./fixtures/publishing-manuscripts";
+import {
+  getLongFormChapterOpeners,
+  sanitizeChapterOpenerDeck,
+} from "../app/longform-chapter-openers";
 
 const onePixelJpeg =
   "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=";
@@ -98,6 +103,42 @@ function sampleBook(): Manuscript {
   };
 }
 
+function chapterOnlyBook(options: { image?: boolean; title?: string } = {}): Manuscript {
+  const source = sampleBook();
+  const chapter = {
+    ...source.sections[1],
+    title: options.title ?? source.sections[1].title,
+    content: "Mara opened the door and stepped into the quiet room. The evidence remained exactly where she had left it.",
+    summary: "A deliberate choice changes what Mara is willing to see.",
+    openerDeck: "A deliberate choice changes what Mara is willing to see.",
+    openerImagePrompt: "Mara beside a rain-dark doorway with clean lower-third negative space.",
+    openerVisualMood: "Midnight navy, muted forest green, low-key light, and restrained tension.",
+  };
+  return {
+    ...source,
+    plan: [{
+      kind: "chapter",
+      number: 1,
+      title: chapter.title,
+      purpose: chapter.purpose,
+      openerDeck: chapter.openerDeck,
+      openerImagePrompt: chapter.openerImagePrompt,
+      openerVisualMood: chapter.openerVisualMood,
+    }],
+    sections: [chapter],
+    images: options.image
+      ? [{
+          id: "chapter-opener-image",
+          sectionIndex: 0,
+          sectionTitle: chapter.title,
+          imageData: onePixelJpeg,
+          prompt: chapter.openerImagePrompt,
+          createdAt: "2026-08-26T00:00:00.000Z",
+        }]
+      : [],
+  };
+}
+
 test("dual-book downloads include the book type in every filename stem", () => {
   const fiction = sampleBook();
   const nonfiction: Manuscript = { ...fiction, mode: "nonfiction" };
@@ -163,6 +204,76 @@ test("PDF export produces a non-empty reference PDF", async () => {
   assert.ok(blob.size > 1_000);
 });
 
+test("long-form chapter opener metadata is safe, chapter-specific, and uses saved images only", () => {
+  const book = sampleBook();
+  book.sections[1] = {
+    ...book.sections[1],
+    title: "Chapter 1: The Door That Would Not Forget",
+    openerDeck: "SAMPLE TEXT...",
+    openerImagePrompt: "KDP Edition: Mara waits beside the rain-dark door.",
+    openerVisualMood: "Deep navy and muted forest green under controlled low-key light.",
+    summary: "Mara must decide whether the locked room deserves one final answer.",
+  };
+  book.images = [{
+    id: "saved-chapter-image",
+    sectionIndex: 1,
+    sectionTitle: book.sections[1].title,
+    imageData: onePixelJpeg,
+    prompt: "A rain-dark doorway with clean lower-third negative space.",
+    createdAt: "2026-08-26T00:00:00.000Z",
+  }];
+
+  const openers = getLongFormChapterOpeners(book);
+  assert.equal(openers.length, 1);
+  assert.equal(openers[0].label, "Chapter 1");
+  assert.equal(openers[0].title, "The Door That Would Not Forget");
+  assert.equal(openers[0].deck, "Mara must decide whether the locked room deserves one final answer.");
+  assert.equal(openers[0].usesFallback, false);
+  assert.ok(openers[0].imageData.startsWith("data:image/jpeg;base64,"));
+  assert.doesNotMatch(`${openers[0].title} ${openers[0].deck} ${openers[0].imagePrompt}`, /\.\.\.|…|SAMPLE TEXT|KDP Edition/i);
+  assert.equal(sanitizeChapterOpenerDeck("An incomplete opener without punctuation"), "");
+  for (const placeholder of [
+    "AUTHOR NAME",
+    "YOUR NAME",
+    "BOOK TITLE",
+    "TITLE",
+    "SUBTITLE",
+    "SAMPLE TEXT",
+  ]) {
+    assert.equal(sanitizeChapterOpenerDeck(`${placeholder}.`), "");
+  }
+});
+
+test("reference PDF places one near-full-page opener before a clean chapter body", async () => {
+  const longTitle = "The Door That Remembered Every Promise After the Last Train Crossed the Rain-Soaked City Without Looking Back";
+  const book = chapterOnlyBook({ image: true, title: longTitle });
+  const [opener] = getLongFormChapterOpeners(book);
+  const blob = await exportPdf(book, false);
+  const bytes = await blobBytes(blob);
+  const source = new TextDecoder("latin1").decode(bytes);
+  const pageCount = source.match(/\/Type \/Page\b/g)?.length ?? 0;
+
+  assert.equal(pageCount, 4, "title, contents, chapter opener, and chapter body should each paginate separately");
+  assert.equal(opener.title, longTitle);
+  assert.doesNotMatch(opener.title, /\.\.\.|…/);
+  assert.match(source, /\(CHAPTER 1\) Tj/);
+  assert.match(source, /\/Subtype \/Image/);
+});
+
+test("missing chapter artwork uses the premium opener fallback without crashing", async () => {
+  const book = chapterOnlyBook();
+  const [opener] = getLongFormChapterOpeners(book);
+  const blob = await exportPdf(book, false);
+  const source = new TextDecoder("latin1").decode(await blobBytes(blob));
+  const pageCount = source.match(/\/Type \/Page\b/g)?.length ?? 0;
+
+  assert.equal(opener.usesFallback, true);
+  assert.equal(opener.imageData, "");
+  assert.equal(pageCount, 4);
+  assert.doesNotMatch(source, /\/Subtype \/Image/);
+  assert.match(source, /\(CHAPTER 1\) Tj/);
+});
+
 test("EPUB export includes EPUB3 navigation, NCX fallback, cover metadata, and rich text", async () => {
   const blob = await exportEpub(sampleBook(), false);
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
@@ -197,6 +308,44 @@ test("EPUB export includes EPUB3 navigation, NCX fallback, cover metadata, and r
   assert.match(chapter, /<ul><li>A photograph<\/li><li>A sealed letter<\/li><\/ul>/);
   assert.match(epilogue, /<em>felt<\/em>/);
   assert.doesNotMatch(epilogue, /\*felt\*/);
+});
+
+test("EPUB includes responsive saved chapter opener images while DOCX stays text-only", async () => {
+  const book = sampleBook();
+  book.images = [{
+    id: "epub-chapter-opener",
+    sectionIndex: 1,
+    sectionTitle: book.sections[1].title,
+    imageData: onePixelJpeg,
+    prompt: "A quiet doorway with protected lower-third negative space.",
+    createdAt: "2026-08-26T00:00:00.000Z",
+  }];
+
+  const epubBlob = await exportEpub(book, false);
+  const epubZip = await JSZip.loadAsync(await epubBlob.arrayBuffer());
+  const chapter = await epubZip.file("OEBPS/section-2.xhtml")?.async("string");
+  const opf = await epubZip.file("OEBPS/content.opf")?.async("string");
+  const stylesheet = await epubZip.file("OEBPS/style.css")?.async("string");
+  assert.ok(epubZip.file("OEBPS/chapter-opener-2.jpg"));
+  assert.match(chapter ?? "", /<figure class="chapter-opener"><img src="chapter-opener-2\.jpg"/);
+  assert.match(opf ?? "", /id="chapter-opener-2"[^>]+media-type="image\/jpeg"/);
+  assert.match(stylesheet ?? "", /\.chapter-opener img\{[^}]*width:100%[^}]*height:auto/);
+
+  const docxBlob = await exportDocx(book, false);
+  const docxZip = await JSZip.loadAsync(await docxBlob.arrayBuffer());
+  assert.equal(Object.keys(docxZip.files).some((name) => name.startsWith("word/media/")), false);
+});
+
+test("long-form generation creates opener metadata without automatically generating images", () => {
+  const routeSource = readFileSync(
+    new URL("../app/api/generate/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(routeSource, /opener_deck/);
+  assert.match(routeSource, /opener_image_prompt/);
+  assert.match(routeSource, /opener_visual_mood/);
+  assert.match(routeSource, /must never trigger image generation automatically/i);
+  assert.match(routeSource, /must not request words, letters, captions/i);
 });
 
 test("EPUB normalizes repeated structural labels in section titles", async () => {

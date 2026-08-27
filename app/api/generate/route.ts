@@ -11,6 +11,10 @@ import {
   buildCopywritingGuidance,
   buildVisualArtworkDirection,
 } from "../../creative-direction";
+import {
+  sanitizeChapterOpenerDeck,
+  sanitizeChapterOpenerMetadata,
+} from "../../longform-chapter-openers";
 import type { VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 
 type RequestBody = {
@@ -1091,8 +1095,31 @@ Key points: ${brief.keyPoints}`;
                   description:
                     "The single character whose point of view this chapter is written from. Empty string when the book is not romance.",
                 },
+                opener_deck: {
+                  type: "string",
+                  description:
+                    "One complete 12 to 24 word sentence that introduces the chapter without repeating its title.",
+                },
+                opener_image_prompt: {
+                  type: "string",
+                  description:
+                    "A visual-only, chapter-specific cinematic scene direction with no typography or readable text.",
+                },
+                opener_visual_mood: {
+                  type: "string",
+                  description:
+                    "A compact visual mood describing palette, light, atmosphere, and emotional tone.",
+                },
               },
-              required: ["number", "title", "purpose", "pov"],
+              required: [
+                "number",
+                "title",
+                "purpose",
+                "pov",
+                "opener_deck",
+                "opener_image_prompt",
+                "opener_visual_mood",
+              ],
             },
           },
           conclusion_title: { type: "string" },
@@ -1119,7 +1146,11 @@ Requested main chapters: exactly ${brief.chapterCount}
 ${modeContext}
 ${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n\n${ROMANCE_POV_RULES}\n` : "\nThis book does not use assigned chapter viewpoints. Return an empty pov_leads array and an empty pov string for every chapter.\n"}
 
-Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes. ${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : mode === "fiction" ? "Create one atmospheric, emotionally specific, cover-readable subtitle that does not repeat the title." : "Create one credible cover-readable subtitle that states the intended reader, useful outcome, and practical approach."}${avoidanceRules(avoidNames)}`,
+Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${openingName} and a closing called ${closingName}. In every title field, return only the distinctive descriptive title. Do not include ${openingName}, ${closingName}, "Chapter", or chapter numbers because EB Studio Pro adds those labels during formatting. Build a deliberate progression with no duplicate chapter purposes.
+
+For every numbered chapter, also return chapter opener metadata. opener_deck must be one complete 12 to 24 word sentence, must not repeat the title, and must not contain an ellipsis, placeholder, internal product label, or incomplete thought. opener_image_prompt must describe only one visible, chapter-specific cinematic scene that sets the chapter tone. It must leave clean lower-third or left-side negative space for app-rendered chapter typography and must not request words, letters, captions, signage, logos, watermarks, title text, or other readable text inside the artwork. opener_visual_mood must concisely specify the chapter's palette, lighting, atmosphere, and emotional tone. This metadata supports optional user-requested image creation only and must never trigger image generation automatically.
+
+${requestedSubtitle ? `Return the supplied subtitle exactly as written: ${requestedSubtitle}` : mode === "fiction" ? "Create one atmospheric, emotionally specific, cover-readable subtitle that does not repeat the title." : "Create one credible cover-readable subtitle that states the intended reader, useful outcome, and practical approach."}${avoidanceRules(avoidNames)}`,
       maxOutputTokens: outlineTokenBudget(brief.chapterCount),
     },
     provider,
@@ -1156,13 +1187,22 @@ Return exactly ${brief.chapterCount} numbered chapters plus an opening called ${
       ...(leads[0] ? { pov: leads[0] } : {}),
     },
     ...chapters.map((chapter, index) => {
-      const item = chapter as { title?: unknown; purpose?: unknown };
+      const item = chapter as {
+        title?: unknown;
+        purpose?: unknown;
+        opener_deck?: unknown;
+        opener_image_prompt?: unknown;
+        opener_visual_mood?: unknown;
+      };
       const pov = chapterPovs[index] ?? "";
       return {
         kind: "chapter" as const,
         number: index + 1,
         title: String(item.title),
         purpose: String(item.purpose),
+        openerDeck: sanitizeChapterOpenerDeck(item.opener_deck),
+        openerImagePrompt: sanitizeChapterOpenerMetadata(item.opener_image_prompt),
+        openerVisualMood: sanitizeChapterOpenerMetadata(item.opener_visual_mood),
         ...(pov ? { pov } : {}),
       };
     }),
