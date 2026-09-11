@@ -98,10 +98,20 @@ type AnthropicErrorPayload = {
   };
 };
 
+type KimiErrorPayload = {
+  error?: {
+    code?: string;
+    type?: string;
+    message?: string;
+  };
+};
+
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+const DEFAULT_KIMI_API_BASE = "https://api.moonshot.ai/v1";
+const DEFAULT_KIMI_MODEL = "moonshot-v1-32k";
 
 function bookCreativeContext(mode: Mode, brief: BookBrief) {
   return {
@@ -146,7 +156,7 @@ const visualPageSchema = {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as RequestBody;
-    if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.MOONSHOT_API_KEY) {
       return NextResponse.json(
         { error: "AI generation is not configured yet." },
         { status: 503 },
@@ -230,12 +240,12 @@ export async function POST(request: Request) {
       const detail = error.failures
         .map(
           (failure) =>
-            `${failure.provider === "openai" ? "OpenAI" : "Anthropic"}: ${failure.code}`,
+            `${providerDisplayName(failure.provider)}: ${failure.code}`,
         )
         .join(", ");
       return NextResponse.json(
         {
-          error: `Both AI writing services are unavailable (${detail}). Check the OpenAI and Anthropic credits or access, then try again. Your book details are safe.`,
+          error: `All configured AI writing services are unavailable (${detail}). Check the provider credits or access, then try again. Your book details are safe.`,
           code: "all_providers_unavailable",
           retryable: error.failures.some((failure) => isRetryable(failure)),
         },
@@ -1409,7 +1419,11 @@ async function generateJson(
   const providerOrder = getProviderOrder(choice, preferredProvider);
   if (providerOrder.length === 0) {
     throw new ProviderRequestError(
-      choice === "anthropic" ? "anthropic" : "openai",
+      choice === "anthropic"
+        ? "anthropic"
+        : choice === "kimi"
+          ? "kimi"
+          : "openai",
       503,
       "provider_not_configured",
       "The selected AI provider is not configured.",
@@ -1422,7 +1436,9 @@ async function generateJson(
       const output =
         provider === "openai"
           ? await openAIJson(request)
-          : await anthropicJson(request);
+          : provider === "anthropic"
+            ? await anthropicJson(request)
+            : await kimiJson(request);
       return { output, provider };
     } catch (error) {
       if (!(error instanceof ProviderRequestError)) throw error;
@@ -1438,7 +1454,7 @@ async function generateJson(
   throw new MultiProviderRequestError(failures);
 }
 
-function getProviderOrder(
+export function getProviderOrder(
   choice: AIProvider,
   preferredProvider?: ActiveAIProvider,
 ): ActiveAIProvider[] {
@@ -1446,19 +1462,24 @@ function getProviderOrder(
   if (choice === "anthropic") {
     return process.env.ANTHROPIC_API_KEY ? ["anthropic"] : [];
   }
+  if (choice === "kimi") {
+    return process.env.MOONSHOT_API_KEY ? ["kimi"] : [];
+  }
 
   const available: ActiveAIProvider[] = [];
   const add = (provider: ActiveAIProvider) => {
-    const configured =
-      provider === "openai"
-        ? Boolean(process.env.OPENAI_API_KEY)
-        : Boolean(process.env.ANTHROPIC_API_KEY);
+    const configured = provider === "openai"
+      ? Boolean(process.env.OPENAI_API_KEY)
+      : provider === "anthropic"
+        ? Boolean(process.env.ANTHROPIC_API_KEY)
+        : Boolean(process.env.MOONSHOT_API_KEY);
     if (configured && !available.includes(provider)) available.push(provider);
   };
 
   if (preferredProvider) add(preferredProvider);
   add("openai");
   add("anthropic");
+  add("kimi");
   return available;
 }
 
@@ -1627,16 +1648,114 @@ async function anthropicJson({
   return parseProviderJson("anthropic", outputText);
 }
 
-function resolveOpenAIModel() {
+async function kimiJson({
+  name,
+  schema,
+  instructions,
+  input,
+  maxOutputTokens,
+}: JsonRequest): Promise<JsonObject> {
+  const requestBody = JSON.stringify({
+    model: resolveKimiModel(),
+    messages: [
+      {
+        role: "system",
+        content: `${instructions}\n\nReturn only valid JSON for the ${name} response. It must match this JSON Schema exactly:\n${JSON.stringify(schema)}`,
+      },
+      { role: "user", content: input },
+    ],
+    max_tokens: maxOutputTokens,
+    temperature: 0.35,
+    stream: false,
+  });
+
+  let response: Response | null = null;
+  let detail: KimiErrorPayload | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    response = await fetch(resolveKimiEndpoint(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.MOONSHOT_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: requestBody,
+    });
+
+    if (response.ok) break;
+    detail = (await response.json().catch(() => null)) as KimiErrorPayload | null;
+    const code = detail?.error?.code ?? detail?.error?.type ?? "unknown";
+    const retryable =
+      response.status >= 500 ||
+      (response.status === 429 && code !== "insufficient_quota");
+
+    if (!retryable || attempt === 2) {
+      console.error("Kimi response error", response.status, code);
+      throw new ProviderRequestError(
+        "kimi",
+        response.status,
+        String(code),
+        detail?.error?.message ?? "Kimi request failed.",
+      );
+    }
+
+    const retryAfter = Number(response.headers.get("retry-after"));
+    await delay(
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : 650 * 2 ** attempt,
+    );
+  }
+
+  if (!response?.ok) {
+    throw new ProviderRequestError(
+      "kimi",
+      response?.status ?? 502,
+      detail?.error?.code ?? detail?.error?.type ?? "unknown",
+      detail?.error?.message ?? "Kimi request failed.",
+    );
+  }
+
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const outputText = data.choices?.[0]?.message?.content;
+  if (!outputText) {
+    throw new ProviderRequestError(
+      "kimi",
+      502,
+      "empty_response",
+      "Kimi returned no text.",
+    );
+  }
+  return parseProviderJson("kimi", outputText);
+}
+
+export function resolveOpenAIModel() {
   const configured = process.env.OPENAI_MODEL?.trim();
   return !configured || configured === "gpt-5.6-terra"
     ? DEFAULT_OPENAI_MODEL
     : configured;
 }
 
-function resolveAnthropicModel() {
+export function resolveAnthropicModel() {
   const configured = process.env.ANTHROPIC_MODEL?.trim();
   return configured || DEFAULT_ANTHROPIC_MODEL;
+}
+
+export function resolveKimiModel() {
+  return process.env.KIMI_MODEL?.trim() || DEFAULT_KIMI_MODEL;
+}
+
+export function resolveKimiEndpoint() {
+  const base = process.env.KIMI_API_BASE?.trim() || DEFAULT_KIMI_API_BASE;
+  return `${base.replace(/\/+$/, "")}/chat/completions`;
+}
+
+export function providerDisplayName(provider: ActiveAIProvider) {
+  if (provider === "openai") return "OpenAI";
+  if (provider === "anthropic") return "Anthropic";
+  return "Kimi";
 }
 
 function parseProviderJson(provider: ActiveAIProvider, outputText: string): JsonObject {
@@ -1690,7 +1809,7 @@ function isRetryable(error: ProviderRequestError) {
 }
 
 function mapProviderError(error: ProviderRequestError) {
-  const providerName = error.provider === "openai" ? "OpenAI" : "Anthropic";
+  const providerName = providerDisplayName(error.provider);
 
   if (error.code === "provider_not_configured") {
     return {
