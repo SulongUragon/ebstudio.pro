@@ -450,7 +450,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
         <div>
           <span className="eyebrow"><LayoutGrid size={18} /> Page-based creator</span>
           <h1>Build a visual mini book.</h1>
-          <p>Five to ten designed pages with editable text, consistent art, and comic-ready panels.</p>
+          <p>Five to fifteen designed pages with editable text, consistent art, and comic-ready panels.</p>
         </div>
         {project ? (
           <button className="visual-new-button" onClick={reset}><Plus size={16} /> New visual project</button>
@@ -506,10 +506,24 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
           <fieldset className="visual-inline-options" disabled={locked || Boolean(project)}>
             <legend>Total pages, including cover</legend>
             <div>
-              {([5, 7, 10] as VisualPageCount[]).map(count => (
+              {([5, 7, 10, 15] as VisualPageCount[]).map(count => (
                 <button type="button" key={count} className={brief.pageCount === count ? "selected" : ""} onClick={() => updateBrief("pageCount", count)}>{count}</button>
               ))}
+              <label className="visual-page-count-custom">
+                <span>Custom</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={3}
+                  max={50}
+                  step={1}
+                  value={brief.pageCount}
+                  onChange={event => updateBrief("pageCount", Math.min(50, Math.max(3, Math.round(Number(event.target.value) || 3))))}
+                  aria-label="Custom total page count"
+                />
+              </label>
             </div>
+            <small>Choose any exact length from 3 to 50 pages. Larger books use more AI credits.</small>
           </fieldset>
 
           <fieldset className="visual-inline-options" disabled={locked}>
