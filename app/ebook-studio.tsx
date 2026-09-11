@@ -1469,11 +1469,13 @@ export default function EbookStudio() {
                     ? "Automatic backup enabled"
                     : provider === "openai"
                       ? "OpenAI only"
-                      : "Anthropic Claude only"}
+                      : provider === "anthropic"
+                        ? "Anthropic Claude only"
+                        : "Kimi only"}
                 </small>
               </div>
               <div className="provider-switch" role="radiogroup" aria-label="AI writer">
-                {(["auto", "openai", "anthropic"] as AIProvider[]).map((option) => (
+                {(["auto", "openai", "anthropic", "kimi"] as AIProvider[]).map((option) => (
                   <button
                     type="button"
                     role="radio"
@@ -1492,13 +1494,15 @@ export default function EbookStudio() {
                       ? "Auto"
                       : option === "openai"
                         ? "OpenAI"
-                        : "Claude"}
+                        : option === "anthropic"
+                          ? "Claude"
+                          : "Kimi"}
                   </button>
                 ))}
               </div>
               <p>
-                Auto starts with OpenAI, switches to Claude when needed, and continues
-                from the current section.
+                Auto starts with OpenAI, then tries Claude and Kimi when needed, and
+                continues from the current section.
               </p>
             </div>
 
@@ -2582,5 +2586,7 @@ function stripInlineMarkdown(text: string): ReactNode {
 }
 
 function providerLabel(provider: ActiveAIProvider) {
-  return provider === "openai" ? "OpenAI" : "Claude";
+  if (provider === "openai") return "OpenAI";
+  if (provider === "anthropic") return "Claude";
+  return "Kimi";
 }

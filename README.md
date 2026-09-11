@@ -14,7 +14,7 @@ export a KDP production package with a Kindle Create DOCX, reflowable EPUB,
 - Separate editable dialogue, captions, sound effects, and text-free AI artwork
 - Page-by-page image regeneration plus visual PDF and JPEG page ZIP exports
 - Structured introduction, chapters, and conclusion
-- OpenAI generation with optional Anthropic fallback
+- OpenAI generation with optional Anthropic and Kimi fallback
 - Chapter-by-chapter progress and preview
 - KDP preflight status before EPUB and package export
 - Kindle Create-ready DOCX with semantic chapter headings, true italics, and linked Contents
@@ -36,9 +36,19 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-terra
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-5
+MOONSHOT_API_KEY=
+KIMI_API_BASE=https://api.moonshot.ai/v1
+KIMI_MODEL=moonshot-v1-32k
 ```
 
 Never commit real API keys.
+
+Kimi uses Moonshot's OpenAI-compatible chat completions endpoint. Keep
+`KIMI_API_BASE` on the international `.ai` host unless your Moonshot account
+uses the China `.cn` platform.
+
+The provider selector applies to writing. AI cover and page artwork still use
+the configured OpenAI image service.
 
 ## Vercel
 
@@ -53,5 +63,5 @@ to the domain's Cloudflare DNS zone. Keep SSL/TLS encryption set to Full.
 
 ## Technology
 
-Next.js, React, TypeScript, OpenAI Responses API, Anthropic Messages API,
+Next.js, React, TypeScript, OpenAI Responses API, Anthropic Messages API, Kimi Chat Completions API,
 JSZip, jsPDF, and DOCX.
