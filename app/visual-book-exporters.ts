@@ -55,6 +55,19 @@ const NOTEBOOK = {
   tape: "rgba(223,211,174,.80)",
 };
 
+const PRACTICAL = {
+  forest: "#214e45",
+  forestLight: "#2f6659",
+  sage: "#a8b9a5",
+  sageWash: "#e7ede7",
+  cream: "#f7f1e7",
+  terracotta: "#c96f4a",
+  gold: "#d8b36a",
+  ink: "#17352f",
+  muted: "#5e6c67",
+  white: "#ffffff",
+};
+
 export async function exportVisualPdf(project: VisualBookProject) {
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [W, H] });
@@ -112,7 +125,9 @@ export async function renderVisualPage(project: VisualBookProject, page: VisualB
   } else {
     beginVisualTextAudit(c);
     try {
-      if (isNotebookReflectionProject(project)) {
+      if (isWarmPracticalGuideProject(project)) {
+        await drawWarmPracticalGuidePage(c, project, page);
+      } else if (isNotebookReflectionProject(project)) {
         await drawNotebookReflectionPage(c, project, page);
       } else {
         await drawEditorialVisual(c, project, page);
@@ -151,6 +166,10 @@ export function getVisualTemplate(project: VisualBookProject): string {
 
 export function isNotebookReflectionProject(project: VisualBookProject) {
   return !isComicProject(project) && getVisualTemplate(project) === "notebook-reflection";
+}
+
+export function isWarmPracticalGuideProject(project: VisualBookProject) {
+  return !isComicProject(project) && getVisualTemplate(project) === "warm-practical-guide";
 }
 
 export function resolveEditorialLayout(
@@ -207,6 +226,188 @@ async function drawEditorialVisual(c: CanvasRenderingContext2D, project: VisualB
   }
 
   await drawImageTopEditorial(c, page, pageIndex);
+}
+
+async function drawWarmPracticalGuidePage(
+  c: CanvasRenderingContext2D,
+  project: VisualBookProject,
+  page: VisualBookPage,
+) {
+  drawWarmPracticalPaper(c);
+  if (page.role === "cover") {
+    drawWarmPracticalCover(c, project, page);
+    return;
+  }
+  if (page.role === "cta") {
+    drawWarmPracticalClosing(c, project, page);
+    return;
+  }
+
+  const copy = buildVisualPageSections(page.body, page.title);
+  drawWarmPracticalHeader(c, project, page);
+  drawWarmPracticalBadge(c, "CHAPTER " + Math.max(1, page.pageNumber - 1));
+
+  c.fillStyle = PRACTICAL.forest;
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: 76, y: 190, maxWidth: 1000, maxLines: 3,
+    fontSize: 64, minFontSize: 42, lineHeight: 72,
+    fontFamily: "Georgia", fontWeight: "700",
+    preserveAll: true, textRole: "headline",
+  }).endY;
+
+  c.fillStyle = PRACTICAL.terracotta;
+  fitTextWithoutEllipsis(c, copy.note, {
+    x: 78, y: afterTitle + 36, maxWidth: 980, maxLines: 2,
+    fontSize: 22, minFontSize: 17, lineHeight: 31, fontFamily: "Arial",
+  });
+  c.strokeStyle = PRACTICAL.gold;
+  c.lineWidth = 4;
+  c.beginPath();
+  c.moveTo(78, afterTitle + 116);
+  c.lineTo(230, afterTitle + 116);
+  c.stroke();
+
+  const bodyY = afterTitle + 166;
+  c.fillStyle = PRACTICAL.ink;
+  const bodyType = visualBodyTypography(copy.body);
+  const afterBody = fitTextWithoutEllipsis(c, copy.body, {
+    x: 78, y: bodyY, maxWidth: 1010,
+    maxLines: lineBudgetBefore(bodyY, 1115, bodyType, 21),
+    fontSize: Math.min(31, bodyType.fontSize), minFontSize: 21,
+    lineHeight: Math.min(46, bodyType.lineHeight), fontFamily: "Arial",
+  }).endY;
+
+  const calloutY = Math.min(Math.max(afterBody + 48, 1100), 1240);
+  drawWarmPracticalCallout(c, "REAL-LIFE MOMENT", copy.highlights[0] || copy.note, calloutY);
+  drawWarmPracticalAction(c, copy.highlights[1] || copy.highlights[0] || copy.note, calloutY + 300);
+  drawWarmPracticalFooter(c, project, page);
+}
+
+function drawWarmPracticalPaper(c: CanvasRenderingContext2D) {
+  c.fillStyle = PRACTICAL.cream;
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = PRACTICAL.sageWash;
+  c.beginPath();
+  c.arc(W + 12, -18, 190, 0, Math.PI * 2);
+  c.fill();
+}
+
+function drawWarmPracticalCover(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
+  c.fillStyle = PRACTICAL.forest;
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = PRACTICAL.forestLight;
+  c.beginPath(); c.arc(W - 75, 85, 290, 0, Math.PI * 2); c.fill();
+  c.fillStyle = PRACTICAL.terracotta;
+  c.beginPath(); c.arc(W + 30, H + 10, 270, 0, Math.PI * 2); c.fill();
+  c.fillStyle = PRACTICAL.gold;
+  c.beginPath(); c.arc(145, 170, 24, 0, Math.PI * 2); c.fill();
+  c.font = "700 21px Arial";
+  drawSafeTextLine(c, "A PRACTICAL GUIDE", 86, 310, "headline");
+
+  c.fillStyle = PRACTICAL.white;
+  const afterTitle = fitTextWithoutEllipsis(c, project.title || page.title, {
+    x: 86, y: 430, maxWidth: 960, maxLines: 4,
+    fontSize: 92, minFontSize: 54, lineHeight: 102,
+    fontFamily: "Georgia", fontWeight: "700",
+    preserveAll: true, textRole: "headline",
+  }).endY;
+  c.strokeStyle = PRACTICAL.gold;
+  c.lineWidth = 5;
+  c.beginPath(); c.moveTo(88, afterTitle + 42); c.lineTo(280, afterTitle + 42); c.stroke();
+
+  const subtitle = fitCompleteSentenceOnly(project.subtitle, page.body);
+  if (subtitle) {
+    c.fillStyle = PRACTICAL.cream;
+    fitTextWithoutEllipsis(c, subtitle, {
+      x: 90, y: afterTitle + 112, maxWidth: 860, maxLines: 4,
+      fontSize: 31, minFontSize: 22, lineHeight: 46,
+      fontFamily: "Arial", preserveAll: true,
+    });
+  }
+  c.fillStyle = PRACTICAL.cream;
+  c.font = "700 21px Arial";
+  drawSafeTextLine(c, project.author.toUpperCase(), 90, H - 94, "headline");
+}
+
+function drawWarmPracticalHeader(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
+  c.fillStyle = PRACTICAL.muted;
+  c.font = "18px Arial";
+  drawSafeTextLine(c, project.title.toUpperCase(), 76, 68, "headline");
+  c.textAlign = "right";
+  drawSafeTextLine(c, String(page.pageNumber).padStart(2, "0"), W - 76, 68, "headline");
+  c.textAlign = "left";
+}
+
+function drawWarmPracticalBadge(c: CanvasRenderingContext2D, label: string) {
+  c.fillStyle = PRACTICAL.terracotta;
+  c.fillRect(76, 96, 174, 38);
+  c.fillStyle = PRACTICAL.white;
+  c.font = "700 16px Arial";
+  drawSafeTextLine(c, label, 92, 122, "headline");
+}
+
+function drawWarmPracticalCallout(c: CanvasRenderingContext2D, label: string, source: string, y: number) {
+  c.fillStyle = PRACTICAL.white;
+  c.fillRect(76, y, 1048, 245);
+  c.fillStyle = PRACTICAL.terracotta;
+  c.font = "700 18px Arial";
+  drawSafeTextLine(c, label, 108, y + 48, "headline");
+  c.fillStyle = PRACTICAL.ink;
+  fitTextWithoutEllipsis(c, source, {
+    x: 108, y: y + 92, maxWidth: 980, maxLines: 4,
+    fontSize: 25, minFontSize: 18, lineHeight: 36, fontFamily: "Arial",
+  });
+}
+
+function drawWarmPracticalAction(c: CanvasRenderingContext2D, source: string, y: number) {
+  c.fillStyle = PRACTICAL.forest;
+  c.font = "700 18px Arial";
+  drawSafeTextLine(c, "A SMALL STEP THIS WEEK", 78, y, "headline");
+  c.fillStyle = PRACTICAL.muted;
+  fitTextWithoutEllipsis(c, source, {
+    x: 78, y: y + 42, maxWidth: 1010, maxLines: 3,
+    fontSize: 23, minFontSize: 17, lineHeight: 34,
+    fontFamily: "Georgia", fontStyle: "italic",
+  });
+}
+
+function drawWarmPracticalFooter(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
+  c.strokeStyle = PRACTICAL.sage;
+  c.lineWidth = 2;
+  c.beginPath(); c.moveTo(76, H - 70); c.lineTo(W - 76, H - 70); c.stroke();
+  c.fillStyle = PRACTICAL.muted;
+  c.font = "16px Arial";
+  drawSafeTextLine(c, project.title.toUpperCase(), 76, H - 38, "headline");
+  c.textAlign = "right";
+  drawSafeTextLine(c, String(page.pageNumber), W - 76, H - 38, "headline");
+  c.textAlign = "left";
+}
+
+function drawWarmPracticalClosing(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
+  c.fillStyle = PRACTICAL.forest;
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = PRACTICAL.terracotta;
+  c.beginPath(); c.arc(W + 30, -20, 280, 0, Math.PI * 2); c.fill();
+  c.fillStyle = PRACTICAL.forestLight;
+  c.beginPath(); c.arc(40, H + 10, 250, 0, Math.PI * 2); c.fill();
+  c.fillStyle = PRACTICAL.cream;
+  const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+    x: 86, y: 420, maxWidth: 980, maxLines: 4,
+    fontSize: 66, minFontSize: 42, lineHeight: 76,
+    fontFamily: "Georgia", fontWeight: "700",
+    preserveAll: true, textRole: "headline",
+  }).endY;
+  c.strokeStyle = PRACTICAL.gold;
+  c.lineWidth = 5;
+  c.beginPath(); c.moveTo(88, afterTitle + 44); c.lineTo(280, afterTitle + 44); c.stroke();
+  c.fillStyle = PRACTICAL.white;
+  fitTextWithoutEllipsis(c, page.body, {
+    x: 90, y: afterTitle + 120, maxWidth: 930, maxLines: 10,
+    fontSize: 27, minFontSize: 19, lineHeight: 42, fontFamily: "Arial",
+  });
+  c.fillStyle = PRACTICAL.gold;
+  c.font = "700 18px Arial";
+  drawSafeTextLine(c, project.author.toUpperCase(), 90, H - 90, "headline");
 }
 
 async function drawNotebookReflectionPage(
