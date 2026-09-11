@@ -3,8 +3,8 @@ import type { ActiveAIProvider } from "./book-types";
 export type VisualProjectMode = "visual" | "comic";
 export type VisualBookKind = "illustrated-story" | "children-story" | "visual-guide" | "motivational" | "recipe-activity" | "book-teaser" | "lead-magnet" | "product-guide";
 export type ComicFormat = "classic" | "graphic-novel" | "romance" | "noir" | "manga" | "children" | "webtoon" | "comic-strip";
-export type VisualPageCount = 5 | 7 | 10;
-export type VisualStyle = "cinematic-editorial" | "warm-storybook" | "dark-luxury" | "clean-modern" | "bold-color" | "ink-noir" | "notebook-reflection";
+export type VisualPageCount = number;
+export type VisualStyle = "cinematic-editorial" | "warm-storybook" | "dark-luxury" | "clean-modern" | "bold-color" | "ink-noir" | "notebook-reflection" | "warm-practical-guide";
 export type ComicDialogue = { speaker: string; text: string };
 export type ComicPanel = { id: string; order: number; scene: string; camera: string; dialogue: ComicDialogue[]; caption: string; soundEffect: string; imageData?: string };
 export type VisualBookPage = { id: string; pageNumber: number; role: "cover" | "content" | "cta"; title: string; body: string; imagePrompt: string; imageData?: string; layout: "full-bleed" | "image-top" | "image-left" | "image-right" | "quote"; panels: ComicPanel[] };
@@ -36,5 +36,6 @@ export const VISUAL_STYLES: Array<{ id: VisualStyle; label: string }> = [
   { id: "dark-luxury", label: "Dark Luxury" }, { id: "clean-modern", label: "Clean Modern" },
   { id: "bold-color", label: "Bold Color" }, { id: "ink-noir", label: "Ink Noir" },
   { id: "notebook-reflection", label: "Notebook Reflection" },
+  { id: "warm-practical-guide", label: "Warm Practical Guide" },
 ];
 export const blankVisualBookBrief = (mode: VisualProjectMode): VisualBookBrief => ({ mode, title: "", subtitle: "", author: "Sulong", kind: "illustrated-story", comicFormat: "graphic-novel", premise: "", audience: "", pageCount: 7, visualStyle: mode === "comic" ? "dark-luxury" : "cinematic-editorial", characterBible: "", palette: "" });

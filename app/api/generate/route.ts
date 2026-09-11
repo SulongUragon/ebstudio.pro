@@ -507,7 +507,10 @@ Preserve all essential information, scenes, arguments, examples, and meaning. Re
 async function createVisualStoryboard(body: RequestBody) {
   const project = body.visualProject;
   if (!project) throw new Error("Missing visual book details.");
-  const pageCount = [5, 7, 10].includes(Number(project.pageCount)) ? Number(project.pageCount) : 7;
+  const requestedPageCount = Math.round(Number(project.pageCount));
+  const pageCount = Number.isFinite(requestedPageCount)
+    ? Math.min(50, Math.max(3, requestedPageCount))
+    : 7;
   const comic = project.mode === "comic";
   const visualDirectionGuidance = comic
     ? ""
@@ -529,7 +532,9 @@ ${comic
   : `This is an image-rich mini ebook, not a chapter book. Keep the cover body to a focused 12 to 28 word hook. Every non-cover page must contain 90 to 150 words across 4 to 7 complete sentences. Build one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflective observations that can become designed takeaway sections. For fiction and memoir, use concrete scene detail, interiority, and consequence. For guides, workbooks, lead magnets, and self-help, use explanation, practical application, and a meaningful reflection or takeaway. Use the available page space fully, but never repeat an idea merely to increase length. Return an empty panels array and panel_count 0 on every page. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks.`}
 
 Maintain a single narrative or instructional progression with no repeated page purpose. The title supplied by the author is authoritative and must not be changed. If the subtitle is blank, create one in refined_subtitle. If the author supplied one, return it exactly. Strengthen the character bible and palette only when their fields are blank. Return exactly ${pageCount} page objects numbered 1 through ${pageCount}.`,
-    maxOutputTokens: comic ? 9000 : 8000,
+    maxOutputTokens: comic
+      ? Math.min(30000, Math.max(9000, pageCount * 600))
+      : Math.min(30000, Math.max(8000, pageCount * 700)),
   }, body.provider ?? "auto", body.preferredProvider);
   const pages = Array.isArray(generated.output.pages) ? generated.output.pages : [];
   if (pages.length !== pageCount) throw new ProviderRequestError(generated.provider, 502, "invalid_response", `The visual storyboard did not contain exactly ${pageCount} pages.`);

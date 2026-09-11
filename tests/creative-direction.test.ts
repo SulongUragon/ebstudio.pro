@@ -60,6 +60,7 @@ test("every existing visual direction expands into a complete creative brief", (
     "bold-color",
     "ink-noir",
     "notebook-reflection",
+    "warm-practical-guide",
     "photoreal-title",
     "minimal-real-title",
     "fully-loaded-title",
@@ -497,6 +498,8 @@ test("premium recommendations map back to backward-compatible visual style IDs",
   assert.equal(resolveVisualStyleId("Premium Nonfiction"), "clean-modern");
   assert.equal(resolveVisualStyleId("Founder/Business Authority"), "clean-modern");
   assert.equal(resolveVisualStyleId("Notebook Reflection"), "notebook-reflection");
+  assert.equal(resolveVisualStyleId("Warm Practical Guide"), "warm-practical-guide");
+  assert.equal(resolveVisualStyleId("Compassionate Guide"), "warm-practical-guide");
   assert.equal(resolveVisualStyleId("Unrelated style"), null);
 });
 

@@ -374,6 +374,18 @@ const VISUAL_DIRECTION_PRESETS: Record<string, VisualDirectionPreset> = {
     avoid: "scrapbook clutter, childish doodles, fake handwriting overload, messy overlap, and novelty stationery",
     bestFor: "memoir, self-help, reflective guides, workbooks, personal growth, and creator lead magnets",
   },
+  "warm-practical-guide": {
+    label: "Warm Practical Guide",
+    mood: "steady, compassionate, useful, calm, and premium without feeling clinical",
+    lighting: "soft natural light with gentle warmth and restrained contrast",
+    composition: "text-first editorial pages with generous whitespace, one clear hierarchy, rounded callout cards, and small organic accents",
+    subject: "one believable everyday moment or simple symbolic detail tied directly to the reader's situation",
+    background: "warm cream paper with deep forest green structure, pale sage shapes, muted terracotta labels, and restrained gold rules",
+    palette: "warm cream, deep forest green, pale sage, muted terracotta, antique gold, and dark readable ink",
+    typography: "elegant readable serif titles paired with a clean humanist sans for body copy",
+    avoid: "clinical worksheets, childish family icons, generic stock-photo smiles, crowded decoration, neon color, and dense walls of text",
+    bestFor: "parenting guides, caregiving resources, wellness education, practical self-help, family support, and compassionate lead magnets",
+  },
   "real-person": {
     label: "Real Person",
     mood: "believable, emotionally specific, intimate, and editorial",
@@ -1131,6 +1143,9 @@ export function resolveVisualStyleId(value: string): VisualStyle | null {
     "bold-color": "bold-color",
     "ink-noir": "ink-noir",
     "notebook-reflection": "notebook-reflection",
+    "warm-practical-guide": "warm-practical-guide",
+    "practical-guide": "warm-practical-guide",
+    "compassionate-guide": "warm-practical-guide",
   };
   return exact[key] ?? null;
 }
