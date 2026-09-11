@@ -47,6 +47,9 @@ Kimi uses Moonshot's OpenAI-compatible chat completions endpoint. Keep
 `KIMI_API_BASE` on the international `.ai` host unless your Moonshot account
 uses the China `.cn` platform.
 
+The provider selector applies to writing. AI cover and page artwork still use
+the configured OpenAI image service.
+
 ## Vercel
 
 Import this repository in Vercel and add the same environment variables under
