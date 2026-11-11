@@ -44,6 +44,13 @@ import {
   shortSectionIndexes,
   tenseOutlierIndexes,
 } from "./exporters";
+import {
+  exportNarrationScript,
+  exportPaperbackPdf,
+  getPaperbackReadiness,
+  PAPERBACK_TRIMS,
+  type PaperbackTrim,
+} from "./print-exporters";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
 import ExistingEbookOptimizer from "./existing-ebook-optimizer";
@@ -230,6 +237,7 @@ export default function EbookStudio() {
   const [titlePromptDismissed, setTitlePromptDismissed] = useState(false);
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
   const [exporting, setExporting] = useState("");
+  const [paperbackTrim, setPaperbackTrim] = useState<PaperbackTrim>("6x9");
   const [repairingSection, setRepairingSection] = useState<number | null>(null);
   const [companionSource, setCompanionSource] = useState<CompanionSource | null>(null);
   const [isCreatingCompanion, setIsCreatingCompanion] = useState(false);
@@ -1180,12 +1188,14 @@ export default function EbookStudio() {
     });
   }
 
-  async function runExport(format: "bundle" | "cover" | "docx" | "pdf" | "epub") {
+  async function runExport(format: ExportFormat) {
     if (!manuscript || manuscript.sections.length === 0) return;
     setExporting(format);
     setError("");
     try {
-      if (format === "bundle") await exportBundle(manuscript);
+      if (format === "bundle") await exportBundle(manuscript, true, { paperbackTrim });
+      if (format === "paperback") await exportPaperbackPdf(manuscript, true, { trim: paperbackTrim });
+      if (format === "narration") await exportNarrationScript(manuscript);
       if (format === "docx") await exportDocx(manuscript);
       if (format === "pdf") await exportPdf(manuscript);
       if (format === "epub") await exportEpub(manuscript);
@@ -1819,6 +1829,8 @@ export default function EbookStudio() {
             setActiveSection={setActiveSection}
             exporting={exporting}
             onExport={runExport}
+            paperbackTrim={paperbackTrim}
+            onPaperbackTrimChange={setPaperbackTrim}
             activeProvider={activeProvider}
             onSaveCover={saveCover}
             onSaveAuthor={saveAuthorName}
@@ -1993,6 +2005,8 @@ function DualBookPreview({
   );
 }
 
+type ExportFormat = "bundle" | "cover" | "docx" | "pdf" | "epub" | "paperback" | "narration";
+
 function BookPreview({
   manuscript,
   status,
@@ -2001,6 +2015,8 @@ function BookPreview({
   setActiveSection,
   exporting,
   onExport,
+  paperbackTrim,
+  onPaperbackTrimChange,
   activeProvider,
   onSaveCover,
   onSaveAuthor,
@@ -2018,7 +2034,9 @@ function BookPreview({
   activeSection: number;
   setActiveSection: (index: number) => void;
   exporting: string;
-  onExport: (format: "bundle" | "cover" | "docx" | "pdf" | "epub") => void;
+  onExport: (format: ExportFormat) => void;
+  paperbackTrim: PaperbackTrim;
+  onPaperbackTrimChange: (trim: PaperbackTrim) => void;
   activeProvider: ActiveAIProvider | null;
   onSaveCover: (cover: NonNullable<Manuscript["cover"]>) => void;
   onSaveAuthor: (author: string) => void;
@@ -2083,6 +2101,7 @@ function BookPreview({
   );
   const kdpReadiness = getKdpReadiness(manuscript);
   const coverReadiness = getCoverReadiness(manuscript);
+  const paperbackReadiness = getPaperbackReadiness(manuscript);
   const canResume =
     typeof resumeFrom === "number" &&
     typeof resumeTotal === "number" &&
@@ -2156,6 +2175,36 @@ function BookPreview({
               <Download size={16} />
               {exporting === "cover" ? "Preparing" : "Cover JPG"}
             </button>
+            <span className="paperback-export">
+              <select
+                aria-label="Paperback trim size"
+                value={paperbackTrim}
+                onChange={(event) => onPaperbackTrimChange(event.target.value as PaperbackTrim)}
+                disabled={Boolean(exporting)}
+              >
+                {(Object.keys(PAPERBACK_TRIMS) as PaperbackTrim[]).map((trim) => (
+                  <option key={trim} value={trim}>
+                    {PAPERBACK_TRIMS[trim].label}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => onExport("paperback")}
+                disabled={Boolean(exporting) || !paperbackReadiness.ready}
+                title="Print-ready KDP paperback interior with mirrored margins and embedded fonts"
+              >
+                <BookOpen size={16} />
+                {exporting === "paperback" ? "Typesetting" : "Paperback PDF"}
+              </button>
+            </span>
+            <button
+              onClick={() => onExport("narration")}
+              disabled={Boolean(exporting) || !paperbackReadiness.ready}
+              title="Prompter-style audiobook narration script"
+            >
+              <FileText size={16} />
+              {exporting === "narration" ? "Preparing" : "Narration Script"}
+            </button>
           </div>
         ) : null}
       </div>
@@ -2165,7 +2214,7 @@ function BookPreview({
           <strong>{kdpReadiness.ready ? "KDP package ready" : "KDP preflight"}</strong>
           <span>
             {kdpReadiness.ready
-              ? "DOCX, EPUB, and the separate 1600 × 2560 cover can now be exported."
+              ? "DOCX, EPUB, the 1600 × 2560 cover, the paperback interior, and the narration script can now be exported."
               : kdpReadiness.errors[0]}
           </span>
           {incompleteSectionIndex >= 0 ? (

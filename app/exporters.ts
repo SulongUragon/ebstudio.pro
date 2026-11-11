@@ -7,20 +7,20 @@ import {
   getLongFormChapterOpeners,
 } from "./longform-chapter-openers";
 
-type InlineToken = {
+export type InlineToken = {
   text: string;
   bold?: boolean;
   italics?: boolean;
   code?: boolean;
 };
 
-type RichBlock =
+export type RichBlock =
   | { type: "paragraph"; inlines: InlineToken[] }
   | { type: "heading"; level: 2 | 3; inlines: InlineToken[] }
   | { type: "list"; ordered: boolean; items: InlineToken[][] }
   | { type: "scene-break" };
 
-type NormalizedSection = {
+export type NormalizedSection = {
   sourceIndex: number;
   kind: SectionKind;
   number: number;
@@ -28,7 +28,7 @@ type NormalizedSection = {
   content: string;
 };
 
-type NormalizedBook = {
+export type NormalizedBook = {
   id: string;
   mode: Mode;
   title: string;
@@ -1166,30 +1166,60 @@ export async function exportCover(book: Manuscript, shouldDownload = true) {
   return blob;
 }
 
-export async function exportBundle(book: Manuscript, shouldDownload = true) {
+export type BundleOptions = {
+  paperbackTrim?: import("./print-exporters").PaperbackTrim;
+  fontLoader?: import("./print-exporters").PrintFontLoader;
+};
+
+export async function exportBundle(book: Manuscript, shouldDownload = true, options: BundleOptions = {}) {
   const readiness = getKdpReadiness(book);
   if (!readiness.ready) throw new Error(readiness.errors[0]);
   const exportBook = normalizeExportBook(book);
   const { default: JSZip } = await import("jszip");
-  const [docxBlob, pdfBlob, epubBlob, coverBlob] = await Promise.all([
+  // Loaded on demand so the print fonts and typesetter stay out of the main bundle.
+  const print = await import("./print-exporters");
+  const [docxBlob, pdfBlob, epubBlob, coverBlob, paperback, narrationBlob] = await Promise.all([
     exportDocx(book, false),
     exportPdf(book, false),
     exportEpub(book, false),
     exportCover(book, false),
+    // A book too short for KDP print still gets its ebook package; the guide
+    // explains why the paperback interior was left out.
+    print
+      .createPaperbackPdf(book, { trim: options.paperbackTrim, fontLoader: options.fontLoader })
+      .catch((error: unknown) => (error instanceof Error ? error : new Error(String(error)))),
+    print.exportNarrationScript(book, false),
   ]);
-  const [docxData, pdfData, epubData, coverData] = await Promise.all([
+  const [docxData, pdfData, epubData, coverData, narrationData] = await Promise.all([
     docxBlob.arrayBuffer(),
     pdfBlob.arrayBuffer(),
     epubBlob.arrayBuffer(),
     coverBlob.arrayBuffer(),
+    narrationBlob.arrayBuffer(),
   ]);
   const filename = exportFilenameStem(exportBook);
+  const narrationName = print.narrationFilename(exportBook);
   const bundle = new JSZip();
   bundle.file(`${filename}-Kindle-Create.docx`, docxData);
   bundle.file(`${filename}.epub`, epubData);
   bundle.file(`${filename}-KDP-Cover.jpg`, coverData);
   bundle.file(`${filename}-Reference.pdf`, pdfData);
-  bundle.file("KDP-UPLOAD-GUIDE.txt", kdpUploadGuide(exportBook));
+  bundle.file(narrationName, narrationData);
+  let printDetails: PrintGuideDetails;
+  if (paperback instanceof Error) {
+    printDetails = { narrationName, paperbackSkipped: paperback.message };
+  } else {
+    const paperbackName = print.paperbackFilename(exportBook, paperback.trim);
+    bundle.file(paperbackName, await paperback.blob.arrayBuffer());
+    printDetails = {
+      narrationName,
+      paperbackName,
+      trimLabel: print.PAPERBACK_TRIMS[paperback.trim].label,
+      pageCount: paperback.pageCount,
+      insideMarginInches: paperback.insideMarginInches,
+    };
+  }
+  bundle.file("KDP-UPLOAD-GUIDE.txt", kdpUploadGuide(exportBook, printDetails));
   const zipBlob = await bundle.generateAsync({
     type: "blob",
     mimeType: "application/zip",
@@ -1200,7 +1230,29 @@ export async function exportBundle(book: Manuscript, shouldDownload = true) {
   return zipBlob;
 }
 
-function kdpUploadGuide(book: NormalizedBook) {
+type PrintGuideDetails =
+  | {
+      narrationName: string;
+      paperbackName: string;
+      trimLabel: string;
+      pageCount: number;
+      insideMarginInches: number;
+    }
+  | { narrationName: string; paperbackSkipped: string };
+
+function paperbackGuide(print: PrintGuideDetails) {
+  if ("paperbackSkipped" in print) {
+    return `PAPERBACK
+The paperback interior was not included. ${print.paperbackSkipped}`;
+  }
+  return `PAPERBACK
+1. In KDP, create the paperback edition and choose trim size ${print.trimLabel}, no bleed.
+2. Upload ${print.paperbackName} as the manuscript. It is ${print.pageCount} pages with mirrored margins (inside ${print.insideMarginInches.toFixed(3)} in) and embedded fonts.
+3. Build the paperback cover in KDP Cover Creator or upload a full-wrap cover sized for ${print.pageCount} pages.
+4. Order a proof copy before publishing.`;
+}
+
+function kdpUploadGuide(book: NormalizedBook, print: PrintGuideDetails) {
   const filename = exportFilenameStem(book);
   return `EB STUDIO PRO - KDP UPLOAD GUIDE
 
@@ -1213,6 +1265,7 @@ PACKAGE CONTENTS
 - ${filename}.epub - Reflowable ebook alternative
 - ${filename}-KDP-Cover.jpg - 1600 x 2560 marketing cover
 - ${filename}-Reference.pdf - Fixed-layout review copy
+${"paperbackName" in print ? `- ${print.paperbackName} - Print-ready paperback interior\n` : ""}- ${print.narrationName} - Prompter-style narration script
 
 RECOMMENDED KINDLE WORKFLOW
 1. Open ${filename}-Kindle-Create.docx in Amazon Kindle Create.
@@ -1227,6 +1280,11 @@ You may upload ${filename}.epub instead of KPF. Do not upload KPF and EPUB toget
 
 PDF
 The PDF is a polished reference and proofing copy. It is not the recommended reflowable Kindle manuscript and should not replace the KPF or EPUB upload.
+
+${paperbackGuide(print)}
+
+NARRATION
+${print.narrationName} is a prompter-style script for audiobook recording, with one sentence per line, pause cues, and runtime estimates.
 `;
 }
 
@@ -1239,7 +1297,7 @@ function xhtmlPage(title: string, body: string) {
 </html>`;
 }
 
-function parseRichBlocks(content: unknown, sectionTitle = "", sectionLabel = ""): RichBlock[] {
+export function parseRichBlocks(content: unknown, sectionTitle = "", sectionLabel = ""): RichBlock[] {
   const source = removeLeadingDuplicateHeading(cleanText(content), sectionTitle, sectionLabel);
   const lines = source.split("\n");
   const blocks: RichBlock[] = [];
@@ -1397,13 +1455,13 @@ function removeLeadingDuplicateHeading(content: string, title: string, label: st
   return lines.join("\n");
 }
 
-function sectionRole(section: NormalizedSection, mode: Mode) {
+export function sectionRole(section: NormalizedSection, mode: Mode) {
   if (section.kind === "introduction") return mode === "fiction" ? "Prologue" : "Introduction";
   if (section.kind === "conclusion") return mode === "fiction" ? "Epilogue" : "Conclusion";
   return `Chapter ${section.number}`;
 }
 
-function sectionTocLabel(section: NormalizedSection, mode: Mode) {
+export function sectionTocLabel(section: NormalizedSection, mode: Mode) {
   const role = sectionRole(section, mode);
   const descriptiveTitle = sectionDescriptiveTitle(section, mode);
   return normalizeHeading(descriptiveTitle) === normalizeHeading(role)
@@ -1411,7 +1469,7 @@ function sectionTocLabel(section: NormalizedSection, mode: Mode) {
     : `${role}: ${descriptiveTitle}`;
 }
 
-function sectionDescriptiveTitle(section: NormalizedSection, mode: Mode) {
+export function sectionDescriptiveTitle(section: NormalizedSection, mode: Mode) {
   const role = sectionRole(section, mode);
   if (normalizeHeading(section.title) === normalizeHeading(role)) return role;
   const rolePrefix = new RegExp(
@@ -1456,7 +1514,7 @@ function safeFilename(value: unknown) {
   return cleanText(value).normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 90) || "eb-studio-pro-book";
 }
 
-function downloadBlob(blob: Blob, filename: string) {
+export function downloadBlob(blob: Blob, filename: string) {
   if (!(blob instanceof Blob) || blob.size === 0) throw new Error("The generated file was empty.");
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -1469,7 +1527,7 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-function normalizeExportBook(book: Manuscript): NormalizedBook {
+export function normalizeExportBook(book: Manuscript): NormalizedBook {
   const rawSections = Array.isArray(book?.sections) ? book.sections : [];
   const sections = rawSections.map((section, index) => {
     const kind: SectionKind = section?.kind === "introduction" || section?.kind === "conclusion" ? section.kind : "chapter";
@@ -1496,7 +1554,7 @@ function normalizeExportBook(book: Manuscript): NormalizedBook {
   };
 }
 
-function copyrightYear(value: string) {
+export function copyrightYear(value: string) {
   const year = new Date(value).getUTCFullYear();
   return Number.isFinite(year) ? year : new Date().getUTCFullYear();
 }
@@ -1532,7 +1590,7 @@ export function normalizeDashes(value: string) {
     .replace(/\.\.\.\s*\.\.\./g, "...");
 }
 
-function cleanText(value: unknown) {
+export function cleanText(value: unknown) {
   const input = normalizeDashes(String(value ?? "")).replace(/\r\n?/g, "\n");
   let output = "";
   for (let index = 0; index < input.length; index += 1) {

@@ -3,7 +3,8 @@
 EB Studio Pro is an AI ebook creation suite for generating complete fiction and
 non-fiction books chapter by chapter. Authors can preview the finished book and
 export a KDP production package with a Kindle Create DOCX, reflowable EPUB,
-1600 × 2560 JPEG cover, PDF reference copy, and upload guide.
+1600 × 2560 JPEG cover, print-ready paperback interior PDF, narration script,
+PDF reference copy, and upload guide.
 
 ## Features
 
@@ -20,6 +21,11 @@ export a KDP production package with a Kindle Create DOCX, reflowable EPUB,
 - Kindle Create-ready DOCX with semantic chapter headings, true italics, and linked Contents
 - Reflowable EPUB 3 with HTML TOC, logical navigation, NCX fallback, metadata, and internal cover declaration
 - Separate 1600 × 2560 KDP marketing cover JPEG
+- Print-ready KDP paperback interior PDF in 6 × 9, 5.5 × 8.5, or 5 × 8 in, with
+  mirrored margins, a gutter sized to the final page count, chapters opening on
+  right-hand pages, running heads, page-numbered Contents, and embedded EB Garamond
+- Prompter-style narration script DOCX with one sentence per line, pause cues,
+  and runtime estimates at 150 words per minute
 - Complete KDP ZIP package plus PDF reference copy and upload guide
 - Responsive interface for desktop and mobile
 
@@ -49,6 +55,12 @@ uses the China `.cn` platform.
 
 The provider selector applies to writing. AI cover and page artwork still use
 the configured OpenAI image service.
+
+## Print fonts
+
+The paperback interior embeds EB Garamond from `public/fonts/eb-garamond`,
+licensed under the SIL Open Font License 1.1 (see `OFL.txt` in that folder).
+The fonts are fetched only when a paperback is exported.
 
 ## Vercel
 

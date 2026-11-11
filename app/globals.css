@@ -2379,6 +2379,27 @@ p {
   opacity: 0.58;
 }
 
+.export-actions .paperback-export {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.export-actions .paperback-export select {
+  min-height: 37px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-right: 0;
+  border-radius: 2px 0 0 2px;
+  background: var(--white);
+  color: #50514d;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.export-actions .paperback-export button {
+  border-radius: 0 2px 2px 0;
+}
+
 .kdp-readiness {
   display: flex;
   align-items: center;
