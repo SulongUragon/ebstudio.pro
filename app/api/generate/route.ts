@@ -1088,9 +1088,51 @@ ${names.join(", ")}
 Invent fresh names that share no surname and no distinctive sound with that list. Give this book its own occupation for each lead, its own kind of workplace, and its own town. Do not repeat the situation that traps the couple together in an earlier book.`;
 }
 
-function outlineTokenBudget(chapterCount: number) {
+export function outlineTokenBudget(chapterCount: number) {
+  // Each chapter carries a title, purpose, opener deck, image prompt, visual
+  // mood, and POV. Claude in particular can spend 300 to 450 tokens on that,
+  // and a budget that runs out cuts the JSON off mid-object.
   const chapters = Math.max(1, Number(chapterCount) || 8);
-  return Math.min(16000, Math.max(5000, 3000 + chapters * 320));
+  return Math.min(24000, Math.max(5000, 3000 + chapters * 520));
+}
+
+/** Highest output budget a truncation retry may ask each provider for. */
+const TRUNCATION_RETRY_CAP: Record<ActiveAIProvider, number> = {
+  openai: 32000,
+  anthropic: 32000,
+  kimi: 16000,
+};
+
+export function truncationRetryBudget(provider: ActiveAIProvider, maxOutputTokens: number) {
+  return Math.min(TRUNCATION_RETRY_CAP[provider], Math.round(maxOutputTokens * 1.6));
+}
+
+function truncatedError(provider: ActiveAIProvider, maxOutputTokens: number) {
+  return new ProviderRequestError(
+    provider,
+    502,
+    "output_truncated",
+    `${providerDisplayName(provider)} reached the ${maxOutputTokens} token output limit before finishing.`,
+  );
+}
+
+/** Calls one provider, and once more with a larger budget if its answer was cut off. */
+async function callProvider(provider: ActiveAIProvider, request: JsonRequest): Promise<JsonObject> {
+  const call = (current: JsonRequest) =>
+    provider === "openai"
+      ? openAIJson(current)
+      : provider === "anthropic"
+        ? anthropicJson(current)
+        : kimiJson(current);
+  try {
+    return await call(request);
+  } catch (error) {
+    if (!(error instanceof ProviderRequestError) || error.code !== "output_truncated") throw error;
+    const larger = truncationRetryBudget(provider, request.maxOutputTokens);
+    console.warn("AI output truncated", provider, request.name, request.maxOutputTokens, "retrying with", larger);
+    if (larger <= request.maxOutputTokens) throw error;
+    return call({ ...request, maxOutputTokens: larger });
+  }
 }
 
 async function createOutline(
@@ -1611,12 +1653,7 @@ async function generateJson(
   const failures: ProviderRequestError[] = [];
   for (const provider of providerOrder) {
     try {
-      const output =
-        provider === "openai"
-          ? await openAIJson(request)
-          : provider === "anthropic"
-            ? await anthropicJson(request)
-            : await kimiJson(request);
+      const output = await callProvider(provider, request);
       return { output, provider };
     } catch (error) {
       if (!(error instanceof ProviderRequestError)) throw error;
@@ -1727,9 +1764,14 @@ async function openAIJson({
   }
 
   const data = (await response.json()) as {
+    status?: string;
+    incomplete_details?: { reason?: string } | null;
     output_text?: string;
     output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
   };
+  if (data.status === "incomplete" && data.incomplete_details?.reason === "max_output_tokens") {
+    throw truncatedError("openai", maxOutputTokens);
+  }
   const outputText =
     data.output_text ??
     data.output
@@ -1812,8 +1854,10 @@ async function anthropicJson({
   }
 
   const data = (await response.json()) as {
+    stop_reason?: string;
     content?: Array<{ type?: string; text?: string }>;
   };
+  if (data.stop_reason === "max_tokens") throw truncatedError("anthropic", maxOutputTokens);
   const outputText = data.content?.find((item) => item.type === "text")?.text;
   if (!outputText) {
     throw new ProviderRequestError(
@@ -1895,8 +1939,9 @@ async function kimiJson({
   }
 
   const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ finish_reason?: string; message?: { content?: string } }>;
   };
+  if (data.choices?.[0]?.finish_reason === "length") throw truncatedError("kimi", maxOutputTokens);
   const outputText = data.choices?.[0]?.message?.content;
   if (!outputText) {
     throw new ProviderRequestError(
@@ -1940,6 +1985,7 @@ function parseProviderJson(provider: ActiveAIProvider, outputText: string): Json
   try {
     return JSON.parse(outputText.replace(/^```json\s*|\s*```$/g, "")) as JsonObject;
   } catch {
+    console.error("AI output was not valid JSON", provider, outputText.length, outputText.slice(-120));
     throw new ProviderRequestError(
       provider,
       502,
@@ -1978,7 +2024,8 @@ function canFailOver(error: ProviderRequestError) {
     error.code === "insufficient_quota" ||
     error.code === "model_not_found" ||
     error.code === "empty_response" ||
-    error.code === "invalid_response"
+    error.code === "invalid_response" ||
+    error.code === "output_truncated"
   );
 }
 
@@ -2044,6 +2091,15 @@ function mapProviderError(error: ProviderRequestError) {
       code: "rate_limit",
       retryable: true,
       message: `${providerName} is receiving too many requests. Wait a moment, then select Generate again.`,
+    };
+  }
+
+  if (error.code === "output_truncated") {
+    return {
+      status: 502,
+      code: "output_truncated",
+      retryable: true,
+      message: `${providerName} ran out of room before finishing this step, even after a retry with more space. Try again, choose fewer chapters, or switch the AI Writer to another provider. Your book details are safe.`,
     };
   }
 
