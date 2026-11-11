@@ -15,8 +15,12 @@ import {
   PenLine,
   Plus,
   RotateCcw,
+  Shrink,
   Sparkles,
   Trash2,
+  Undo2,
+  WandSparkles,
+  Expand as ExpandIcon,
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import type {
@@ -51,6 +55,12 @@ import {
   PAPERBACK_TRIMS,
   type PaperbackTrim,
 } from "./print-exporters";
+import {
+  applySectionRevision,
+  describeWordChange,
+  undoSectionRevision,
+  type RevisionMode,
+} from "./section-revision";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
 import ExistingEbookOptimizer from "./existing-ebook-optimizer";
@@ -239,6 +249,8 @@ export default function EbookStudio() {
   const [exporting, setExporting] = useState("");
   const [paperbackTrim, setPaperbackTrim] = useState<PaperbackTrim>("6x9");
   const [repairingSection, setRepairingSection] = useState<number | null>(null);
+  const [revisingMode, setRevisingMode] = useState<RevisionMode | "rewrite" | null>(null);
+  const [revisionNotice, setRevisionNotice] = useState<{ index: number; text: string } | null>(null);
   const [companionSource, setCompanionSource] = useState<CompanionSource | null>(null);
   const [isCreatingCompanion, setIsCreatingCompanion] = useState(false);
   const [dualInput, setDualInput] = useState<DualBookInput>({
@@ -1219,6 +1231,8 @@ export default function EbookStudio() {
 
     const section = manuscript.plan[index];
     setRepairingSection(index);
+    setRevisingMode("rewrite");
+    setRevisionNotice(null);
     setActiveSection(index);
     setError("");
 
@@ -1256,11 +1270,10 @@ export default function EbookStudio() {
       }
 
       const usedProvider = sectionData.provider as ActiveAIProvider;
-      const sections = [...manuscript.sections];
-      sections[index] = { ...section, content, summary };
+      const before = manuscript.sections[index]?.content ?? "";
+      const revised = applySectionRevision(manuscript, index, { content, summary }, section);
       const updated: Manuscript = {
-        ...manuscript,
-        sections,
+        ...revised,
         providersUsed: Array.from(
           new Set([...(manuscript.providersUsed ?? []), usedProvider]),
         ),
@@ -1269,6 +1282,7 @@ export default function EbookStudio() {
       setActiveProvider(usedProvider);
       setStatus("complete");
       saveBook(updated);
+      if (before.trim()) setRevisionNotice({ index, text: `Chapter rewritten. ${describeWordChange(before, content)}` });
     } catch (repairError) {
       setError(
         repairError instanceof Error
@@ -1277,7 +1291,82 @@ export default function EbookStudio() {
       );
     } finally {
       setRepairingSection(null);
+      setRevisingMode(null);
     }
+  }
+
+  async function reviseSection(index: number, mode: RevisionMode, instruction = "") {
+    const current = manuscript?.sections[index];
+    if (!manuscript || repairingSection !== null || !manuscript.plan[index] || !current?.content?.trim()) return;
+
+    const section = manuscript.plan[index];
+    setRepairingSection(index);
+    setRevisingMode(mode);
+    setRevisionNotice(null);
+    setError("");
+
+    try {
+      const previousSummaries = manuscript.sections
+        .slice(0, index)
+        .map((item) => item.summary?.trim())
+        .filter((summary): summary is string => Boolean(summary));
+      const preferredProvider =
+        provider === "auto"
+          ? manuscript.providersUsed?.at(-1) ?? activeProvider ?? undefined
+          : undefined;
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "revise_section",
+          avoidNames: collectUsedNames(library),
+          mode: manuscript.mode,
+          brief: manuscript.brief,
+          plan: manuscript.plan,
+          section,
+          sectionIndex: index,
+          previousSummaries: previousSummaries.slice(-10),
+          revision: { mode, instruction, content: current.content },
+          provider,
+          preferredProvider,
+        }),
+      });
+      const data = await readResponse(response);
+      const content = String(data.content ?? "").trim();
+      const summary = String(data.summary ?? "").trim();
+      if (!content || !summary || content.length < MIN_SECTION_CHARACTERS) {
+        throw new Error(`The writer could not finish revising \"${section.title}\". Your chapter was not changed.`);
+      }
+      const usedProvider = data.provider as ActiveAIProvider;
+      const revised = applySectionRevision(manuscript, index, { content, summary });
+      const updated: Manuscript = {
+        ...revised,
+        providersUsed: Array.from(new Set([...(manuscript.providersUsed ?? []), usedProvider])),
+      };
+      setManuscript(updated);
+      setActiveProvider(usedProvider);
+      saveBook(updated);
+      const label = mode === "expand" ? "Chapter expanded." : mode === "tighten" ? "Chapter tightened." : "Your note was applied.";
+      setRevisionNotice({ index, text: `${label} ${describeWordChange(current.content, content)}` });
+    } catch (revisionError) {
+      setError(
+        revisionError instanceof Error
+          ? revisionError.message
+          : `EB Studio Pro could not revise \"${section.title}\". Your chapter was not changed.`,
+      );
+    } finally {
+      setRepairingSection(null);
+      setRevisingMode(null);
+    }
+  }
+
+  function undoSection(index: number) {
+    if (!manuscript || repairingSection !== null) return;
+    const updated = undoSectionRevision(manuscript, index);
+    if (updated === manuscript) return;
+    setManuscript(updated);
+    saveBook(updated);
+    setRevisionNotice({ index, text: "Last change undone." });
   }
 
   async function createCompanionBook(source: Manuscript) {
@@ -1836,6 +1925,10 @@ export default function EbookStudio() {
             onSaveAuthor={saveAuthorName}
             repairingSection={repairingSection}
             onRepairSection={repairSection}
+            revisingMode={revisingMode}
+            revisionNotice={revisionNotice?.index === activeSection ? revisionNotice.text : ""}
+            onReviseSection={reviseSection}
+            onUndoSection={undoSection}
             isCreatingCompanion={isCreatingCompanion}
             onCreateCompanion={createCompanionBook}
             resumeFrom={singleResume ? singleResume.nextIndex : null}
@@ -2022,6 +2115,10 @@ function BookPreview({
   onSaveAuthor,
   repairingSection,
   onRepairSection,
+  revisingMode = null,
+  revisionNotice = "",
+  onReviseSection,
+  onUndoSection,
   isCreatingCompanion,
   onCreateCompanion,
   resumeFrom,
@@ -2042,6 +2139,10 @@ function BookPreview({
   onSaveAuthor: (author: string) => void;
   repairingSection: number | null;
   onRepairSection: (index: number) => void;
+  revisingMode?: RevisionMode | "rewrite" | null;
+  revisionNotice?: string;
+  onReviseSection?: (index: number, mode: RevisionMode, instruction?: string) => void;
+  onUndoSection?: (index: number) => void;
   isCreatingCompanion: boolean;
   onCreateCompanion: (source: Manuscript) => void;
   resumeFrom?: number | null;
@@ -2330,23 +2431,34 @@ function BookPreview({
                         Written in a different tense from the rest of this book
                       </span>
                     ) : null}
-                    Not right? Only this chapter is written again. The rest of your
-                    book stays unchanged.
+                    Not right? Only this chapter changes. The rest of your book
+                    stays the same.
                   </p>
                   <button
                     className="chapter-repair-button"
                     onClick={() => onRepairSection(activeSection)}
                     disabled={repairingSection !== null}
                   >
-                    {repairingSection === activeSection ? (
+                    {repairingSection === activeSection && revisingMode === "rewrite" ? (
                       <LoaderCircle className="spin" size={15} />
                     ) : (
                       <RotateCcw size={15} />
                     )}
-                    {repairingSection === activeSection
+                    {repairingSection === activeSection && revisingMode === "rewrite"
                       ? "Rewriting chapter"
                       : "Rewrite this chapter"}
                   </button>
+                  {onReviseSection ? (
+                    <ChapterEditor
+                      key={activeSection}
+                      busy={repairingSection !== null}
+                      activeMode={repairingSection === activeSection ? revisingMode : null}
+                      canUndo={Boolean(selected.previousVersion)}
+                      notice={revisionNotice}
+                      onRevise={(mode, note) => onReviseSection(activeSection, mode, note)}
+                      onUndo={() => onUndoSection?.(activeSection)}
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </>
@@ -2379,6 +2491,62 @@ function BookPreview({
         </article>
       </div>
     </aside>
+  );
+}
+
+function ChapterEditor({
+  busy,
+  activeMode,
+  canUndo,
+  notice,
+  onRevise,
+  onUndo,
+}: {
+  busy: boolean;
+  activeMode: RevisionMode | "rewrite" | null;
+  canUndo: boolean;
+  notice: string;
+  onRevise: (mode: RevisionMode, note?: string) => void;
+  onUndo: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const spinner = (mode: RevisionMode) =>
+    activeMode === mode ? <LoaderCircle className="spin" size={15} /> : null;
+
+  return (
+    <div className="chapter-editor">
+      <label htmlFor="chapter-editor-note">Tell EB what to change</label>
+      <textarea
+        id="chapter-editor-note"
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        placeholder="Example: make the argument in the kitchen more tense, and end on her decision."
+        maxLength={1200}
+        rows={3}
+        disabled={busy}
+      />
+      <div className="chapter-editor-actions">
+        <button onClick={() => onRevise("instruction", note)} disabled={busy || !note.trim()}>
+          {spinner("instruction") ?? <WandSparkles size={15} />}
+          {activeMode === "instruction" ? "Applying note" : "Apply my note"}
+        </button>
+        <button onClick={() => onRevise("expand")} disabled={busy}>
+          {spinner("expand") ?? <ExpandIcon size={15} />}
+          {activeMode === "expand" ? "Expanding" : "Expand"}
+        </button>
+        <button onClick={() => onRevise("tighten")} disabled={busy}>
+          {spinner("tighten") ?? <Shrink size={15} />}
+          {activeMode === "tighten" ? "Tightening" : "Tighten"}
+        </button>
+        {canUndo ? (
+          <button className="chapter-undo" onClick={onUndo} disabled={busy}>
+            <Undo2 size={15} />
+            Undo last change
+          </button>
+        ) : null}
+      </div>
+      {notice ? <p className="chapter-editor-notice" role="status">{notice}</p> : null}
+    </div>
   );
 }
 

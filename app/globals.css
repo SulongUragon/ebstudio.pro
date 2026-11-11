@@ -2753,6 +2753,72 @@ p {
   line-height: 1.3;
 }
 
+.chapter-editor {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.chapter-editor label {
+  color: #4a463f;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.chapter-editor textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  color: #33312c;
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.chapter-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chapter-editor-actions button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  color: #50514d;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.chapter-editor-actions button:hover:not(:disabled) {
+  border-color: var(--rust);
+  color: var(--rust);
+}
+
+.chapter-editor-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.chapter-editor-actions .chapter-undo {
+  margin-left: auto;
+}
+
+.chapter-editor-notice {
+  color: var(--sage);
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
 .section-repair-state {
   display: grid;
   min-height: 420px;

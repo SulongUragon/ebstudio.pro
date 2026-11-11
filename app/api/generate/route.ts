@@ -16,9 +16,19 @@ import {
   sanitizeChapterOpenerMetadata,
 } from "../../longform-chapter-openers";
 import type { VisualBookBrief, VisualBookPage } from "../../visual-book-types";
+import {
+  countWords,
+  revisionDirection,
+  revisionLengthOk,
+  validateRevisionRequest,
+  type RevisionRequest,
+} from "../../section-revision";
+
+/** A revision the writer could not complete. The message is safe to show the author. */
+class RevisionError extends Error {}
 
 type RequestBody = {
-  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page";
+  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "revise_section";
   mode: Mode;
   sourceMode?: Mode;
   brief: BookBrief;
@@ -28,6 +38,7 @@ type RequestBody = {
   section?: SectionPlan;
   sectionIndex?: number;
   previousSummaries?: string[];
+  revision?: Partial<RevisionRequest>;
   assistantPrompt?: string;
   assistantHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   manuscript?: {
@@ -229,6 +240,18 @@ export async function POST(request: Request) {
     if (body.action === "section" && body.plan && body.section) {
       const result = await createSection(body);
       return NextResponse.json(result);
+    }
+    if (body.action === "revise_section" && body.plan && body.section) {
+      const problem = validateRevisionRequest(body.revision);
+      if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+      try {
+        return NextResponse.json(await reviseSection(body));
+      } catch (error) {
+        if (error instanceof RevisionError) {
+          return NextResponse.json({ error: error.message, code: "revision_incomplete", retryable: true }, { status: 422 });
+        }
+        throw error;
+      }
     }
     return NextResponse.json({ error: "Unknown generation action." }, { status: 400 });
   } catch (error) {
@@ -1294,6 +1317,124 @@ function matchLead(pov: string, leads: string[]): string {
   return partial ?? "";
 }
 
+function sectionVoiceRules(mode: Mode, sectionPov: string, romance: boolean) {
+  return `${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n` : ""}${
+  sectionPov
+    ? `
+Point of view for this section: ${sectionPov}. This overrides any general instruction to alternate viewpoints, because the alternation happens between sections and never inside one.
+Write the whole section in close third person limited anchored to ${sectionPov}, from the first line to the last. Stay inside that character's body, senses, memory, and judgement.
+Never state another character's private thoughts or feelings as fact. Everyone else is rendered only through what ${sectionPov} can see, hear, and infer, and the reading can be wrong.
+Do not switch, share, or widen the point of view partway through, and do not open with a distant narrator before settling into the character.
+`
+    : ""
+}
+${
+  mode === "fiction"
+    ? `
+Narrate this section in the past tense, the same as every other section of this book, including the opening and the closing. A book that switches tense in one chapter reads as an error. Dialogue, direct thought, and anything a character remembers are not bound by this; the narration is.
+`
+    : ""
+}`;
+}
+
+async function reviseSection(body: RequestBody) {
+  const { brief, mode, plan = [], section, sectionIndex = 0, previousSummaries = [], avoidNames } = body;
+  const revision = body.revision as RevisionRequest;
+  if (!section) throw new Error("Missing section.");
+  const romance = isRomanceBrief(mode, brief);
+  const original = revision.content.trim().slice(0, 60000);
+  const originalWords = countWords(original);
+  const bookContext =
+    mode === "fiction"
+      ? `Genre: ${brief.genre}
+Characters: ${brief.characters}
+Premise: ${brief.premise}`
+      : `Topic: ${brief.topic}
+Audience: ${brief.audience}
+Required points: ${brief.keyPoints}`;
+  const outline = plan.map((item, index) => `${index + 1}. ${item.title}: ${item.purpose}`).join("\n");
+  const continuity =
+    previousSummaries.length > 0
+      ? `Continuity from earlier sections:
+${previousSummaries.map((summary, index) => `${index + 1}. ${summary}`).join("\n")}`
+      : "This is the first section.";
+  // Room for the expanded chapter plus JSON overhead, within the provider limits.
+  const maxOutputTokens = Math.min(16000, Math.max(4000, Math.round(originalWords * (revision.mode === "expand" ? 1.5 : 1.1) * 1.6) + 1200));
+
+  const request: JsonRequest = {
+    name: "revised_ebook_section",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        content: { type: "string" },
+        summary: { type: "string" },
+      },
+      required: ["content", "summary"],
+    },
+    instructions:
+      "You are the senior line and developmental editor inside EB Studio Pro. Revise an existing book section exactly as directed and return the full revised section. Preserve the author's voice, facts, character names, and continuity with the rest of the book. Never use the em dash character. Do not mention prompts, outlines, AI, editing, or word counts.",
+    input: `Revise section ${sectionIndex + 1} of ${plan.length} of this ${mode === "fiction" ? "fiction" : "non-fiction"} ebook.
+
+Book title: ${brief.title}
+Author: ${brief.author}
+${bookContext}
+
+Full book structure:
+${outline}
+
+Current section:
+Type: ${section.kind}
+Title: ${section.title}
+Purpose: ${section.purpose}
+
+${continuity}
+
+Direction:
+${revisionDirection(revision.mode, revision.instruction, originalWords)}
+
+Return the complete revised section in content, never a partial excerpt or a list of changes. Start directly with the section prose. Do not repeat the section title, section type, or chapter number as a heading. Never use a top-level # heading. Keep clean Markdown with paragraphs and only useful internal subheadings.
+${sectionVoiceRules(mode, String(section.pov ?? "").trim(), romance)}
+The summary must be a compact continuity note of 2 to 4 sentences describing the revised section for the writer of the next section.
+
+Any new minor character, business, street, or building must use a name that appears nowhere in the exclusion list below.${avoidanceRules(avoidNames)}
+
+Original section:
+"""
+${original}
+"""`,
+    maxOutputTokens,
+  };
+
+  let fallback: { content: string; summary: string; provider: ActiveAIProvider } | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const generated = await generateJson(
+      attempt === 0
+        ? request
+        : {
+            ...request,
+            input: `${request.input}\n\nThe previous revision did not follow the direction closely enough on length or completeness. Return the full section, and follow the word range in the direction.`,
+          },
+      body.provider ?? "auto",
+      body.preferredProvider,
+    );
+    const content = String(generated.output.content ?? "").trim();
+    const summary = String(generated.output.summary ?? "").trim();
+    if (!content || !summary) continue;
+    const result = { content, summary, provider: generated.provider };
+    if (revisionLengthOk(revision.mode, original, content)) return result;
+    fallback = result;
+  }
+  if (fallback && revision.mode === "instruction") return fallback;
+  throw new RevisionError(
+    revision.mode === "expand"
+      ? `The writer could not expand ${section.title} enough. Your chapter was not changed.`
+      : revision.mode === "tighten"
+        ? `The writer could not tighten ${section.title} enough. Your chapter was not changed.`
+        : `The writer could not finish revising ${section.title}. Your chapter was not changed.`,
+  );
+}
+
 async function createSection(body: RequestBody) {
   const {
     brief,
@@ -1367,23 +1508,7 @@ ${
     ? "Write in immersive scenes with specific sensory detail, emotional consequence, natural dialogue when appropriate, and forward story movement. Preserve character consistency and do not summarize scenes that should be dramatized."
     : "Teach with clarity and authority. Use concrete examples and practical steps where appropriate. Make each section useful on its own while advancing the book's central promise."
 }
-${romance ? `\n${ROMANCE_STRUCTURE_RULES}\n` : ""}${
-  sectionPov
-    ? `
-Point of view for this section: ${sectionPov}. This overrides any general instruction to alternate viewpoints, because the alternation happens between sections and never inside one.
-Write the whole section in close third person limited anchored to ${sectionPov}, from the first line to the last. Stay inside that character's body, senses, memory, and judgement.
-Never state another character's private thoughts or feelings as fact. Everyone else is rendered only through what ${sectionPov} can see, hear, and infer, and the reading can be wrong.
-Do not switch, share, or widen the point of view partway through, and do not open with a distant narrator before settling into the character.
-`
-    : ""
-}
-${
-  mode === "fiction"
-    ? `
-Narrate this section in the past tense, the same as every other section of this book, including the opening and the closing. A book that switches tense in one chapter reads as an error. Dialogue, direct thought, and anything a character remembers are not bound by this; the narration is.
-`
-    : ""
-}
+${sectionVoiceRules(mode, sectionPov, romance)}
 The summary must be a compact continuity note of 2 to 4 sentences for the writer of the next section.
 
 Any minor character you introduce must be named with a name that appears nowhere in the exclusion list below, and any business, street, or building you name is bound by the same list.${avoidanceRules(avoidNames)}`,

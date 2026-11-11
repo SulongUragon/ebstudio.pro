@@ -34,6 +34,8 @@ export type SectionPlan = {
 export type SectionContent = SectionPlan & {
   content: string;
   summary: string;
+  /** The text this section had before its last edit, kept for Undo. */
+  previousVersion?: { content: string; summary: string };
 };
 
 export type BookImage = {
