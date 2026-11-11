@@ -2446,6 +2446,154 @@ p {
   color: #7a421f;
 }
 
+.paperback-cover-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px 20px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.paperback-cover-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.paperback-cover-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.paperback-cover-head strong {
+  color: #33312c;
+  font-size: 0.8rem;
+}
+
+.paperback-cover-head span,
+.paperback-cover-note,
+.paperback-cover-controls .hint {
+  color: #77736b;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.paperback-cover-panel button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  color: #50514d;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.paperback-cover-head button {
+  border-color: var(--sage);
+  background: var(--sage);
+  color: white;
+}
+
+.paperback-cover-panel button:hover:not(:disabled) {
+  border-color: var(--rust);
+  color: var(--rust);
+}
+
+.paperback-cover-head button:hover:not(:disabled) {
+  border-color: #34483c;
+  background: #34483c;
+  color: white;
+}
+
+.paperback-cover-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.paperback-cover-panel button.link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rust);
+  text-decoration: underline;
+}
+
+.paperback-cover-panel > label {
+  display: flex;
+  justify-content: space-between;
+  color: #4a463f;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.paperback-cover-panel > label span {
+  color: #77736b;
+  font-weight: 600;
+}
+
+.paperback-cover-panel > label span.warn {
+  color: var(--rust);
+}
+
+.paperback-cover-panel textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  color: #33312c;
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.paperback-cover-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.paperback-cover-controls label.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #4a463f;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.paperback-cover-controls select {
+  min-height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--white);
+  font-size: 0.7rem;
+}
+
+.paperback-cover-controls input[type="color"] {
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: none;
+}
+
+.paperback-cover-status {
+  color: var(--rust);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
 .companion-action-bar {
   display: flex;
   align-items: center;

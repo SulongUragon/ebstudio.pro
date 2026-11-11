@@ -61,6 +61,12 @@ import {
   undoSectionRevision,
   type RevisionMode,
 } from "./section-revision";
+import {
+  exportPaperbackCover,
+  frontCoverPixels,
+  getPaperbackCoverReadiness,
+} from "./paperback-cover";
+import PaperbackCoverPanel from "./paperback-cover-panel";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
 import ExistingEbookOptimizer from "./existing-ebook-optimizer";
@@ -248,6 +254,7 @@ export default function EbookStudio() {
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
   const [exporting, setExporting] = useState("");
   const [paperbackTrim, setPaperbackTrim] = useState<PaperbackTrim>("6x9");
+  const [draftingBlurb, setDraftingBlurb] = useState(false);
   const [repairingSection, setRepairingSection] = useState<number | null>(null);
   const [revisingMode, setRevisingMode] = useState<RevisionMode | "rewrite" | null>(null);
   const [revisionNotice, setRevisionNotice] = useState<{ index: number; text: string } | null>(null);
@@ -591,6 +598,54 @@ export default function EbookStudio() {
    * which is frozen at generation time. Editing the brief afterwards changes
    * nothing, so the name has to be editable on the finished book.
    */
+  /** Front panel re-rendered at 300 DPI for the chosen trim, plus the back color. */
+  async function preparePaperbackCoverArt(book: Manuscript) {
+    const { renderPrintFrontCover, sampleCoverEdgeColor } = await import("./cover-studio");
+    const frontImage = await renderPrintFrontCover(book, frontCoverPixels(paperbackTrim));
+    const backColor = book.backCover?.color || (await sampleCoverEdgeColor(frontImage, "left"));
+    return { frontImage, backColor };
+  }
+
+  function saveBackCover(patch: Partial<NonNullable<Manuscript["backCover"]>>) {
+    if (!manuscript) return;
+    const updated: Manuscript = {
+      ...manuscript,
+      backCover: { blurb: "", ...manuscript.backCover, ...patch },
+    };
+    setManuscript(updated);
+    saveBook(updated);
+  }
+
+  async function draftBackCoverBlurb() {
+    if (!manuscript || draftingBlurb) return;
+    setDraftingBlurb(true);
+    setError("");
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "back_cover_blurb",
+          mode: manuscript.mode,
+          brief: { ...manuscript.brief, title: manuscript.title, subtitle: manuscript.subtitle, author: manuscript.author },
+          manuscript: {
+            sections: manuscript.sections.map((section) => ({ title: section.title, summary: section.summary })),
+          },
+          provider,
+          preferredProvider: provider === "auto" ? manuscript.providersUsed?.at(-1) ?? undefined : undefined,
+        }),
+      });
+      const data = await readResponse(response);
+      const blurb = String(data.blurb ?? "").trim();
+      if (!blurb) throw new Error("The writer could not draft a back cover blurb. Try again, or write your own.");
+      saveBackCover({ blurb });
+    } catch (draftError) {
+      setError(draftError instanceof Error ? draftError.message : "The back cover blurb could not be drafted.");
+    } finally {
+      setDraftingBlurb(false);
+    }
+  }
+
   function saveAuthorName(author: string) {
     const nextAuthor = author.trim();
     if (!manuscript || !nextAuthor || nextAuthor === manuscript.author) return;
@@ -1205,7 +1260,16 @@ export default function EbookStudio() {
     setExporting(format);
     setError("");
     try {
-      if (format === "bundle") await exportBundle(manuscript, true, { paperbackTrim });
+      if (format === "bundle") {
+        const paperbackCover = getPaperbackCoverReadiness(manuscript).ready
+          ? await preparePaperbackCoverArt(manuscript)
+          : undefined;
+        await exportBundle(manuscript, true, { paperbackTrim, paperbackCover });
+      }
+      if (format === "paperback-cover") {
+        const art = await preparePaperbackCoverArt(manuscript);
+        await exportPaperbackCover(manuscript, true, { trim: paperbackTrim, ...art });
+      }
       if (format === "paperback") await exportPaperbackPdf(manuscript, true, { trim: paperbackTrim });
       if (format === "narration") await exportNarrationScript(manuscript);
       if (format === "docx") await exportDocx(manuscript);
@@ -1925,6 +1989,9 @@ export default function EbookStudio() {
             onSaveAuthor={saveAuthorName}
             repairingSection={repairingSection}
             onRepairSection={repairSection}
+            onSaveBackCover={saveBackCover}
+            onDraftBlurb={draftBackCoverBlurb}
+            draftingBlurb={draftingBlurb}
             revisingMode={revisingMode}
             revisionNotice={revisionNotice?.index === activeSection ? revisionNotice.text : ""}
             onReviseSection={reviseSection}
@@ -2098,7 +2165,7 @@ function DualBookPreview({
   );
 }
 
-type ExportFormat = "bundle" | "cover" | "docx" | "pdf" | "epub" | "paperback" | "narration";
+type ExportFormat = "bundle" | "cover" | "docx" | "pdf" | "epub" | "paperback" | "narration" | "paperback-cover";
 
 function BookPreview({
   manuscript,
@@ -2115,6 +2182,9 @@ function BookPreview({
   onSaveAuthor,
   repairingSection,
   onRepairSection,
+  onSaveBackCover,
+  onDraftBlurb,
+  draftingBlurb = false,
   revisingMode = null,
   revisionNotice = "",
   onReviseSection,
@@ -2139,6 +2209,9 @@ function BookPreview({
   onSaveAuthor: (author: string) => void;
   repairingSection: number | null;
   onRepairSection: (index: number) => void;
+  onSaveBackCover?: (patch: Partial<NonNullable<Manuscript["backCover"]>>) => void;
+  onDraftBlurb?: () => void;
+  draftingBlurb?: boolean;
   revisingMode?: RevisionMode | "rewrite" | null;
   revisionNotice?: string;
   onReviseSection?: (index: number, mode: RevisionMode, instruction?: string) => void;
@@ -2335,6 +2408,19 @@ function BookPreview({
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {isComplete && incompleteSectionIndex < 0 && onSaveBackCover && onDraftBlurb ? (
+        <PaperbackCoverPanel
+          key={manuscript.id}
+          manuscript={manuscript}
+          busy={Boolean(exporting)}
+          exporting={exporting === "paperback-cover"}
+          drafting={draftingBlurb}
+          onSave={onSaveBackCover}
+          onDraft={onDraftBlurb}
+          onExport={() => onExport("paperback-cover")}
+        />
       ) : null}
 
       {isComplete && incompleteSectionIndex < 0 ? (

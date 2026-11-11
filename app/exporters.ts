@@ -1169,6 +1169,8 @@ export async function exportCover(book: Manuscript, shouldDownload = true) {
 export type BundleOptions = {
   paperbackTrim?: import("./print-exporters").PaperbackTrim;
   fontLoader?: import("./print-exporters").PrintFontLoader;
+  /** Front art at print size and the back color, rendered in the browser. */
+  paperbackCover?: { frontImage: string; backColor?: string };
 };
 
 export async function exportBundle(book: Manuscript, shouldDownload = true, options: BundleOptions = {}) {
@@ -1211,12 +1213,33 @@ export async function exportBundle(book: Manuscript, shouldDownload = true, opti
   } else {
     const paperbackName = print.paperbackFilename(exportBook, paperback.trim);
     bundle.file(paperbackName, await paperback.blob.arrayBuffer());
+    let cover: { name: string; paper: string; spineInches: number } | { skipped: string } = {
+      skipped: "Add a back cover blurb in the Paperback cover panel to include the full-wrap cover.",
+    };
+    if (options.paperbackCover) {
+      const coverModule = await import("./paperback-cover");
+      try {
+        const report = await coverModule.createPaperbackCoverPdf(book, {
+          trim: paperback.trim,
+          pageCount: paperback.pageCount,
+          frontImage: options.paperbackCover.frontImage,
+          backColor: options.paperbackCover.backColor,
+          fontLoader: options.fontLoader,
+        });
+        const name = coverModule.paperbackCoverFilename(exportBook, paperback.trim);
+        bundle.file(name, await report.blob.arrayBuffer());
+        cover = { name, paper: report.geometry.paper, spineInches: report.geometry.spineWidth };
+      } catch (error) {
+        cover = { skipped: error instanceof Error ? error.message : String(error) };
+      }
+    }
     printDetails = {
       narrationName,
       paperbackName,
       trimLabel: print.PAPERBACK_TRIMS[paperback.trim].label,
       pageCount: paperback.pageCount,
       insideMarginInches: paperback.insideMarginInches,
+      cover,
     };
   }
   bundle.file("KDP-UPLOAD-GUIDE.txt", kdpUploadGuide(exportBook, printDetails));
@@ -1237,6 +1260,7 @@ type PrintGuideDetails =
       trimLabel: string;
       pageCount: number;
       insideMarginInches: number;
+      cover: { name: string; paper: string; spineInches: number } | { skipped: string };
     }
   | { narrationName: string; paperbackSkipped: string };
 
@@ -1248,7 +1272,11 @@ The paperback interior was not included. ${print.paperbackSkipped}`;
   return `PAPERBACK
 1. In KDP, create the paperback edition and choose trim size ${print.trimLabel}, no bleed.
 2. Upload ${print.paperbackName} as the manuscript. It is ${print.pageCount} pages with mirrored margins (inside ${print.insideMarginInches.toFixed(3)} in) and embedded fonts.
-3. Build the paperback cover in KDP Cover Creator or upload a full-wrap cover sized for ${print.pageCount} pages.
+3. ${
+    "name" in print.cover
+      ? `Choose ${print.cover.paper} paper, then upload ${print.cover.name} as the cover (spine ${print.cover.spineInches.toFixed(3)} in). Leave KDP's barcode option on; the back keeps the barcode area clear.`
+      : `Paperback cover not included. ${print.cover.skipped}`
+  }
 4. Order a proof copy before publishing.`;
 }
 
@@ -1265,7 +1293,7 @@ PACKAGE CONTENTS
 - ${filename}.epub - Reflowable ebook alternative
 - ${filename}-KDP-Cover.jpg - 1600 x 2560 marketing cover
 - ${filename}-Reference.pdf - Fixed-layout review copy
-${"paperbackName" in print ? `- ${print.paperbackName} - Print-ready paperback interior\n` : ""}- ${print.narrationName} - Prompter-style narration script
+${"paperbackName" in print ? `- ${print.paperbackName} - Print-ready paperback interior\n` : ""}${"paperbackName" in print && "name" in print.cover ? `- ${print.cover.name} - Full-wrap paperback cover\n` : ""}- ${print.narrationName} - Prompter-style narration script
 
 RECOMMENDED KINDLE WORKFLOW
 1. Open ${filename}-Kindle-Create.docx in Amazon Kindle Create.

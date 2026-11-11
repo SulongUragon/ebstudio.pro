@@ -92,6 +92,8 @@ export type Manuscript = {
   providersUsed?: ActiveAIProvider[];
   companionOf?: { id: string; title: string; mode: Mode };
   cover?: CoverDesign;
+  /** Paperback back cover copy and print settings. */
+  backCover?: { blurb: string; color?: string; paper?: "white" | "cream" };
   images?: BookImage[];
   optimization?: {
     sourceFileName: string;

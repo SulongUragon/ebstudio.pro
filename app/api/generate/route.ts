@@ -16,6 +16,7 @@ import {
   sanitizeChapterOpenerMetadata,
 } from "../../longform-chapter-openers";
 import type { VisualBookBrief, VisualBookPage } from "../../visual-book-types";
+import { BLURB_MAX_WORDS, BLURB_MIN_WORDS, removeDashes } from "../../back-cover-copy";
 import {
   countWords,
   revisionDirection,
@@ -28,7 +29,7 @@ import {
 class RevisionError extends Error {}
 
 type RequestBody = {
-  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "revise_section";
+  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "revise_section" | "back_cover_blurb";
   mode: Mode;
   sourceMode?: Mode;
   brief: BookBrief;
@@ -240,6 +241,16 @@ export async function POST(request: Request) {
     if (body.action === "section" && body.plan && body.section) {
       const result = await createSection(body);
       return NextResponse.json(result);
+    }
+    if (body.action === "back_cover_blurb") {
+      try {
+        return NextResponse.json(await createBackCoverBlurb(body));
+      } catch (error) {
+        if (error instanceof RevisionError) {
+          return NextResponse.json({ error: error.message, code: "blurb_incomplete", retryable: true }, { status: 422 });
+        }
+        throw error;
+      }
     }
     if (body.action === "revise_section" && body.plan && body.section) {
       const problem = validateRevisionRequest(body.revision);
@@ -1315,6 +1326,48 @@ function matchLead(pov: string, leads: string[]): string {
     );
   });
   return partial ?? "";
+}
+
+async function createBackCoverBlurb(body: RequestBody) {
+  const { brief, mode, manuscript } = body;
+  const fiction = mode === "fiction";
+  const summaries = (manuscript?.sections ?? [])
+    .map((section, index) => `${index + 1}. ${section.title ?? ""}: ${section.summary ?? ""}`)
+    .join("\n")
+    .slice(0, 12000);
+  const request: JsonRequest = {
+    name: "back_cover_blurb",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { blurb: { type: "string" } },
+      required: ["blurb"],
+    },
+    instructions:
+      "You are the back cover copywriter inside EB Studio Pro. Write honest, compelling paperback back cover copy. Never use the em dash or en dash character. Never invent reviews, quotes, awards, sales figures, bestseller claims, or credentials.",
+    input: `Write the back cover blurb for this ${fiction ? "novel" : "non-fiction book"}.
+
+Title: ${brief.title}
+${brief.subtitle ? `Subtitle: ${brief.subtitle}\n` : ""}Author: ${brief.author}
+${fiction ? `Genre: ${brief.genre}\nPremise: ${brief.premise}` : `Topic: ${brief.topic}\nAudience: ${brief.audience}\nKey points: ${brief.keyPoints}`}
+
+Section summaries:
+${summaries || "Not available."}
+
+Write 120 to 170 words in 3 or 4 short paragraphs separated by a blank line. The first paragraph is a single hook line. ${
+      fiction
+        ? "Introduce the main character, the inciting situation, and the stakes. Do not reveal the ending or late twists."
+        : "State the reader's problem, what the book helps them do, and two or three concrete outcomes. Do not use a bulleted list."
+    } End with a short closing line about the kind of reader this book is for. Plain text only, no headings, no markdown.`,
+    maxOutputTokens: 1200,
+  };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const generated = await generateJson(request, body.provider ?? "auto", body.preferredProvider);
+    const blurb = removeDashes(String(generated.output.blurb ?? "").replace(/\r/g, "").trim());
+    const words = countWords(blurb);
+    if (words >= BLURB_MIN_WORDS && words <= BLURB_MAX_WORDS) return { blurb, provider: generated.provider };
+  }
+  throw new RevisionError("The writer could not draft a back cover blurb. Try again, or write your own.");
 }
 
 function sectionVoiceRules(mode: Mode, sectionPov: string, romance: boolean) {

@@ -831,6 +831,113 @@ export default function CoverStudio({
   );
 }
 
+export type CoverOutputSize = { width: number; height: number };
+
+const COVER_LAYOUT_HEIGHT = 2560;
+const EBOOK_COVER_OUTPUT: CoverOutputSize = { width: 1600, height: 2560 };
+
+/**
+ * Canvas text silently falls back to a default font when a web font has not
+ * loaded yet. Load the faces this cover uses before drawing.
+ */
+async function loadCoverFonts(authorStyle: AuthorStyle, typographyPresetId?: string) {
+  if (typeof document === "undefined" || !document.fonts?.load) return;
+  const typography = getCoverTypographyPreset(typographyPresetId);
+  const faces = [
+    `${typography.fontWeight} 64px ${typography.fontFamily}`,
+    "italic 40px Georgia, serif",
+    authorStyle === "signature"
+      ? '400 64px "Great Vibes"'
+      : authorStyle === "typewriter"
+        ? '700 40px "Courier Prime"'
+        : '700 40px "Montserrat"',
+  ];
+  await Promise.all(faces.map((face) => document.fonts.load(face).catch(() => [])));
+}
+
+/**
+ * Renders the front cover at an exact print pixel size, for example 1838 by
+ * 2775 for a 6 x 9 inch paperback front with bleed at 300 DPI. App-typography
+ * covers are re-composed from the original artwork so the title stays sharp and
+ * nothing is cropped; covers with typography painted into the art are scaled
+ * from the artwork itself.
+ */
+export async function renderPrintFrontCover(manuscript: Manuscript, output: CoverOutputSize) {
+  const cover = manuscript.cover;
+  if (!cover?.imageData) throw new Error("Generate the front cover in Cover Studio first.");
+  const source = cover.sourceImageData || cover.imageData;
+  const appTypography = cover.resolvedCoverTextMode !== "integrated-typography" && Boolean(cover.sourceImageData);
+  if (appTypography) {
+    const subtitle = cover.displaySubtitle ?? manuscript.subtitle ?? "";
+    const creativeFinish = cover.creativeFinish ?? "auto";
+    const style = cover.style ?? "cinematic";
+    const authorStyle = cover.authorStyle ?? "uppercase";
+    const directions = resolveTitleDirections(
+      manuscript,
+      subtitle,
+      creativeFinish,
+      style,
+      cover.titleTypography ?? "auto",
+      cover.titlePlacement ?? "auto",
+    );
+    // Fall back to the same defaults Cover Studio uses, so a re-render matches
+    // the cover the author approved.
+    return composeCover(
+      source,
+      cover.displayTitle ?? manuscript.title,
+      subtitle,
+      formattedCoverAuthor(manuscript, subtitle, creativeFinish, authorStyle),
+      cover.finish ?? "satin",
+      style,
+      cover.autoFitText ?? true,
+      cover.subtitleFontSize ?? 40,
+      cover.subtitlePosition ?? 25,
+      cover.subtitleAlignment ?? "center",
+      cover.subtitleColor ?? (style === "eb-signature" ? "#e8d5b8" : "#fffdf7"),
+      cover.authorColor ?? "#e9dfcf",
+      authorStyle,
+      cover.typographyPreset ?? directions.typographyPreset,
+      directions.placementPreset,
+      output,
+    );
+  }
+  const image = await loadImage(source);
+  const canvas = document.createElement("canvas");
+  canvas.width = output.width;
+  canvas.height = output.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("This browser could not prepare the cover.");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  drawImageCover(context, image, output.width, output.height);
+  return canvas.toDataURL("image/jpeg", 0.95);
+}
+
+/** Average color of a strip along one edge of an image, as a hex string. */
+export async function sampleCoverEdgeColor(imageData: string, edge: "left" | "right" = "left") {
+  const image = await loadImage(imageData);
+  const canvas = document.createElement("canvas");
+  canvas.width = 24;
+  canvas.height = 96;
+  const context = canvas.getContext("2d");
+  if (!context) return "#1d1d1b";
+  const stripWidth = Math.max(1, Math.round(image.naturalWidth * 0.06));
+  const sourceX = edge === "left" ? 0 : image.naturalWidth - stripWidth;
+  context.drawImage(image, sourceX, 0, stripWidth, image.naturalHeight, 0, 0, 24, 96);
+  const { data } = context.getImageData(0, 0, 24, 96);
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  const pixels = data.length / 4;
+  for (let index = 0; index < data.length; index += 4) {
+    red += data[index];
+    green += data[index + 1];
+    blue += data[index + 2];
+  }
+  const hex = (value: number) => Math.round(value / pixels).toString(16).padStart(2, "0");
+  return `#${hex(red)}${hex(green)}${hex(blue)}`;
+}
+
 async function composeCover(
   artworkData: string,
   title: string,
@@ -847,13 +954,24 @@ async function composeCover(
   authorStyle: AuthorStyle = "uppercase",
   typographyPresetId?: string,
   titlePlacementId?: string,
+  output: CoverOutputSize = EBOOK_COVER_OUTPUT,
 ) {
   const image = await loadImage(artworkData);
+  // The layout is designed on a 2560-unit-tall page. Print sizes keep that
+  // height and widen or narrow the page to the trim's shape, then the whole
+  // drawing is scaled up so text and art render at the real pixel size.
+  const H = COVER_LAYOUT_HEIGHT;
+  const W = Math.round((COVER_LAYOUT_HEIGHT * output.width) / output.height);
+  const pixelScale = output.height / COVER_LAYOUT_HEIGHT;
   const canvas = document.createElement("canvas");
-  canvas.width = 1600;
-  canvas.height = 2560;
+  canvas.width = output.width;
+  canvas.height = output.height;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("This browser could not prepare the cover.");
+  context.scale(pixelScale, pixelScale);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  await loadCoverFonts(authorStyle, typographyPresetId);
 
   context.save();
   context.filter =
@@ -862,19 +980,19 @@ async function composeCover(
       : finish === "matte"
         ? "contrast(0.97) saturate(0.94)"
         : "contrast(1.04) saturate(1.03)";
-  drawImageCover(context, image, canvas.width, canvas.height);
+  drawImageCover(context, image, W, H);
   context.restore();
 
-  const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+  const gradient = context.createLinearGradient(0, 0, 0, H);
   gradient.addColorStop(0, "rgba(10,14,12,.62)");
   gradient.addColorStop(0.34, "rgba(10,14,12,.04)");
   gradient.addColorStop(0.7, "rgba(10,14,12,.08)");
   gradient.addColorStop(1, "rgba(10,14,12,.72)");
   context.fillStyle = gradient;
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillRect(0, 0, W, H);
 
   if (finish === "glossy-premium") {
-    const sheen = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+    const sheen = context.createLinearGradient(0, 0, W, H);
     sheen.addColorStop(0, "rgba(255,255,255,.03)");
     sheen.addColorStop(0.3, "rgba(255,255,255,.015)");
     sheen.addColorStop(0.43, "rgba(255,248,228,.13)");
@@ -882,14 +1000,14 @@ async function composeCover(
     sheen.addColorStop(0.62, "rgba(255,255,255,0)");
     sheen.addColorStop(1, "rgba(255,255,255,.025)");
     context.fillStyle = sheen;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillRect(0, 0, W, H);
 
     const highlight = context.createRadialGradient(980, 210, 20, 980, 210, 520);
     highlight.addColorStop(0, "rgba(255,245,214,.16)");
     highlight.addColorStop(0.45, "rgba(255,255,255,.045)");
     highlight.addColorStop(1, "rgba(255,255,255,0)");
     context.fillStyle = highlight;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillRect(0, 0, W, H);
   }
 
   const isEbSignature = style === "eb-signature";
@@ -938,7 +1056,7 @@ async function composeCover(
     context.shadowColor = typography.shadowColor ?? "rgba(0,0,0,.72)";
     context.shadowBlur = typography.shadowBlur ?? 18;
     context.shadowOffsetY = typography.shadowOffsetY ?? 5;
-    const titleX = alignmentX(typography.titleAlignment, canvas.width);
+    const titleX = alignmentX(typography.titleAlignment, W);
     const titleLineHeight = fittedTitle.size * typography.lineHeight;
     const titleLines = fittedTitle.lines;
     const splitIndex = placement.split && titleLines.length > 1
@@ -950,9 +1068,9 @@ async function composeCover(
     const drawTitleGroup = (lines: string[], top: number, framed: boolean) => {
       const height = lines.length * titleLineHeight;
       if (framed) {
-        const panelX = canvas.width * 0.065;
+        const panelX = W * 0.065;
         const panelY = top - 42;
-        const panelWidth = canvas.width * 0.87;
+        const panelWidth = W * 0.87;
         const panelHeight = height + 84;
         context.save();
         context.shadowColor = "rgba(0,0,0,0)";
@@ -982,7 +1100,7 @@ async function composeCover(
     };
     const firstGroupHeight = titleGroups[0].length * titleLineHeight;
     const firstTop = resolveCoverTitleTop(
-      canvas.height,
+      H,
       firstGroupHeight,
       placement,
     );
@@ -990,9 +1108,9 @@ async function composeCover(
     if (titleGroups.length > 1) {
       const secondGroupHeight = titleGroups[1].length * titleLineHeight;
       const secondTop = resolveNonCollidingCoverTextY(
-        canvas.height * 0.61,
+        H * 0.61,
         secondGroupHeight,
-        canvas.height,
+        H,
         titleBands,
       );
       drawTitleGroup(titleGroups[1], secondTop, false);
@@ -1000,7 +1118,7 @@ async function composeCover(
     if (typography.rule) {
       const finalBand = titleBands[titleBands.length - 1];
       context.fillStyle = "#0f5d3b";
-      context.fillRect(canvas.width * 0.39, finalBand.bottom + 18, canvas.width * 0.22, 5);
+      context.fillRect(W * 0.39, finalBand.bottom + 18, W * 0.22, 5);
       finalBand.bottom += 31;
     }
   }
@@ -1022,16 +1140,16 @@ async function composeCover(
     context.font = `italic ${fittedSubtitle.size}px Georgia, serif`;
     context.lineWidth = Math.max(2, fittedSubtitle.size * 0.05);
     context.strokeStyle = contrastingTextStroke(subtitleColor);
-    const subtitleX = alignmentX(subtitleAlignment, canvas.width);
+    const subtitleX = alignmentX(subtitleAlignment, W);
     const subtitleLineHeight = fittedSubtitle.size * 1.3;
     const subtitleHeight = fittedSubtitle.lines.length * subtitleLineHeight;
     const preferredSubtitleY = subtitlePosition >= 70
-      ? (canvas.height * subtitlePosition) / 100 - subtitleHeight
-      : (canvas.height * subtitlePosition) / 100;
+      ? (H * subtitlePosition) / 100 - subtitleHeight
+      : (H * subtitlePosition) / 100;
     y = resolveNonCollidingCoverTextY(
       preferredSubtitleY,
       subtitleHeight,
-      canvas.height,
+      H,
       titleBands,
     );
     subtitleTop = y;
@@ -1067,7 +1185,7 @@ async function composeCover(
     context.lineWidth = signature ? 2 : 3;
     context.strokeStyle = contrastingTextStroke(authorColor);
     const authorY = resolveCoverAuthorY(
-      canvas.height,
+      H,
       [
         ...titleBands,
         { top: subtitleTop, bottom: subtitleBottom },
@@ -1076,8 +1194,8 @@ async function composeCover(
         ? { heightRatio: 0.038, defaultRatio: 0.912 }
         : {},
     );
-    context.strokeText(authorText, canvas.width / 2, authorY);
-    context.fillText(authorText, canvas.width / 2, authorY);
+    context.strokeText(authorText, W / 2, authorY);
+    context.fillText(authorText, W / 2, authorY);
   }
   return canvas.toDataURL("image/jpeg", 0.92);
 }
