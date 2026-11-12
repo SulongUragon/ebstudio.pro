@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { denyWithoutApiAccess } from "../../api-access";
+import { classifyOpenAIImageError } from "../../openai-image-errors";
 import { sanitizeChapterOpenerMetadata } from "../../longform-chapter-openers";
 
 export const maxDuration = 300;
@@ -44,7 +46,8 @@ async function requestImage(prompt: string, attempts = 3) {
       lastRequestId = response.headers.get("x-request-id") ?? "";
       lastData = (await response.json().catch(() => ({}))) as OpenAIImageResponse;
       if (response.ok && lastData.data?.[0]?.b64_json) return { ok: true as const, data: lastData, status: response.status, requestId: lastRequestId };
-      if (!RETRYABLE_STATUS.has(response.status) || attempt === attempts - 1) break;
+      // Used-up credits or billing limits never succeed on retry.
+      if (!RETRYABLE_STATUS.has(response.status) || !classifyOpenAIImageError(response.status, lastData).retryable || attempt === attempts - 1) break;
     } catch (error) {
       lastData = { error: { message: error instanceof DOMException && error.name === "AbortError" ? "The image service timed out before returning an image." : error instanceof Error ? error.message : "The image service connection failed.", type: "network_error" } };
       lastStatus = 504;
@@ -56,6 +59,8 @@ async function requestImage(prompt: string, attempts = 3) {
 }
 
 export async function POST(request: Request) {
+  const denied = await denyWithoutApiAccess(request);
+  if (denied) return denied;
   try {
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "OpenAI image generation is not configured." }, { status: 503 });
     const body = (await request.json()) as RequestBody;
@@ -99,8 +104,11 @@ No person in distress. No injury, death, self-harm, suicide, medical emergency, 
     if (!result.ok || !result.data.data?.[0]?.b64_json) {
       const upstreamMessage = result.data.error?.message || "Book image could not be generated.";
       console.error("Book image upstream failure", { section: body.section.title, status: result.status, requestId: result.requestId, code: result.data.error?.code, type: result.data.error?.type, message: upstreamMessage });
-      const userMessage = looksLikeSafetyRejection(result.data, result.status) ? "This chapter could not be illustrated safely even with the theme-preserving fallback. Try another section or revise the chapter illustration context." : upstreamMessage;
-      return NextResponse.json({ error: userMessage, status: result.status, code: result.data.error?.code ?? result.data.error?.type ?? "image_generation_failed", requestId: result.requestId || undefined }, { status: result.status >= 400 ? result.status : 502 });
+      const failure = classifyOpenAIImageError(result.status, result.data, "chapter image");
+      const userMessage = looksLikeSafetyRejection(result.data, result.status)
+        ? "This chapter could not be illustrated safely even with the theme-preserving fallback. Try another section or revise the chapter illustration context."
+        : failure.kind === "other" ? upstreamMessage : failure.message;
+      return NextResponse.json({ error: userMessage, reason: failure.kind, status: result.status, code: result.data.error?.code ?? result.data.error?.type ?? "image_generation_failed", requestId: result.requestId || undefined }, { status: result.status >= 400 ? result.status : 502 });
     }
 
     return NextResponse.json({ imageData: `data:image/jpeg;base64,${result.data.data[0].b64_json}`, prompt: usedPrompt, fallback: usedFallback, requestId: result.requestId || undefined });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { denyWithoutApiAccess } from "../../api-access";
 import type {
   ActiveAIProvider,
   AIProvider,
@@ -166,6 +167,8 @@ const visualPageSchema = {
 } as const;
 
 export async function POST(request: Request) {
+  const denied = await denyWithoutApiAccess(request);
+  if (denied) return denied;
   try {
     const body = (await request.json()) as RequestBody;
     if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.MOONSHOT_API_KEY) {

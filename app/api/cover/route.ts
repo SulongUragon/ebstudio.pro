@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { denyWithoutApiAccess } from "../../api-access";
+import { classifyOpenAIImageError, retryDelayMs, type OpenAIImageErrorPayload } from "../../openai-image-errors";
 import type { BookBrief, Mode } from "../../book-types";
 import {
   buildCoverPrompt,
@@ -48,6 +50,8 @@ const COVER_STYLES = new Set([
 ]);
 
 export async function POST(request: Request) {
+  const denied = await denyWithoutApiAccess(request);
+  if (denied) return denied;
   try {
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -139,46 +143,46 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1",
-        prompt,
-        n: 1,
-        size: "1024x1536",
-        quality: "low",
-        output_format: "jpeg",
-        output_compression: 82,
-      }),
-    });
+    const requestCover = () =>
+      fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1",
+          prompt,
+          n: 1,
+          size: "1024x1536",
+          quality: "low",
+          output_format: "jpeg",
+          output_compression: 82,
+        }),
+      });
 
-    const data = (await response.json().catch(() => ({}))) as {
-      data?: Array<{ b64_json?: string }>;
-      error?: { message?: string; code?: string };
-    };
+    type ImageResponse = OpenAIImageErrorPayload & { data?: Array<{ b64_json?: string }> };
+    let response = await requestCover();
+    let data = (await response.json().catch(() => ({}))) as ImageResponse;
+    if (!response.ok && classifyOpenAIImageError(response.status, data, "cover").kind === "busy") {
+      // One retry when OpenAI is only busy. Used-up credits are never retried.
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs(response.headers.get("retry-after"))));
+      response = await requestCover();
+      data = (await response.json().catch(() => ({}))) as ImageResponse;
+    }
 
     if (!response.ok || !data.data?.[0]?.b64_json) {
-      console.error("EB Studio Pro cover generation failed", response.status, data.error?.code);
+      const failure = classifyOpenAIImageError(response.ok ? 502 : response.status, data, "cover");
+      console.error("EB Studio Pro cover generation failed", response.status, failure.kind, failure.code);
       return NextResponse.json(
         {
-          code: data.error?.code ?? "image_request_failed",
+          code: failure.code,
+          reason: failure.kind,
+          retryable: failure.retryable,
           providerDetail: String(data.error?.message ?? "").slice(0, 240),
-          error:
-            data.error?.code === "billing_hard_limit_reached"
-              ? "OpenAI image credits are unavailable or the project spending limit has been reached."
-              : data.error?.message?.toLowerCase().includes("verif")
-                ? "OpenAI requires organization verification before image generation can be used."
-                : response.status === 403
-                ? "OpenAI image generation access is not enabled for this project."
-                : response.status === 429
-                  ? "The cover generator is busy or has reached its usage limit. Please try again shortly."
-                  : "The AI cover could not be generated. Your manuscript is safe.",
+          error: failure.message,
         },
-        { status: response.status >= 400 ? response.status : 502 },
+        { status: failure.status },
       );
     }
 

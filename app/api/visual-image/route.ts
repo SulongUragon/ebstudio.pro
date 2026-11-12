@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { denyWithoutApiAccess } from "../../api-access";
 import { buildVisualArtworkDirection } from "../../creative-direction";
 import type { ComicPanel, VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 export const maxDuration = 300;
@@ -59,6 +60,8 @@ async function requestImageWithRetry(prompt: string, size: string) {
 }
 
 export async function POST(request: Request) {
+  const denied = await denyWithoutApiAccess(request);
+  if (denied) return denied;
   try {
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "OpenAI image generation is not configured." }, { status: 503 });
     const { project, page, panel } = (await request.json()) as VisualImageRequest;
@@ -102,7 +105,7 @@ ABSOLUTELY NO TEXT: no words, letters, numbers, speech bubbles, thought bubbles,
       const code = data.error?.code ?? "image_request_failed";
       const quotaFailure = QUOTA_ERROR_CODES.has(code) || /quota|credit|billing/i.test(data.error?.message ?? "");
       const error = quotaFailure
-        ? "OpenAI image credits are unavailable or the project spending limit has been reached."
+        ? "OpenAI credits are used up or the spending limit was reached, so this page image could not be generated. Add credits at platform.openai.com > Settings > Billing, then try again."
         : response.status === 429
           ? "The image generator remained rate-limited after automatic retries. Finished images were saved; resume again later."
           : response.status === 401

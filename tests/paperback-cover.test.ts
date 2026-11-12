@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
+import { authorizedRequest } from "./helpers/api-access";
 import JSZip from "jszip";
 import { POST } from "../app/api/generate/route";
 import type { Manuscript } from "../app/book-types";
@@ -165,7 +166,7 @@ test("back_cover_blurb returns dash-free copy from the writer", async () => {
   try {
     const book = createLongFictionManuscript();
     const response = await POST(
-      new Request("http://localhost/api/generate", {
+      await authorizedRequest("http://localhost/api/generate", {
         method: "POST",
         body: JSON.stringify({
           action: "back_cover_blurb",

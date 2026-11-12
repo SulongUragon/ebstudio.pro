@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { authorizedRequest } from "./helpers/api-access";
 import { POST, outlineTokenBudget, truncationRetryBudget } from "../app/api/generate/route";
 import { createLongFictionManuscript } from "./fixtures/publishing-manuscripts";
 
@@ -62,7 +63,7 @@ async function withProviders(
 
 function instructionRequest(provider: "auto" | Provider) {
   const book = createLongFictionManuscript();
-  return new Request("http://localhost/api/generate", {
+  return authorizedRequest("http://localhost/api/generate", {
     method: "POST",
     body: JSON.stringify({
       action: "revise_section",
@@ -95,7 +96,7 @@ test("truncation retries ask for 1.6 times the budget within each provider's cap
 for (const provider of ["anthropic", "openai", "kimi"] as const) {
   test(`${provider}: a cut-off answer is retried once with a larger budget`, async () => {
     await withProviders([provider], { [provider]: [{ truncated: true, text: CUT }, { truncated: false, text: FULL }] }, async (calls) => {
-      const response = await POST(instructionRequest(provider));
+      const response = await POST(await instructionRequest(provider));
       assert.equal(response.status, 200, await response.clone().text());
       assert.equal(calls.length, 2);
       assert.equal(calls[1].budget, truncationRetryBudget(provider, calls[0].budget));
@@ -106,7 +107,7 @@ for (const provider of ["anthropic", "openai", "kimi"] as const) {
 
 test("a provider that stays cut off reports output_truncated, not invalid_response", async () => {
   await withProviders(["anthropic"], { anthropic: [{ truncated: true, text: CUT }] }, async (calls) => {
-    const response = await POST(instructionRequest("anthropic"));
+    const response = await POST(await instructionRequest("anthropic"));
     const data = await response.json();
     assert.equal(response.status, 502);
     assert.equal(data.code, "output_truncated");
@@ -121,7 +122,7 @@ test("Auto fails over to the next provider when one stays cut off", async () => 
     ["openai", "anthropic"],
     { openai: [{ truncated: true, text: CUT }], anthropic: [{ truncated: false, text: FULL }] },
     async (calls) => {
-      const response = await POST(instructionRequest("auto"));
+      const response = await POST(await instructionRequest("auto"));
       const data = await response.json();
       assert.equal(response.status, 200);
       assert.equal(data.provider, "anthropic");

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { authorizedRequest } from "./helpers/api-access";
 import { POST } from "../app/api/generate/route";
 import {
   applySectionRevision,
@@ -104,7 +105,7 @@ async function withMockedOpenAI<T>(replies: string[], run: (prompts: string[]) =
 
 function reviseRequest(mode: "expand" | "tighten" | "instruction", content: string, instruction?: string) {
   const book = createLongFictionManuscript();
-  return new Request("http://localhost/api/generate", {
+  return authorizedRequest("http://localhost/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -123,7 +124,7 @@ function reviseRequest(mode: "expand" | "tighten" | "instruction", content: stri
 
 test("revise_section returns the expanded chapter from the writer", async () => {
   await withMockedOpenAI([words(1400, "longer")], async (prompts) => {
-    const response = await POST(reviseRequest("expand", words(1000)));
+    const response = await POST(await reviseRequest("expand", words(1000)));
     const data = await response.json();
     assert.equal(response.status, 200);
     assert.equal(countWords(data.content), 1400);
@@ -136,7 +137,7 @@ test("revise_section returns the expanded chapter from the writer", async () => 
 
 test("revise_section retries once, then refuses an expand that did not grow", async () => {
   await withMockedOpenAI([words(1000, "same")], async (prompts) => {
-    const response = await POST(reviseRequest("expand", words(1000)));
+    const response = await POST(await reviseRequest("expand", words(1000)));
     const data = await response.json();
     assert.equal(response.status, 422);
     assert.match(data.error, /could not expand/);
@@ -147,7 +148,7 @@ test("revise_section retries once, then refuses an expand that did not grow", as
 
 test("revise_section applies the author's note", async () => {
   await withMockedOpenAI([words(980, "edited")], async (prompts) => {
-    const response = await POST(reviseRequest("instruction", words(1000), "Make the ending quieter."));
+    const response = await POST(await reviseRequest("instruction", words(1000), "Make the ending quieter."));
     assert.equal(response.status, 200);
     assert.match(prompts[0], /Make the ending quieter\./);
   });
@@ -155,7 +156,7 @@ test("revise_section applies the author's note", async () => {
 
 test("revise_section rejects a missing note without calling a writer", async () => {
   await withMockedOpenAI([words(10)], async (prompts) => {
-    const response = await POST(reviseRequest("instruction", words(1000), "  "));
+    const response = await POST(await reviseRequest("instruction", words(1000), "  "));
     assert.equal(response.status, 400);
     assert.equal(prompts.length, 0);
   });

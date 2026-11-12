@@ -3736,3 +3736,81 @@ p {
   background: var(--sage);
   color: white;
 }
+
+.access-gate {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: var(--paper);
+}
+
+.access-gate section {
+  display: grid;
+  width: min(380px, 100%);
+  gap: 14px;
+  justify-items: center;
+  padding: 32px 28px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--white);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  text-align: center;
+}
+
+.access-gate h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.access-gate form {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  text-align: left;
+}
+
+.access-gate label {
+  color: #4a463f;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.access-gate input {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.access-gate button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--sage);
+  color: white;
+  font-weight: 750;
+}
+
+.access-gate button:disabled {
+  opacity: 0.6;
+}
+
+.access-gate p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.access-gate .access-gate-error {
+  color: var(--rust);
+  font-weight: 650;
+}

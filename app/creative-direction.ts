@@ -572,7 +572,11 @@ export function stripCoverPlaceholderText(text: string | undefined) {
 }
 
 export function validateCoverPromptForPlaceholders(prompt: string) {
-  const explicitTemplateArtifact = /\b(?:author name|your name|book title|lorem ipsum|sample text)\b/i;
+  // Negated instructions such as "no author name" or "no book title" are the
+  // artwork prompt's own no-text rules, which validateCoverArtworkPrompt
+  // requires. Only an unnegated phrase is a leftover template placeholder.
+  const explicitTemplateArtifact =
+    /(?<!\b(?:no|without|never)\s)\b(?:author name|your name|book title|lorem ipsum|sample text)\b/i;
   const standaloneTemplateLabel = /(?:^|\n)\s*(?:title|subtitle|tagline|placeholder)\s*(?::|$)/im;
   return !explicitTemplateArtifact.test(prompt) && !standaloneTemplateLabel.test(prompt);
 }

@@ -7,6 +7,7 @@ import "@fontsource/great-vibes/400.css";
 import "@fontsource/montserrat/800.css";
 import "@fontsource/playfair-display/700.css";
 import "./globals.css";
+import AccessGate from "./access-gate";
 
 export const metadata: Metadata = {
   title: "EB Studio Pro | AI Ebook Generator",
@@ -52,7 +53,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AccessGate>{children}</AccessGate>
+      </body>
     </html>
   );
 }
