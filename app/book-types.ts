@@ -4,6 +4,16 @@ export type Mode = "fiction" | "nonfiction";
 export type AIProvider = "auto" | "openai" | "anthropic" | "kimi";
 export type ActiveAIProvider = Exclude<AIProvider, "auto">;
 
+/** The author's writing voice, locked to a book so every chapter sounds the same. */
+export type BookVoice = {
+  /** A passage the author wrote, used to learn the style. */
+  sample?: string;
+  /** Short direction from the author, such as "short sentences, warm, no jargon". */
+  notes?: string;
+  /** Style profile drawn from the sample; the author can edit it. */
+  profile?: string;
+};
+
 export type BookBrief = {
   title: string;
   subtitle?: string;
@@ -15,6 +25,7 @@ export type BookBrief = {
   audience: string;
   keyPoints: string;
   chapterCount: number;
+  voice?: BookVoice;
 };
 
 export type BookLength = "novella" | "standard" | "long";

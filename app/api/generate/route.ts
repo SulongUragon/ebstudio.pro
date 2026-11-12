@@ -19,6 +19,12 @@ import {
 import type { VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 import { BLURB_MAX_WORDS, BLURB_MIN_WORDS, removeDashes } from "../../back-cover-copy";
 import {
+  normalizeVoice,
+  validateVoiceSample,
+  VOICE_PROFILE_MAX_CHARACTERS,
+  voicePromptBlock,
+} from "../../voice-style";
+import {
   countWords,
   revisionDirection,
   revisionLengthOk,
@@ -30,7 +36,7 @@ import {
 class RevisionError extends Error {}
 
 type RequestBody = {
-  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "revise_section" | "back_cover_blurb";
+  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "revise_section" | "back_cover_blurb" | "voice_profile";
   mode: Mode;
   sourceMode?: Mode;
   brief: BookBrief;
@@ -41,6 +47,7 @@ type RequestBody = {
   sectionIndex?: number;
   previousSummaries?: string[];
   revision?: Partial<RevisionRequest>;
+  voice?: { sample?: string; notes?: string };
   assistantPrompt?: string;
   assistantHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   manuscript?: {
@@ -176,6 +183,19 @@ export async function POST(request: Request) {
         { error: "AI generation is not configured yet." },
         { status: 503 },
       );
+    }
+    // A voice can be analyzed before the rest of the brief is filled in.
+    if (body.action === "voice_profile") {
+      const problem = validateVoiceSample(body.voice?.sample);
+      if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+      try {
+        return NextResponse.json(await createVoiceProfile(body));
+      } catch (error) {
+        if (error instanceof RevisionError) {
+          return NextResponse.json({ error: error.message, code: "voice_incomplete", retryable: true }, { status: 422 });
+        }
+        throw error;
+      }
     }
     if (!body.brief?.title || !body.mode) {
       return NextResponse.json({ error: "The book brief is incomplete." }, { status: 400 });
@@ -1373,6 +1393,34 @@ function matchLead(pov: string, leads: string[]): string {
   return partial ?? "";
 }
 
+async function createVoiceProfile(body: RequestBody) {
+  const voice = normalizeVoice({ sample: body.voice?.sample, notes: body.voice?.notes });
+  const request: JsonRequest = {
+    name: "author_voice_profile",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { profile: { type: "string" } },
+      required: ["profile"],
+    },
+    instructions:
+      "You are a senior line editor inside EB Studio Pro. Describe an author's prose style precisely enough that another writer could match it. Describe the style only: never summarize the content, repeat the author's sentences, or judge quality. Never use the em dash or en dash character.",
+    input: `Read this passage by the author and write a style profile of 6 to 9 short lines, each starting with a label and a colon. Cover: Sentence rhythm, Diction, Tone, Point of view and address, Openings and endings, Paragraphing, Signature moves, and Avoid. Be specific and concrete, for example "Mostly short declarative sentences, with one longer sentence to land each paragraph." Keep the whole profile under 1,200 characters.
+${voice?.notes ? `\nThe author also says: ${voice.notes}\n` : ""}
+Passage:
+"""
+${voice?.sample ?? ""}
+"""`,
+    maxOutputTokens: 1200,
+  };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const generated = await generateJson(request, body.provider ?? "auto", body.preferredProvider);
+    const profile = removeDashes(String(generated.output.profile ?? "").replace(/\r/g, "").trim()).slice(0, VOICE_PROFILE_MAX_CHARACTERS);
+    if (profile.split(/\n/).filter((line) => line.trim()).length >= 4) return { profile, provider: generated.provider };
+  }
+  throw new RevisionError("The writer could not describe this voice. Try again, or write the profile yourself.");
+}
+
 async function createBackCoverBlurb(body: RequestBody) {
   const { brief, mode, manuscript } = body;
   const fiction = mode === "fiction";
@@ -1403,7 +1451,7 @@ Write 120 to 170 words in 3 or 4 short paragraphs separated by a blank line. The
       fiction
         ? "Introduce the main character, the inciting situation, and the stakes. Do not reveal the ending or late twists."
         : "State the reader's problem, what the book helps them do, and two or three concrete outcomes. Do not use a bulleted list."
-    } End with a short closing line about the kind of reader this book is for. Plain text only, no headings, no markdown.`,
+    } End with a short closing line about the kind of reader this book is for. Plain text only, no headings, no markdown.${voicePromptBlock(brief.voice)}`,
     maxOutputTokens: 1200,
   };
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -1492,7 +1540,7 @@ Direction:
 ${revisionDirection(revision.mode, revision.instruction, originalWords)}
 
 Return the complete revised section in content, never a partial excerpt or a list of changes. Start directly with the section prose. Do not repeat the section title, section type, or chapter number as a heading. Never use a top-level # heading. Keep clean Markdown with paragraphs and only useful internal subheadings.
-${sectionVoiceRules(mode, String(section.pov ?? "").trim(), romance)}
+${sectionVoiceRules(mode, String(section.pov ?? "").trim(), romance)}${voicePromptBlock(brief.voice)}
 The summary must be a compact continuity note of 2 to 4 sentences describing the revised section for the writer of the next section.
 
 Any new minor character, business, street, or building must use a name that appears nowhere in the exclusion list below.${avoidanceRules(avoidNames)}
@@ -1606,7 +1654,7 @@ ${
     ? "Write in immersive scenes with specific sensory detail, emotional consequence, natural dialogue when appropriate, and forward story movement. Preserve character consistency and do not summarize scenes that should be dramatized."
     : "Teach with clarity and authority. Use concrete examples and practical steps where appropriate. Make each section useful on its own while advancing the book's central promise."
 }
-${sectionVoiceRules(mode, sectionPov, romance)}
+${sectionVoiceRules(mode, sectionPov, romance)}${voicePromptBlock(brief.voice)}
 The summary must be a compact continuity note of 2 to 4 sentences for the writer of the next section.
 
 Any minor character you introduce must be named with a name that appears nowhere in the exclusion list below, and any business, street, or building you name is bound by the same list.${avoidanceRules(avoidNames)}`,

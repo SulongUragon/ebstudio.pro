@@ -67,6 +67,7 @@ import {
   getPaperbackCoverReadiness,
 } from "./paperback-cover";
 import PaperbackCoverPanel from "./paperback-cover-panel";
+import VoicePanel from "./voice-panel";
 import CreativeAssistant from "./creative-assistant";
 import CoverStudio from "./cover-studio";
 import ExistingEbookOptimizer from "./existing-ebook-optimizer";
@@ -1885,6 +1886,13 @@ export default function EbookStudio() {
                   />
                 </>
               )}
+
+              <VoicePanel
+                voice={brief.voice}
+                onChange={(voice) => setBrief((current) => ({ ...current, voice }))}
+                disabled={fieldsLocked}
+                provider={provider}
+              />
 
               <fieldset className="chapter-fieldset" disabled={fieldsLocked}>
                 <legend>Book length</legend>
