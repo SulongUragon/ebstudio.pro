@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
 import { buildVisualArtworkDirection } from "../../creative-direction";
+import {
+  bothProvidersFailedMessage,
+  cloudflareImageConfigured,
+  generateCloudflareImage,
+  shouldUseImageFallback,
+} from "../../image-providers";
+import { classifyOpenAIImageError } from "../../openai-image-errors";
 import type { ComicPanel, VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 export const maxDuration = 300;
 type VisualImageRequest = { project: VisualBookBrief; page: VisualBookPage; panel?: ComicPanel };
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
   const denied = await denyWithoutApiAccess(request);
   if (denied) return denied;
   try {
-    if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "OpenAI image generation is not configured." }, { status: 503 });
+    if (!process.env.OPENAI_API_KEY && !cloudflareImageConfigured()) return NextResponse.json({ error: "No image provider is configured." }, { status: 503 });
     const { project, page, panel } = (await request.json()) as VisualImageRequest;
     if (!project?.title || !page) return NextResponse.json({ error: "Complete the visual project and storyboard first." }, { status: 400 });
     const comic = project.mode === "comic";
@@ -100,8 +107,23 @@ Locked palette and lighting: ${project.palette || "Use a coherent premium palett
 The character description is authoritative. Preserve the same apparent age, facial structure, hair, skin tone, body type, wardrobe identifiers, and distinguishing features in every recurring appearance. Show only what can be visibly present in this scene. Keep the composition readable at page size.
 
 ABSOLUTELY NO TEXT: no words, letters, numbers, speech bubbles, thought bubbles, captions, sound effects, signs, labels, logos, watermarks, borders, page numbers, book mockups, or typography. Do not imitate a living artist, named franchise, protected character, or recognizable copyrighted visual world.`;
+    const [width, height] = size.split("x").map(Number);
+    const tryBackup = async (openAIFailure: ReturnType<typeof classifyOpenAIImageError>) => {
+      try {
+        const backup = await generateCloudflareImage(prompt, width, height);
+        console.warn("Visual image used the Cloudflare backup", openAIFailure.kind, backup.model);
+        return NextResponse.json({ imageData: backup.imageData, imageProvider: "cloudflare" });
+      } catch (cloudflareError) {
+        return NextResponse.json({ code: openAIFailure.code, error: bothProvidersFailedMessage(openAIFailure, cloudflareError) }, { status: openAIFailure.status });
+      }
+    };
+    if (!process.env.OPENAI_API_KEY) {
+      return tryBackup(classifyOpenAIImageError(401, { error: { code: "openai_not_configured" } }, "page image"));
+    }
     const { response, data } = await requestImageWithRetry(prompt, size);
     if (!response.ok || !data.data?.[0]?.b64_json) {
+      const openAIFailure = classifyOpenAIImageError(response.ok ? 502 : response.status, data, "page image");
+      if (cloudflareImageConfigured() && shouldUseImageFallback(openAIFailure)) return tryBackup(openAIFailure);
       const code = data.error?.code ?? "image_request_failed";
       const quotaFailure = QUOTA_ERROR_CODES.has(code) || /quota|credit|billing/i.test(data.error?.message ?? "");
       const error = quotaFailure
@@ -116,7 +138,7 @@ ABSOLUTELY NO TEXT: no words, letters, numbers, speech bubbles, thought bubbles,
       console.error("EB Studio Pro visual image generation failed", response.status, code);
       return NextResponse.json({ code, error }, { status: response.status >= 400 ? response.status : 502 });
     }
-    return NextResponse.json({ imageData: `data:image/jpeg;base64,${data.data[0].b64_json}` });
+    return NextResponse.json({ imageData: `data:image/jpeg;base64,${data.data[0].b64_json}`, imageProvider: "openai" });
   } catch (error) {
     console.error("EB Studio Pro visual image request failed", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "This page image could not be generated. Your storyboard is safe." }, { status: 500 });

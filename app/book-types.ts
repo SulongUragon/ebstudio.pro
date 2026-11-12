@@ -49,6 +49,8 @@ export type BookImage = {
 
 export type CoverDesign = {
   imageData: string;
+  /** Which image service painted the artwork. */
+  artworkProvider?: "openai" | "cloudflare";
   width?: number;
   height?: number;
   style: string;

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
-import { classifyOpenAIImageError, retryDelayMs, type OpenAIImageErrorPayload } from "../../openai-image-errors";
+import { classifyOpenAIImageError, retryDelayMs, type ImageFailure, type OpenAIImageErrorPayload } from "../../openai-image-errors";
+import {
+  bothProvidersFailedMessage,
+  cloudflareImageConfigured,
+  generateCloudflareImage,
+  shouldUseImageFallback,
+} from "../../image-providers";
 import type { BookBrief, Mode } from "../../book-types";
 import {
   buildCoverPrompt,
@@ -53,9 +59,9 @@ export async function POST(request: Request) {
   const denied = await denyWithoutApiAccess(request);
   if (denied) return denied;
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.OPENAI_API_KEY && !cloudflareImageConfigured()) {
       return NextResponse.json(
-        { error: "OpenAI cover generation is not configured." },
+        { error: "No image provider is configured for cover generation." },
         { status: 503 },
       );
     }
@@ -162,32 +168,61 @@ export async function POST(request: Request) {
       });
 
     type ImageResponse = OpenAIImageErrorPayload & { data?: Array<{ b64_json?: string }> };
-    let response = await requestCover();
-    let data = (await response.json().catch(() => ({}))) as ImageResponse;
-    if (!response.ok && classifyOpenAIImageError(response.status, data, "cover").kind === "busy") {
-      // One retry when OpenAI is only busy. Used-up credits are never retried.
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs(response.headers.get("retry-after"))));
-      response = await requestCover();
-      data = (await response.json().catch(() => ({}))) as ImageResponse;
+    let imageData = "";
+    let imageProvider: "openai" | "cloudflare" = "openai";
+    let failure: ImageFailure | null = null;
+    let providerDetail = "";
+
+    if (process.env.OPENAI_API_KEY) {
+      let response = await requestCover();
+      let data = (await response.json().catch(() => ({}))) as ImageResponse;
+      if (!response.ok && classifyOpenAIImageError(response.status, data, "cover").kind === "busy") {
+        // One retry when OpenAI is only busy. Used-up credits are never retried.
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(response.headers.get("retry-after"))));
+        response = await requestCover();
+        data = (await response.json().catch(() => ({}))) as ImageResponse;
+      }
+      if (response.ok && data.data?.[0]?.b64_json) {
+        imageData = `data:image/jpeg;base64,${data.data[0].b64_json}`;
+      } else {
+        failure = classifyOpenAIImageError(response.ok ? 502 : response.status, data, "cover");
+        providerDetail = String(data.error?.message ?? "").slice(0, 240);
+        console.error("EB Studio Pro cover generation failed", response.status, failure.kind, failure.code);
+      }
+    } else {
+      failure = classifyOpenAIImageError(401, { error: { code: "openai_not_configured" } }, "cover");
     }
 
-    if (!response.ok || !data.data?.[0]?.b64_json) {
-      const failure = classifyOpenAIImageError(response.ok ? 502 : response.status, data, "cover");
-      console.error("EB Studio Pro cover generation failed", response.status, failure.kind, failure.code);
+    if (!imageData && failure && cloudflareImageConfigured() && shouldUseImageFallback(failure)) {
+      try {
+        const backup = await generateCloudflareImage(prompt, 1024, 1536);
+        imageData = backup.imageData;
+        imageProvider = "cloudflare";
+        console.warn("EB Studio Pro cover used the Cloudflare backup", failure.kind, backup.model);
+      } catch (cloudflareError) {
+        return NextResponse.json(
+          {
+            code: failure.code,
+            reason: failure.kind,
+            retryable: failure.retryable,
+            providerDetail,
+            error: bothProvidersFailedMessage(failure, cloudflareError),
+          },
+          { status: failure.status },
+        );
+      }
+    }
+
+    if (!imageData && failure) {
       return NextResponse.json(
-        {
-          code: failure.code,
-          reason: failure.kind,
-          retryable: failure.retryable,
-          providerDetail: String(data.error?.message ?? "").slice(0, 240),
-          error: failure.message,
-        },
+        { code: failure.code, reason: failure.kind, retryable: failure.retryable, providerDetail, error: failure.message },
         { status: failure.status },
       );
     }
 
     return NextResponse.json({
-      imageData: `data:image/jpeg;base64,${data.data[0].b64_json}`,
+      imageData,
+      imageProvider,
       style,
       finish,
       creativeFinish,

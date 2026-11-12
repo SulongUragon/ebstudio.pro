@@ -3814,3 +3814,9 @@ p {
   color: var(--rust);
   font-weight: 650;
 }
+
+.cover-provider-note {
+  color: #77736b;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}

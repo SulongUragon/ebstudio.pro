@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
 import { classifyOpenAIImageError } from "../../openai-image-errors";
+import {
+  bothProvidersFailedMessage,
+  cloudflareImageConfigured,
+  generateCloudflareImage,
+  shouldUseImageFallback,
+} from "../../image-providers";
 import { sanitizeChapterOpenerMetadata } from "../../longform-chapter-openers";
 
 export const maxDuration = 300;
@@ -62,7 +68,7 @@ export async function POST(request: Request) {
   const denied = await denyWithoutApiAccess(request);
   if (denied) return denied;
   try {
-    if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "OpenAI image generation is not configured." }, { status: 503 });
+    if (!process.env.OPENAI_API_KEY && !cloudflareImageConfigured()) return NextResponse.json({ error: "No image provider is configured." }, { status: 503 });
     const body = (await request.json()) as RequestBody;
     if (!body.manuscript?.title || !body.section?.title) return NextResponse.json({ error: "Book and section details are required." }, { status: 400 });
 
@@ -85,7 +91,9 @@ ${openerMood ? `Chapter opener visual mood: ${openerMood}` : ""}
 ${visualBible}
 Choose the single strongest visually specific moment from this section. Preserve character identity, age, wardrobe logic, setting, mood, and story continuity implied by the supplied book context. Sophisticated composition, believable anatomy, controlled depth, premium publishing quality, emotionally specific rather than generic. Portrait interior-book illustration with a clear focal subject positioned away from the lower-third text-safe area when possible. Preserve clean lower-third or left-side negative space for app-rendered chapter typography. No title, captions, speech bubbles, words, letters, typography, readable signage, logos, watermark, border, mockup, or unrelated decorative text.`;
 
-    let result = await requestImage(prompt);
+    let result = process.env.OPENAI_API_KEY
+      ? await requestImage(prompt)
+      : { ok: false as const, data: { error: { code: "openai_not_configured", message: "OpenAI is not configured." } } as OpenAIImageResponse, status: 401, requestId: "" };
     let usedPrompt = prompt;
     let usedFallback = false;
 
@@ -102,6 +110,16 @@ No person in distress. No injury, death, self-harm, suicide, medical emergency, 
     }
 
     if (!result.ok || !result.data.data?.[0]?.b64_json) {
+      const openAIFailure = classifyOpenAIImageError(result.status, result.data, "chapter image");
+      if (!looksLikeSafetyRejection(result.data, result.status) && cloudflareImageConfigured() && shouldUseImageFallback(openAIFailure)) {
+        try {
+          const backup = await generateCloudflareImage(usedPrompt, 1024, 1536);
+          console.warn("Book image used the Cloudflare backup", openAIFailure.kind, backup.model);
+          return NextResponse.json({ imageData: backup.imageData, imageProvider: "cloudflare", prompt: usedPrompt, fallback: usedFallback });
+        } catch (cloudflareError) {
+          return NextResponse.json({ error: bothProvidersFailedMessage(openAIFailure, cloudflareError), reason: openAIFailure.kind, code: openAIFailure.code }, { status: openAIFailure.status });
+        }
+      }
       const upstreamMessage = result.data.error?.message || "Book image could not be generated.";
       console.error("Book image upstream failure", { section: body.section.title, status: result.status, requestId: result.requestId, code: result.data.error?.code, type: result.data.error?.type, message: upstreamMessage });
       const failure = classifyOpenAIImageError(result.status, result.data, "chapter image");
@@ -111,7 +129,7 @@ No person in distress. No injury, death, self-harm, suicide, medical emergency, 
       return NextResponse.json({ error: userMessage, reason: failure.kind, status: result.status, code: result.data.error?.code ?? result.data.error?.type ?? "image_generation_failed", requestId: result.requestId || undefined }, { status: result.status >= 400 ? result.status : 502 });
     }
 
-    return NextResponse.json({ imageData: `data:image/jpeg;base64,${result.data.data[0].b64_json}`, prompt: usedPrompt, fallback: usedFallback, requestId: result.requestId || undefined });
+    return NextResponse.json({ imageData: `data:image/jpeg;base64,${result.data.data[0].b64_json}`, imageProvider: "openai", prompt: usedPrompt, fallback: usedFallback, requestId: result.requestId || undefined });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown server error";
     console.error("Book image generation failed", message);

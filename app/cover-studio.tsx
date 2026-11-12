@@ -340,7 +340,9 @@ export default function CoverStudio({
       if (!response.ok || !data.imageData) {
         throw new Error(String(data.error ?? "The AI cover could not be generated."));
       }
-      const sourceImageData = String(data.imageData);
+      // The Cloudflare backup can return PNG or WebP; covers are stored as JPEG.
+      const sourceImageData = await ensureJpegDataUri(String(data.imageData));
+      const artworkProvider: "openai" | "cloudflare" = data.imageProvider === "cloudflare" ? "cloudflare" : "openai";
       const resolvedGeneratedTextMode = data.resolvedCoverTextMode === "integrated-typography"
         ? "integrated-typography"
         : "app-typography";
@@ -392,6 +394,7 @@ export default function CoverStudio({
         width: 1600,
         height: 2560,
         sourceImageData,
+        artworkProvider,
         style,
         finish,
         creativeFinish,
@@ -825,6 +828,9 @@ export default function CoverStudio({
             {loading ? "Designing cover…" : manuscript.cover ? "Generate another cover" : "Generate AI cover"}
           </button>
           {error ? <p className="cover-error" role="alert">{error}</p> : null}
+          {manuscript.cover?.artworkProvider === "cloudflare" ? (
+            <p className="cover-provider-note">Artwork by the Cloudflare FLUX backup, because OpenAI was unavailable.</p>
+          ) : null}
         </div>
       </div>
     </section>
@@ -911,6 +917,21 @@ export async function renderPrintFrontCover(manuscript: Manuscript, output: Cove
   context.imageSmoothingQuality = "high";
   drawImageCover(context, image, output.width, output.height);
   return canvas.toDataURL("image/jpeg", 0.95);
+}
+
+/** Re-encodes a PNG or WebP data URI as JPEG; JPEG input is returned unchanged. */
+export async function ensureJpegDataUri(dataUri: string) {
+  if (/^data:image\/jpe?g;base64,/i.test(dataUri)) return dataUri;
+  const image = await loadImage(dataUri);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) return dataUri;
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.92);
 }
 
 /** Average color of a strip along one edge of an image, as a hex string. */
