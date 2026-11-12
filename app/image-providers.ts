@@ -75,59 +75,75 @@ export class CloudflareImageError extends Error {
   }
 }
 
+/** True when Cloudflare rejected the request only because the model takes no width or height. */
+export function isSizeNotSupportedError(message: string) {
+  return /\b(width|height)\b/i.test(message) && /(not allowed|unevaluated|additional|unknown|unexpected)/i.test(message);
+}
+
 export async function generateCloudflareImage(prompt: string, width: number, height: number): Promise<GeneratedImage> {
   if (!cloudflareImageConfigured()) throw new CloudflareImageError("Cloudflare image generation is not configured.", 503);
   const model = cloudflareImageModel();
   const size = cloudflareSize(width, height);
   const text = compactPrompt(prompt);
   const url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID!.trim()}/ai/run/${model}`;
-  const headers: Record<string, string> = { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN!.trim()}` };
-  let body: BodyInit;
-  if (usesMultipartInput(model)) {
-    const form = new FormData();
-    form.append("prompt", text);
-    form.append("width", String(size.width));
-    form.append("height", String(size.height));
-    body = form;
-  } else {
-    headers["Content-Type"] = "application/json";
-    body = JSON.stringify({ prompt: text, width: size.width, height: size.height });
-  }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CLOUDFLARE_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetch(url, { method: "POST", headers, body, signal: controller.signal });
-  } catch (error) {
-    const timedOut = error instanceof DOMException && error.name === "AbortError";
-    throw new CloudflareImageError(timedOut ? "Cloudflare took too long to return the image." : "Cloudflare could not be reached.", 504);
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    const data = (await response.json().catch(() => ({}))) as {
-      success?: boolean;
-      result?: { image?: string };
-      errors?: Array<{ message?: string; code?: number }>;
-    };
-    const image = data.result?.image;
-    if (!response.ok || !image) {
-      const detail = data.errors?.[0]?.message ?? `HTTP ${response.status}`;
-      console.error("Cloudflare image generation failed", response.status, model, detail.slice(0, 200));
-      throw new CloudflareImageError(`Cloudflare could not generate the image (${detail.slice(0, 120)}).`, response.ok ? 502 : response.status);
+  const send = async (includeSize: boolean) => {
+    const headers: Record<string, string> = { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN!.trim()}` };
+    let body: BodyInit;
+    if (usesMultipartInput(model)) {
+      const form = new FormData();
+      form.append("prompt", text);
+      if (includeSize) {
+        form.append("width", String(size.width));
+        form.append("height", String(size.height));
+      }
+      body = form;
+    } else {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(includeSize ? { prompt: text, width: size.width, height: size.height } : { prompt: text });
     }
-    return { imageData: `data:${mimeFromBase64(image)};base64,${image}`, provider: "cloudflare", model };
-  }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CLOUDFLARE_TIMEOUT_MS);
+    try {
+      return await fetch(url, { method: "POST", headers, body, signal: controller.signal });
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "AbortError";
+      throw new CloudflareImageError(timedOut ? "Cloudflare took too long to return the image." : "Cloudflare could not be reached.", 504);
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!response.ok || bytes.length < 100) {
-    console.error("Cloudflare image generation failed", response.status, model);
-    throw new CloudflareImageError("Cloudflare could not generate the image.", response.ok ? 502 : response.status);
+  const read = async (response: Response): Promise<GeneratedImage | { error: string; status: number }> => {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const data = (await response.json().catch(() => ({}))) as {
+        result?: { image?: string };
+        errors?: Array<{ message?: string; code?: number }>;
+      };
+      const image = data.result?.image;
+      if (response.ok && image) return { imageData: `data:${mimeFromBase64(image)};base64,${image}`, provider: "cloudflare", model };
+      return { error: data.errors?.[0]?.message ?? `HTTP ${response.status}`, status: response.ok ? 502 : response.status };
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (response.ok && bytes.length >= 100) {
+      return { imageData: `data:${mimeFromBytes(bytes)};base64,${toBase64(bytes)}`, provider: "cloudflare", model };
+    }
+    return { error: `HTTP ${response.status}`, status: response.ok ? 502 : response.status };
+  };
+
+  let result = await read(await send(true));
+  // Some models (for example flux-1-schnell) take only a prompt and always
+  // return a square image. Ask again without the size instead of failing.
+  if ("error" in result && isSizeNotSupportedError(result.error)) {
+    console.warn("Cloudflare model takes no width or height; retrying with the prompt only", model);
+    result = await read(await send(false));
   }
-  return { imageData: `data:${mimeFromBytes(bytes)};base64,${toBase64(bytes)}`, provider: "cloudflare", model };
+  if ("error" in result) {
+    console.error("Cloudflare image generation failed", result.status, model, result.error.slice(0, 200));
+    throw new CloudflareImageError(`Cloudflare could not generate the image (${result.error.slice(0, 120)}).`, result.status);
+  }
+  return result;
 }
 
 /** One message when both providers failed, naming both reasons. */

@@ -196,3 +196,46 @@ test("visual book pages fall back to Cloudflare when OpenAI credits are used up"
     assert.equal(data.imageProvider, "cloudflare");
   });
 });
+
+test("a Cloudflare model that rejects width and height is retried with the prompt only", async () => {
+  let attempt = 0;
+  await withImageServices(
+    { model: "@cf/black-forest-labs/flux-1-schnell" },
+    (url) => {
+      if (url.includes("openai")) return openAIQuota();
+      attempt += 1;
+      if (attempt === 1) {
+        return new Response(
+          JSON.stringify({ success: false, errors: [{ code: 5006, message: "AiError: Bad input: Error: Additional or unevaluated properties '/width, /height' at '/' not allowed (f3076b47)" }] }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        );
+      }
+      return cloudflareJson();
+    },
+    async (calls) => {
+      const response = await coverPost(await coverRequest());
+      const data = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(data));
+      assert.equal(data.imageProvider, "cloudflare");
+      const cloudflareCalls = calls.filter((call) => call.url.includes("cloudflare"));
+      assert.equal(cloudflareCalls.length, 2);
+      assert.deepEqual(Object.keys(JSON.parse(String(cloudflareCalls[0].body))).sort(), ["height", "prompt", "width"]);
+      assert.deepEqual(Object.keys(JSON.parse(String(cloudflareCalls[1].body))), ["prompt"]);
+    },
+  );
+});
+
+test("other Cloudflare errors are not retried", async () => {
+  await withImageServices(
+    {},
+    (url) =>
+      url.includes("openai")
+        ? openAIQuota()
+        : new Response(JSON.stringify({ success: false, errors: [{ message: "Authentication error" }] }), { status: 401, headers: { "content-type": "application/json" } }),
+    async (calls) => {
+      const response = await coverPost(await coverRequest());
+      assert.notEqual(response.status, 200);
+      assert.equal(calls.filter((call) => call.url.includes("cloudflare")).length, 1);
+    },
+  );
+});
