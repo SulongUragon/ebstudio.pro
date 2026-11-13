@@ -1,4 +1,4 @@
-import type { BookVoice } from "./book-types";
+import type { BookVoice, Manuscript } from "./book-types";
 
 /** Voice and style lock rules shared by the editor and the API. */
 export const VOICE_SAMPLE_MIN_WORDS = 150;
@@ -40,6 +40,18 @@ export function normalizeVoice(voice: BookVoice | undefined): BookVoice | undefi
     profile: clean(voice.profile, VOICE_PROFILE_MAX_CHARACTERS),
   };
   return hasVoice(normalized) ? normalized : undefined;
+}
+
+/**
+ * Locks (or removes) a voice on a book that already exists. Chapters already
+ * written stay as they are; only later rewrites and blurbs use the new voice.
+ */
+export function setBookVoice(book: Manuscript, voice: BookVoice | undefined): Manuscript {
+  const normalized = normalizeVoice(voice);
+  const brief = { ...book.brief };
+  if (normalized) brief.voice = normalized;
+  else delete brief.voice;
+  return { ...book, brief };
 }
 
 /** Cuts the sample at a sentence end near the excerpt limit. */

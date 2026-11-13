@@ -7,6 +7,7 @@ import {
   normalizeVoice,
   validateVoiceSample,
   VOICE_EXCERPT_CHARACTERS,
+  setBookVoice,
   voiceExcerpt,
   voicePromptBlock,
 } from "../app/voice-style";
@@ -152,4 +153,30 @@ test("voice_profile refuses a sample that is too short without calling a writer"
   const { response, prompt } = await captureWriterPrompt({ action: "voice_profile", voice: { sample: "Too short." } }, {});
   assert.equal(response.status, 400);
   assert.equal(prompt, "");
+});
+
+test("a voice locked on a finished book reaches its next rewrite, and removing it restores the old prompt", async () => {
+  const book = createLongFictionManuscript();
+  const reviseBody = (target: typeof book) => ({
+    action: "revise_section",
+    mode: target.mode,
+    brief: target.brief,
+    plan: target.plan,
+    section: target.plan[1],
+    sectionIndex: 1,
+    revision: { mode: "tighten", content: "word ".repeat(1000), instruction: "" },
+  });
+  const output = { content: "word ".repeat(900), summary: "Tighter." };
+
+  const locked = setBookVoice(book, VOICE);
+  assert.equal(locked.sections, book.sections);
+  assert.equal(book.brief.voice, undefined);
+  const withVoice = await captureWriterPrompt(reviseBody(locked), output);
+  assert.match(withVoice.prompt, /AUTHOR VOICE LOCK/);
+
+  const removed = setBookVoice(locked, undefined);
+  assert.equal("voice" in removed.brief, false);
+  const before = await captureWriterPrompt(reviseBody(book), output);
+  const after = await captureWriterPrompt(reviseBody(removed), output);
+  assert.equal(after.prompt, before.prompt);
 });

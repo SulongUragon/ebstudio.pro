@@ -61,6 +61,7 @@ import {
   undoSectionRevision,
   type RevisionMode,
 } from "./section-revision";
+import { setBookVoice } from "./voice-style";
 import {
   exportPaperbackCover,
   frontCoverPixels,
@@ -614,6 +615,15 @@ export default function EbookStudio() {
       backCover: { blurb: "", ...manuscript.backCover, ...patch },
     };
     setManuscript(updated);
+    saveBook(updated);
+  }
+
+  /** Locks or removes the writing voice on a finished book. Written chapters stay as they are. */
+  function saveBookVoice(voice: Manuscript["brief"]["voice"]) {
+    if (!manuscript) return;
+    const updated = setBookVoice(manuscript, voice);
+    setManuscript(updated);
+    setBrief((current) => ({ ...current, voice: updated.brief.voice }));
     saveBook(updated);
   }
 
@@ -1999,6 +2009,8 @@ export default function EbookStudio() {
             onRepairSection={repairSection}
             onSaveBackCover={saveBackCover}
             onDraftBlurb={draftBackCoverBlurb}
+            onSaveVoice={saveBookVoice}
+            voiceProvider={provider}
             draftingBlurb={draftingBlurb}
             revisingMode={revisingMode}
             revisionNotice={revisionNotice?.index === activeSection ? revisionNotice.text : ""}
@@ -2192,6 +2204,8 @@ function BookPreview({
   onRepairSection,
   onSaveBackCover,
   onDraftBlurb,
+  onSaveVoice,
+  voiceProvider = "auto",
   draftingBlurb = false,
   revisingMode = null,
   revisionNotice = "",
@@ -2219,6 +2233,8 @@ function BookPreview({
   onRepairSection: (index: number) => void;
   onSaveBackCover?: (patch: Partial<NonNullable<Manuscript["backCover"]>>) => void;
   onDraftBlurb?: () => void;
+  onSaveVoice?: (voice: Manuscript["brief"]["voice"]) => void;
+  voiceProvider?: string;
   draftingBlurb?: boolean;
   revisingMode?: RevisionMode | "rewrite" | null;
   revisionNotice?: string;
@@ -2416,6 +2432,17 @@ function BookPreview({
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {isComplete && incompleteSectionIndex < 0 && onSaveVoice ? (
+        <VoicePanel
+          key={`voice-${manuscript.id}`}
+          mode="book"
+          voice={manuscript.brief.voice}
+          onChange={onSaveVoice}
+          disabled={Boolean(exporting) || repairingSection !== null || draftingBlurb}
+          provider={voiceProvider}
+        />
       ) : null}
 
       {isComplete && incompleteSectionIndex < 0 && onSaveBackCover && onDraftBlurb ? (

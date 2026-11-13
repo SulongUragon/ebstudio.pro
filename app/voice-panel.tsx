@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, LoaderCircle, Mic2, Save, Sparkles } from "lucide-react";
+import { ChevronDown, Lock, LoaderCircle, Mic2, Save, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { BookVoice } from "./book-types";
 import {
@@ -25,32 +25,59 @@ export function loadDefaultVoice(): BookVoice | undefined {
 }
 
 /**
- * Optional panel on the Create form. The voice is stored on the book's brief,
- * so every chapter, rewrite, and blurb for that book is written in it.
+ * Optional voice panel. On the Create form ("create" mode) every edit goes
+ * straight into the brief. On a finished book ("book" mode) edits stay in a
+ * draft until "Lock voice for this book", so typing never saves on every key.
+ * The voice lives on the book's brief, so chapters, rewrites, and blurbs use it.
  */
 export default function VoicePanel({
   voice,
   onChange,
   disabled,
   provider,
+  mode = "create",
 }: {
   voice: BookVoice | undefined;
   onChange: (voice: BookVoice | undefined) => void;
   disabled: boolean;
   provider: string;
+  mode?: "create" | "book";
 }) {
-  const [open, setOpen] = useState(hasVoice(voice));
+  const bookMode = mode === "book";
+  const idPrefix = bookMode ? "book-voice" : "voice";
+  const [open, setOpen] = useState(!bookMode && hasVoice(voice));
   const [analyzing, setAnalyzing] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const current: BookVoice = voice ?? {};
+  const [draft, setDraft] = useState<BookVoice | undefined>(voice);
+  const working = bookMode ? draft : voice;
+  const current: BookVoice = working ?? {};
   const sampleWords = countVoiceWords(current.sample ?? "");
+  const unsaved = bookMode && JSON.stringify(draft ?? {}) !== JSON.stringify(voice ?? {});
+
+  const setWorking = (next: BookVoice | undefined) => {
+    if (bookMode) setDraft(next);
+    else onChange(next);
+  };
 
   const update = (patch: Partial<BookVoice>) => {
     const next = { ...current, ...patch };
-    onChange(hasVoice(next) ? next : undefined);
+    setWorking(hasVoice(next) ? next : undefined);
     setMessage("");
   };
+
+  function lockForBook() {
+    onChange(hasVoice(draft) ? draft : undefined);
+    setError("");
+    setMessage("Voice locked for this book. Your next rewrite, expand, tighten, and blurb will use it.");
+  }
+
+  function removeFromBook() {
+    setDraft(undefined);
+    onChange(undefined);
+    setError("");
+    setMessage("Voice removed from this book.");
+  }
 
   async function analyze() {
     const problem = validateVoiceSample(current.sample);
@@ -95,11 +122,11 @@ export default function VoicePanel({
         aria-expanded={open}
         onClick={() => {
           // Opening the panel on a new book brings in the saved default voice.
-          if (!open && !hasVoice(voice) && !disabled) {
+          if (!open && !hasVoice(working) && !disabled) {
             const saved = loadDefaultVoice();
             if (saved) {
-              onChange(saved);
-              setMessage("Loaded your default voice. Edit it for this book if you like.");
+              setWorking(saved);
+              setMessage(bookMode ? "Loaded your default voice. Lock it to use it on this book." : "Loaded your default voice. Edit it for this book if you like.");
             }
           }
           setOpen(!open);
@@ -108,21 +135,29 @@ export default function VoicePanel({
         <Mic2 size={16} />
         <span>
           <strong>Your writing voice</strong>
-          <small>{hasVoice(voice) ? "Locked for this book" : "Optional. Make every chapter sound like you."}</small>
+          <small>
+            {unsaved
+              ? "Changes not locked yet"
+              : hasVoice(voice)
+                ? "Locked for this book"
+                : bookMode
+                  ? "Optional. Make your next rewrites sound like you."
+                  : "Optional. Make every chapter sound like you."}
+          </small>
         </span>
         <ChevronDown size={16} className="voice-panel-chevron" />
       </button>
 
       {open ? (
         <div className="voice-panel-body">
-          <label htmlFor="voice-sample">
+          <label htmlFor={`${idPrefix}-sample`}>
             Sample of your writing
             <span className={sampleWords && (sampleWords < VOICE_SAMPLE_MIN_WORDS || sampleWords > VOICE_SAMPLE_MAX_WORDS) ? "warn" : ""}>
               {sampleWords} words, {VOICE_SAMPLE_MIN_WORDS} to {VOICE_SAMPLE_MAX_WORDS}
             </span>
           </label>
           <textarea
-            id="voice-sample"
+            id={`${idPrefix}-sample`}
             rows={6}
             value={current.sample ?? ""}
             disabled={disabled || analyzing}
@@ -130,9 +165,9 @@ export default function VoicePanel({
             onChange={(event) => update({ sample: event.target.value })}
           />
 
-          <label htmlFor="voice-notes">How you want it to sound</label>
+          <label htmlFor={`${idPrefix}-notes`}>How you want it to sound</label>
           <input
-            id="voice-notes"
+            id={`${idPrefix}-notes`}
             value={current.notes ?? ""}
             maxLength={VOICE_NOTES_MAX_CHARACTERS}
             disabled={disabled}
@@ -145,17 +180,29 @@ export default function VoicePanel({
               {analyzing ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
               {analyzing ? "Analyzing" : current.profile ? "Analyze again" : "Analyze my voice"}
             </button>
-            <button type="button" onClick={saveDefault} disabled={disabled || !hasVoice(voice)}>
+            {bookMode ? (
+              <button type="button" onClick={lockForBook} disabled={disabled || analyzing || !unsaved || !hasVoice(draft)}>
+                <Lock size={15} />
+                Lock voice for this book
+              </button>
+            ) : null}
+            <button type="button" onClick={saveDefault} disabled={disabled || !hasVoice(working)}>
               <Save size={15} />
               Save as my default voice
             </button>
+            {bookMode && hasVoice(voice) ? (
+              <button type="button" onClick={removeFromBook} disabled={disabled || analyzing}>
+                <Trash2 size={15} />
+                Remove voice
+              </button>
+            ) : null}
           </div>
 
           {current.profile !== undefined && current.profile !== "" ? (
             <>
-              <label htmlFor="voice-profile">Style profile</label>
+              <label htmlFor={`${idPrefix}-profile`}>Style profile</label>
               <textarea
-                id="voice-profile"
+                id={`${idPrefix}-profile`}
                 rows={7}
                 value={current.profile}
                 maxLength={VOICE_PROFILE_MAX_CHARACTERS}
