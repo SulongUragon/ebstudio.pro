@@ -1,3 +1,4 @@
+import { visualPlaybookBlock } from "../../visual-playbooks";
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
 import type {
@@ -590,6 +591,8 @@ async function createVisualStoryboard(body: RequestBody) {
       : `You are the visual publishing director inside EB Studio Pro. Create premium, content-rich mini ebooks where every page has one clear job, substantial publication-ready copy, and art direction that materially supports the text. Every page must earn its place and give the reader real narrative, emotional, practical, or reflective value. Never pad pages with generic slogans, repeated ideas, invented facts, research, credentials, or statistics. Never use the em dash character. ${visualDirectionGuidance}`,
     input: `${visualProjectContext(project)}
 
+${visualPlaybookBlock(project)}
+
 ${comic ? "" : `Creative and copy direction:\n${visualDirectionGuidance}\n`}
 
 Create exactly ${pageCount} total pages, including the cover. Page 1 is the cover. The final page must provide a satisfying resolution for a story, or a focused takeaway and call to action for a guide, teaser, lead magnet, or product book.
@@ -624,6 +627,8 @@ async function rewriteVisualPage(body: RequestBody) {
       ? "You are the graphic-story editor inside EB Studio Pro. Rewrite one comic page while preserving continuity, character identity, reading order, and the story's ending. Keep dialogue short and natural. Never use the em dash character."
       : `You are the visual mini-book editor inside EB Studio Pro. Rewrite one page for clarity, emotional force, and visual rhythm without changing the book's central promise. Never invent factual claims. Never use the em dash character. ${visualDirectionGuidance}`,
     input: `${visualProjectContext(project)}
+
+${visualPlaybookBlock(project)}
 
 ${comic ? "" : `Creative and copy direction:\n${visualDirectionGuidance}\n`}
 
