@@ -9,6 +9,7 @@ import {
   formatPremiumCoverAuthor,
   getCreativeCoverFinishPreset,
   resolveCoverTextMode,
+  coverAuthorForDrawing,
   stripCoverPlaceholderText,
   type CoverTextModeId,
 } from "./creative-direction";
@@ -829,7 +830,12 @@ export default function CoverStudio({
           </button>
           {error ? <p className="cover-error" role="alert">{error}</p> : null}
           {manuscript.cover?.artworkProvider === "cloudflare" ? (
-            <p className="cover-provider-note">Artwork by the Cloudflare FLUX backup, because OpenAI was unavailable.</p>
+            <p className="cover-provider-note">
+              Artwork by the Cloudflare FLUX backup, because OpenAI was unavailable.
+              {manuscript.cover.resolvedCoverTextMode !== "integrated-typography"
+                ? " The app set the exact cover text, since the backup cannot spell it reliably."
+                : ""}
+            </p>
           ) : null}
         </div>
       </div>
@@ -1182,7 +1188,7 @@ async function composeCover(
     subtitleBottom = y;
   }
 
-  const safeAuthor = stripCoverPlaceholderText(author);
+  const safeAuthor = coverAuthorForDrawing(author);
   if (safeAuthor) {
     context.textAlign = "center";
     context.fillStyle = authorColor;

@@ -23,6 +23,7 @@ import {
   sanitizeIntegratedTypographyPrompt,
   shouldOverlayCoverText,
   stripCoverPlaceholderText,
+  coverAuthorForDrawing,
   validateCoverTextModePayload,
   validateCoverPromptForPlaceholders,
   validateCoverArtworkPrompt,
@@ -543,4 +544,23 @@ test("creative prompt helpers never introduce visible ellipsis fallbacks", () =>
   for (const output of outputs) {
     assert.doesNotMatch(output, /\.\.\.|…/);
   }
+});
+
+test("a letter-spaced author keeps the gap between the two words when drawn", () => {
+  const spaced = formatPremiumCoverAuthor("Sulong Uragon", "rain-soaked-gothic", {
+    mode: "fiction",
+    title: "My Dark Spirit Guide",
+    subtitle: "",
+    genre: "dark fantasy",
+    topic: "",
+    premise: "",
+    audience: "",
+    keyPoints: "",
+  });
+  const drawn = coverAuthorForDrawing(spaced);
+  const words = drawn.split(/\s{3}/);
+  assert.equal(words.length, 2, `expected two words in "${drawn}"`);
+  assert.equal(words.map((word) => word.replace(/ /g, "")).join(" "), "SULONG URAGON");
+  assert.equal(coverAuthorForDrawing("  Sulong Uragon  "), "Sulong Uragon");
+  assert.equal(coverAuthorForDrawing("Author Name"), "");
 });

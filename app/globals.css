@@ -1070,23 +1070,66 @@ p {
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.65);
 }
 
+/*
+ * Floating buttons share one right-hand column of round icons, bottom up:
+ * Ask EB, Book Images, Account. Each is one --fab-size, with --fab-gap between.
+ */
+:root {
+  --fab-size: 48px;
+  --fab-gap: 12px;
+  --fab-edge: 24px;
+}
+
 .assistant-launcher {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: var(--fab-edge);
+  bottom: var(--fab-edge);
   z-index: 80;
   display: inline-flex;
+  width: var(--fab-size);
+  height: var(--fab-size);
   align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  padding: 0 19px;
+  justify-content: center;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--sage);
   color: white;
   box-shadow: 0 16px 42px rgba(25, 45, 38, 0.28);
   font-weight: 750;
   cursor: pointer;
+}
+
+.assistant-launcher span,
+.fab-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.fab-book-images {
+  position: fixed;
+  right: var(--fab-edge);
+  bottom: calc(var(--fab-edge) + var(--fab-size) + var(--fab-gap));
+  z-index: 79;
+  display: inline-flex;
+  width: var(--fab-size);
+  height: var(--fab-size);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(143, 68, 43, 0.28);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #eee2d5 0%, #e8d8c8 100%);
+  box-shadow: 0 12px 30px rgba(44, 35, 27, 0.12);
+  color: #8f442b;
+}
+
+.fab-book-images:hover,
+.fab-book-images:focus-visible {
+  transform: translateY(-2px);
 }
 
 .assistant-launcher:hover,
@@ -3310,11 +3353,10 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .assistant-launcher {
-    right: 14px;
-    bottom: 14px;
-    min-height: 46px;
-    padding: 0 16px;
+  :root {
+    --fab-size: 46px;
+    --fab-gap: 10px;
+    --fab-edge: 14px;
   }
 
   .assistant-panel {
@@ -3856,46 +3898,56 @@ p {
   content: "";
 }
 
+/* The account button sits at the top of whichever floating buttons the page has. */
 .account-chip {
   position: fixed;
-  right: 14px;
-  bottom: 14px;
-  z-index: 60;
-  display: grid;
-  justify-items: end;
-  gap: 8px;
-  max-width: min(320px, calc(100vw - 28px));
+  right: var(--fab-edge);
+  bottom: var(--fab-edge);
+  z-index: 78;
+}
+
+body:has(.assistant-launcher) .account-chip {
+  bottom: calc(var(--fab-edge) + var(--fab-size) + var(--fab-gap));
+}
+
+body:has(.fab-book-images) .account-chip {
+  bottom: calc(var(--fab-edge) + 2 * (var(--fab-size) + var(--fab-gap)));
 }
 
 .account-chip-toggle {
   display: inline-flex;
-  max-width: 100%;
+  width: var(--fab-size);
+  height: var(--fab-size);
   align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
+  justify-content: center;
+  padding: 0;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--white);
   box-shadow: var(--shadow);
   color: var(--ink);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.account-chip-toggle span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .account-chip-menu {
+  position: absolute;
+  right: calc(100% + 10px);
+  bottom: 0;
   display: grid;
+  width: min(280px, calc(100vw - var(--fab-size) - 2 * var(--fab-edge) - 10px));
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: var(--white);
   box-shadow: var(--shadow);
+}
+
+.account-chip-menu .account-chip-email {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-chip-menu p {

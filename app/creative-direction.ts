@@ -571,6 +571,15 @@ export function stripCoverPlaceholderText(text: string | undefined) {
   return rejectCoverPlaceholderArtifacts(clean) ? "" : clean;
 }
 
+/**
+ * The author line as it will be drawn. Placeholder text is still rejected,
+ * but the spacing of a real name is kept: premium finishes space the letters
+ * ("S U L O N G   U R A G O N") and collapsing spaces would merge the words.
+ */
+export function coverAuthorForDrawing(author: string | undefined) {
+  return stripCoverPlaceholderText(author) ? String(author ?? "").trim() : "";
+}
+
 export function validateCoverPromptForPlaceholders(prompt: string) {
   // Negated instructions such as "no author name" or "no book title" are the
   // artwork prompt's own no-text rules, which validateCoverArtworkPrompt

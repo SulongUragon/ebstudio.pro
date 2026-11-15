@@ -240,9 +240,10 @@ export default function CreativeAssistant({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open EB Creative Assistant"
+        title="Ask EB"
         aria-expanded={open}
       >
-        <Sparkles size={18} />
+        <Sparkles size={20} />
         <span>Ask EB</span>
       </button>
 

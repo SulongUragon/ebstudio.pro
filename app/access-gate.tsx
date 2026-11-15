@@ -285,12 +285,19 @@ function AccountChip({ email, approved }: { email: string | null; approved: bool
 
   return (
     <div className={`account-chip${open ? " open" : ""}`}>
-      <button type="button" className="account-chip-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <UserRound size={15} />
-        <span>{email ?? "Signed in"}</span>
+      <button
+        type="button"
+        className="account-chip-toggle"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label={`Account${email ? `: ${email}` : ""}`}
+        title={email ?? "Account"}
+      >
+        <UserRound size={19} />
       </button>
       {open ? (
         <div className="account-chip-menu">
+          <p className="account-chip-email">{email ?? "Signed in"}</p>
           <p>{approved ? "AI tools on. Your library syncs to this account." : "Your library syncs to this account. AI tools need owner approval."}</p>
           <button type="button" onClick={signOut} disabled={signingOut}>
             {signingOut ? <LoaderCircle className="spin" size={14} /> : <LogOut size={14} />}

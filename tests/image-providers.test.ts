@@ -239,3 +239,37 @@ test("other Cloudflare errors are not retried", async () => {
     },
   );
 });
+
+const integratedCoverRequest = () =>
+  authorizedRequest("https://ebstudiopro.loudminds.club/api/cover", {
+    method: "POST",
+    body: JSON.stringify({ ...COVER_BODY, mode: "fiction", coverTextMode: "integrated-typography", brief: { ...COVER_BODY.brief, title: "Kael", genre: "dark fantasy" } }),
+  });
+
+test("an Integrated Typography cover made by the Cloudflare backup gets exact app text instead", async () => {
+  await withImageServices({}, (url) => (url.includes("openai") ? openAIQuota() : cloudflareJson()), async (calls) => {
+    const response = await coverPost(await integratedCoverRequest());
+    const data = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(data));
+    assert.equal(data.imageProvider, "cloudflare");
+    assert.equal(data.resolvedCoverTextMode, "app-typography");
+    assert.equal(data.shouldOverlayText, true);
+    assert.match(data.textModeNote, /cannot spell cover text/);
+
+    const openaiBody = JSON.parse(String(calls.find((call) => call.url.includes("openai"))?.body));
+    const cloudflare = calls.find((call) => call.url.includes("cloudflare"));
+    assert.ok(cloudflare?.body instanceof FormData);
+    const backupPrompt = String(cloudflare.body.get("prompt"));
+    assert.notEqual(backupPrompt, openaiBody.prompt.slice(0, backupPrompt.length), "the backup gets an artwork-only prompt");
+  });
+});
+
+test("an Integrated Typography cover from OpenAI keeps the AI typography", async () => {
+  await withImageServices({}, () => new Response(JSON.stringify({ data: [{ b64_json: "OPENAI" }] }), { status: 200 }), async () => {
+    const data = await (await coverPost(await integratedCoverRequest())).json();
+    assert.equal(data.imageProvider, "openai");
+    assert.equal(data.resolvedCoverTextMode, "integrated-typography");
+    assert.equal(data.shouldOverlayText, false);
+    assert.equal(data.textModeNote, "");
+  });
+});

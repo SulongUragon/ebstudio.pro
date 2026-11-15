@@ -160,8 +160,8 @@ export default function VisualCreativeAssistant({
 
   return (
     <>
-      <button className="assistant-launcher" type="button" onClick={() => setOpen(true)} aria-label="Open Ask EB for Visuals and Comics" aria-expanded={open}>
-        <Sparkles size={18} />
+      <button className="assistant-launcher" type="button" onClick={() => setOpen(true)} aria-label="Open Ask EB for Visuals and Comics" title="Ask EB" aria-expanded={open}>
+        <Sparkles size={20} />
         <span>Ask EB</span>
       </button>
 

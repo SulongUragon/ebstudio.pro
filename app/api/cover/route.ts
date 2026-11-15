@@ -100,24 +100,26 @@ export async function POST(request: Request) {
       coverTextMode,
       customDirection: body.customDirection,
     });
-    const prompt = buildCoverPrompt({
-      mode: body.mode,
-      title,
-      subtitle,
-      author,
-      genre: body.brief.genre,
-      topic: body.brief.topic,
-      premise: body.brief.premise,
-      audience: body.brief.audience,
-      keyPoints: body.brief.keyPoints,
-      style,
-      finishDirection,
-      creativeFinish,
-      coverTextMode: resolvedCoverTextMode,
-      titleTypography: body.titleTypography,
-      titlePlacement: body.titlePlacement,
-      customDirection: body.customDirection,
-    });
+    const promptFor = (textMode: typeof resolvedCoverTextMode) =>
+      buildCoverPrompt({
+        mode: body.mode,
+        title,
+        subtitle,
+        author,
+        genre: body.brief.genre,
+        topic: body.brief.topic,
+        premise: body.brief.premise,
+        audience: body.brief.audience,
+        keyPoints: body.brief.keyPoints,
+        style,
+        finishDirection,
+        creativeFinish,
+        coverTextMode: textMode,
+        titleTypography: body.titleTypography,
+        titlePlacement: body.titlePlacement,
+        customDirection: body.customDirection,
+      });
+    const prompt = promptFor(resolvedCoverTextMode);
     const typographyLayout = buildCoverTypographyLayout({
       mode: body.mode,
       title,
@@ -170,6 +172,8 @@ export async function POST(request: Request) {
     type ImageResponse = OpenAIImageErrorPayload & { data?: Array<{ b64_json?: string }> };
     let imageData = "";
     let imageProvider: "openai" | "cloudflare" = "openai";
+    let finalTextMode = resolvedCoverTextMode;
+    let textModeNote = "";
     let failure: ImageFailure | null = null;
     let providerDetail = "";
 
@@ -195,7 +199,19 @@ export async function POST(request: Request) {
 
     if (!imageData && failure && cloudflareImageConfigured() && shouldUseImageFallback(failure)) {
       try {
-        const backup = await generateCloudflareImage(prompt, 1024, 1536);
+        // FLUX cannot spell cover text reliably, so the backup paints artwork
+        // only and the app sets the exact title, subtitle, and author on top.
+        let backupPrompt = prompt;
+        if (resolvedCoverTextMode === "integrated-typography") {
+          const artOnly = promptFor("app-typography");
+          if (validateCoverArtworkPrompt(artOnly) && validateCoverPromptForPlaceholders(artOnly)) {
+            backupPrompt = artOnly;
+            finalTextMode = "app-typography";
+            textModeNote =
+              "The backup image model cannot spell cover text reliably, so the app set your exact title, subtitle, and author on the artwork.";
+          }
+        }
+        const backup = await generateCloudflareImage(backupPrompt, 1024, 1536);
         imageData = backup.imageData;
         imageProvider = "cloudflare";
         console.warn("EB Studio Pro cover used the Cloudflare backup", failure.kind, backup.model);
@@ -227,8 +243,9 @@ export async function POST(request: Request) {
       finish,
       creativeFinish,
       coverTextMode,
-      resolvedCoverTextMode,
-      shouldOverlayText: resolvedCoverTextMode === "app-typography",
+      resolvedCoverTextMode: finalTextMode,
+      shouldOverlayText: finalTextMode === "app-typography",
+      textModeNote,
       typographyLayout,
     });
   } catch (error) {
