@@ -2765,7 +2765,7 @@ function LibraryView({
       <div>
         <span className="eyebrow"><LibraryBig size={18} /> Your library</span>
         <h1>Every manuscript, in one place.</h1>
-        <p>{syncState === "synced" ? "Cloud synced across your signed-in devices, with an offline copy kept here." : syncState === "syncing" ? "Syncing this device with your private cloud library..." : "Saved on this device. Cloud sync will resume when account storage is available."}</p>
+        <p>{syncState === "synced" ? "Cloud synced across your signed-in devices, with an offline copy kept here." : syncState === "syncing" ? "Syncing this device with your private cloud library..." : "Saved on this device. It will sync to your account the next time this device is online."}</p>
       </div>
 
       {books.length ? (

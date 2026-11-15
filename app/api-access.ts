@@ -4,6 +4,8 @@
  * variable; the browser keeps an HttpOnly cookie holding an HMAC of it, never
  * the code itself.
  */
+import { accountForRequest } from "./account-server";
+
 export const ACCESS_COOKIE = "eb_access";
 export const ACCESS_COOKIE_MAX_AGE = 180 * 24 * 60 * 60;
 const TOKEN_CONTEXT = "eb-studio-pro-api-access-v1";
@@ -67,7 +69,8 @@ export async function hasApiAccess(request: Request) {
 
 /**
  * Returns a Response to send back when the request may not use the API keys,
- * or null when it may continue.
+ * or null when it may continue. A signed-in account the owner approved may
+ * continue; so may a browser unlocked with the owner access code.
  */
 export async function denyWithoutApiAccess(request: Request): Promise<Response | null> {
   if (request.headers.get("sec-fetch-site") === "cross-site") {
@@ -76,23 +79,39 @@ export async function denyWithoutApiAccess(request: Request): Promise<Response |
       { status: 403 },
     );
   }
-  if (!accessConfigured()) {
-    console.error("APP_ACCESS_CODE is not set; AI endpoints are locked.");
+  if (await hasApiAccess(request)) return null;
+
+  const account = await accountForRequest(request);
+  if (account.approved) return null;
+  if (account.signedIn) {
     return Response.json(
       {
-        error: "EB Studio Pro is locked until the owner sets APP_ACCESS_CODE in the hosting settings.",
+        error: "Your account is signed in but not approved for the AI tools yet. Your books still sync to your account.",
+        code: "account_not_approved",
+      },
+      { status: 403 },
+    );
+  }
+  if (account.configured) {
+    return Response.json(
+      { error: "Sign in to your EB Studio Pro account to continue.", code: "sign_in_required" },
+      { status: 401 },
+    );
+  }
+  if (!accessConfigured()) {
+    console.error("Neither accounts nor APP_ACCESS_CODE are set; AI endpoints are locked.");
+    return Response.json(
+      {
+        error: "EB Studio Pro is locked until the owner sets up accounts or APP_ACCESS_CODE in the hosting settings.",
         code: "access_not_configured",
       },
       { status: 503 },
     );
   }
-  if (!(await hasApiAccess(request))) {
-    return Response.json(
-      { error: "Enter your EB Studio Pro access code to continue.", code: "access_required" },
-      { status: 401 },
-    );
-  }
-  return null;
+  return Response.json(
+    { error: "Enter your EB Studio Pro access code to continue.", code: "access_required" },
+    { status: 401 },
+  );
 }
 
 export function accessCookieHeader(token: string, secure: boolean) {
