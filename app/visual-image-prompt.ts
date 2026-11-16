@@ -1,0 +1,58 @@
+/**
+ * Prompt for one visual-book illustration or comic panel.
+ *
+ * Image models draw any words they are given, and the backup model keeps only
+ * the first 2,000 characters. So the prompt never contains the book title, page
+ * title, or premise, and the two rules that matter most (no lettering, and the locked
+ * cast) come first where they cannot be cut off.
+ */
+export type VisualImagePromptInput = {
+  comic: boolean;
+  scene: string;
+  camera: string;
+  style: string;
+  characterBible: string;
+  palette: string;
+};
+
+// Fixed wording is about 420 characters; these keep the whole prompt under 2,000.
+const LIMITS = { scene: 360, camera: 90, style: 200, cast: 700, palette: 160 };
+
+export function buildVisualImagePrompt(input: VisualImagePromptInput) {
+  const cast = clip(input.characterBible, LIMITS.cast);
+  const lines = [
+    `One original ${input.comic ? "comic panel illustration" : "book illustration"}, artwork only.`,
+    "No text in the image: no words, letters, numbers, titles, speech bubbles, captions, signs, labels, logos, or watermarks. Any sign or book is blank.",
+    cast
+      ? `Locked cast, draw each exactly as described, same kind of being, shape, colors, and size: ${cast}`
+      : "Keep every visible character specific and believable.",
+    `Scene: ${clip(input.scene, LIMITS.scene) || "A quiet moment from the story."}`,
+    `Framing: ${clip(input.camera, LIMITS.camera) || "clear, readable composition"}`,
+    `Art style: ${clip(input.style, LIMITS.style)}`,
+    `Palette and lighting: ${clip(input.palette, LIMITS.palette) || "one coherent palette drawn from the scene"}`,
+    "Show only the cast members the scene names. Do not imitate a living artist or protected character.",
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+/**
+ * The author's own character lock always stays word for word. Locks the
+ * storyboard writer adds for other recurring characters are appended once.
+ */
+export function mergeCharacterLock(authorLock: string, generatedLock: string) {
+  const author = authorLock.trim();
+  const generated = generatedLock.replace(/\s+/g, " ").trim();
+  if (!author) return generated;
+  if (!generated || author.toLowerCase().includes(generated.toLowerCase())) return author;
+  return `${author} ${generated}`;
+}
+
+/** Cuts at a sentence or word boundary so a description is never left half-said mid-word. */
+function clip(value: string, limit: number) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (text.length <= limit) return text;
+  const cut = text.slice(0, limit);
+  const sentence = cut.lastIndexOf(". ");
+  if (sentence > limit * 0.6) return cut.slice(0, sentence + 1);
+  return cut.slice(0, cut.lastIndexOf(" ")).replace(/[,;:]$/, "");
+}

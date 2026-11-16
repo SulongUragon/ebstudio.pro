@@ -1,3 +1,4 @@
+import { buildVisualImagePrompt } from "../../visual-image-prompt";
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
 import { buildVisualArtworkDirection } from "../../creative-direction";
@@ -93,20 +94,14 @@ export async function POST(request: Request) {
     const scene = comic ? panel?.scene : page.imagePrompt;
     const camera = comic ? panel?.camera : "portrait editorial composition";
     const size = comic && project.comicFormat !== "webtoon" ? "1024x1024" : "1024x1536";
-    const prompt = `Create one original ${comic ? "comic panel" : "visual mini ebook illustration"}.
-
-Book title context only, do not render it: ${project.title}
-Project premise: ${project.premise}
-Page ${page.pageNumber} purpose: ${page.title}
-Visible scene: ${scene || page.title}
-Camera and framing: ${camera}
-Art direction: ${style}
-Locked recurring character design: ${project.characterBible || "No recurring character design was supplied. Keep any visible person believable and specific."}
-Locked palette and lighting: ${project.palette || "Use a coherent premium palette derived from the scene."}
-
-The character description is authoritative. Preserve the same apparent age, facial structure, hair, skin tone, body type, wardrobe identifiers, and distinguishing features in every recurring appearance. Show only what can be visibly present in this scene. Keep the composition readable at page size.
-
-ABSOLUTELY NO TEXT: no words, letters, numbers, speech bubbles, thought bubbles, captions, sound effects, signs, labels, logos, watermarks, borders, page numbers, book mockups, or typography. Do not imitate a living artist, named franchise, protected character, or recognizable copyrighted visual world.`;
+    const prompt = buildVisualImagePrompt({
+      comic,
+      scene: scene ?? "",
+      camera: camera ?? "",
+      style,
+      characterBible: project.characterBible ?? "",
+      palette: project.palette ?? "",
+    });
     const [width, height] = size.split("x").map(Number);
     const tryBackup = async (openAIFailure: ReturnType<typeof classifyOpenAIImageError>) => {
       try {

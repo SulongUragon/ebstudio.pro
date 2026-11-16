@@ -1,5 +1,7 @@
 "use client";
 
+import { bubbleSide, bubbleSpeakerLabel, spokenLines } from "./comic-bubbles";
+import { mergeCharacterLock } from "./visual-image-prompt";
 import {
   BookOpen,
   Check,
@@ -178,8 +180,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
       const refined = {
         ...brief,
         subtitle: brief.subtitle.trim() || String(data.refined_subtitle ?? "").trim(),
-        characterBible:
-          brief.characterBible.trim() || String(data.character_bible ?? "").trim(),
+        characterBible: mergeCharacterLock(brief.characterBible, String(data.character_bible ?? "")),
         palette: brief.palette.trim() || String(data.palette ?? "").trim(),
       };
       const next: VisualBookProject = {
@@ -703,7 +704,15 @@ function PagePreview({ project, page }: { project: VisualBookProject; page: Visu
           <div className="comic-preview-panel" key={panel.id} style={panel.imageData ? { backgroundImage: `url(${panel.imageData})` } : undefined}>
             {!panel.imageData ? <span><ImageIcon /> Art pending</span> : null}
             <div className="comic-bubbles">
-              {panel.dialogue.map((dialogue, index) => <p key={index}><b>{dialogue.speaker}</b>{dialogue.text}</p>)}
+              {spokenLines(panel.dialogue).map((dialogue, index) => {
+                const label = bubbleSpeakerLabel(panel.dialogue, index);
+                return (
+                  <p key={index} className={`bubble-${bubbleSide(panel.dialogue, index)}`}>
+                    {label ? <b>{label}</b> : null}
+                    {dialogue.text}
+                  </p>
+                );
+              })}
             </div>
             {panel.caption ? <small className="comic-caption">{panel.caption}</small> : null}
             {panel.soundEffect ? <strong className="comic-sfx">{panel.soundEffect}</strong> : null}

@@ -1,3 +1,4 @@
+import { bubbleSide, bubbleSpeakerLabel, spokenLines } from "./comic-bubbles";
 import type { ComicPanel, VisualBookPage, VisualBookProject } from "./visual-book-types";
 import { visualProjectFilename } from "./visual-book-utils";
 
@@ -1281,22 +1282,56 @@ async function drawComic(c: CanvasRenderingContext2D, project: VisualBookProject
 }
 
 function panelWords(c: CanvasRenderingContext2D, p: ComicPanel, b: { x: number; y: number; w: number; h: number }) {
-  let y = b.y + 24;
+  let y = b.y + 26;
+  const lines = spokenLines(p.dialogue);
 
-  for (const line of p.dialogue.slice(0, 3)) {
-    const text = line.speaker ? `${line.speaker.toUpperCase()}: ${line.text}` : line.text;
-    const bh = Math.min(176, 58 + Math.ceil(text.length / 28) * 29);
+  lines.forEach((line, index) => {
+    const label = bubbleSpeakerLabel(p.dialogue, index);
+    const side = bubbleSide(p.dialogue, index);
+    const maxTextWidth = Math.min(b.w - 120, 400);
 
-    c.fillStyle = "rgba(255,255,255,.94)";
-    roundedRect(c, b.x + 24, y, Math.min(b.w - 48, 430), bh, 26);
+    // Size the bubble to its words so it covers as little art as possible.
+    c.font = "700 23px Arial";
+    const textLines = wrappedLines(c, line.text.replace(/\s+/g, " ").trim(), maxTextWidth).slice(0, 5);
+    let textWidth = Math.max(...textLines.map((text) => c.measureText(text).width), 40);
+    if (label) {
+      c.font = "700 15px Arial";
+      textWidth = Math.max(textWidth, c.measureText(label.toUpperCase()).width);
+    }
+    const bw = Math.ceil(textWidth) + 48;
+    const bh = textLines.length * 29 + (label ? 22 : 0) + 30;
+    const bx = side === "left" ? b.x + 26 : b.x + b.w - 26 - bw;
+    const tailX = side === "left" ? bx + 34 : bx + bw - 34;
+
+    // Tail first, then the body over it, so the outline reads as one shape.
+    c.fillStyle = "#ffffff";
+    c.strokeStyle = "#141514";
+    c.lineWidth = 4;
+    c.lineJoin = "round";
+    c.beginPath();
+    c.moveTo(tailX - 13, y + bh - 4);
+    c.lineTo(tailX + (side === "left" ? -4 : 4), y + bh + 22);
+    c.lineTo(tailX + 13, y + bh - 4);
+    c.closePath();
+    c.stroke();
     c.fill();
+    roundedRect(c, bx, y, bw, bh, 24);
+    c.stroke();
+    c.fill();
+    c.fillRect(tailX - 10, y + bh - 8, 20, 8);
 
     c.fillStyle = "#141514";
+    let textY = y + 34;
+    if (label) {
+      c.font = "700 15px Arial";
+      c.fillText(label.toUpperCase(), bx + 24, y + 26);
+      textY += 22;
+    }
     c.font = "700 23px Arial";
-    wrap(c, text, b.x + 46, y + 37, Math.min(b.w - 92, 384), 29, 5);
+    textLines.forEach((text, lineIndex) => c.fillText(text, bx + 24, textY + lineIndex * 29));
 
-    y += bh + 15;
-  }
+    y += bh + 34;
+  });
 
   if (p.caption) {
     c.fillStyle = "rgba(248,235,191,.94)";

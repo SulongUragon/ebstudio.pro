@@ -657,7 +657,8 @@ Content type: ${project.mode === "comic" ? project.comicFormat : project.kind}
 Premise or core promise: ${project.premise}
 Target reader: ${project.audience || "General readers"}
 Visual style: ${project.visualStyle}
-Character consistency bible: ${project.characterBible || "Create a concise locked visual description for every recurring character"}
+Character lock from the author: ${project.characterBible || "none supplied"}
+Cast lock rule: every recurring character, creature, or object-character in the story needs a locked visual description (what kind of being it is, size, body shape, exact colors, and one or two distinguishing marks), one sentence each, starting with its name. ${project.characterBible ? "The author already described some of the cast above. In character_bible return ONLY the locks for recurring characters the author did not describe, or an empty string if none are missing. Never restate or change the author's descriptions." : "In character_bible return the lock for the whole recurring cast."} Use those exact names in every panel scene and image prompt so each drawing names who is in it.
 Color and lighting palette: ${project.palette || "Create one coherent palette and lighting direction"}`;
 }
 
