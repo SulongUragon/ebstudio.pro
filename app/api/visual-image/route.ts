@@ -1,3 +1,4 @@
+import { characterSheetPrompt, decodeReferenceImages } from "../../character-refs";
 import { buildVisualImagePrompt } from "../../visual-image-prompt";
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
@@ -11,7 +12,15 @@ import {
 import { classifyOpenAIImageError } from "../../openai-image-errors";
 import type { ComicPanel, VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 export const maxDuration = 300;
-type VisualImageRequest = { project: VisualBookBrief; page: VisualBookPage; panel?: ComicPanel };
+type VisualImageRequest = {
+  project: VisualBookBrief;
+  page?: VisualBookPage;
+  panel?: ComicPanel;
+  /** Draw one character's reference picture instead of a page or panel. */
+  character?: { name?: string; description?: string };
+  /** Reference pictures of the characters this page or panel names. */
+  references?: unknown;
+};
 type ImageResponsePayload = { data?: Array<{ b64_json?: string }>; error?: { message?: string; code?: string } };
 const IMAGE_RETRY_DELAYS_MS = [15_000, 30_000, 60_000];
 const QUOTA_ERROR_CODES = new Set(["billing_hard_limit_reached", "insufficient_quota"]);
@@ -72,10 +81,16 @@ export async function POST(request: Request) {
   if (denied) return denied;
   try {
     if (!process.env.OPENAI_API_KEY && !cloudflareImageConfigured()) return NextResponse.json({ error: "No image provider is configured." }, { status: 503 });
-    const { project, page, panel } = (await request.json()) as VisualImageRequest;
-    if (!project?.title || !page) return NextResponse.json({ error: "Complete the visual project and storyboard first." }, { status: 400 });
+    const { project, page, panel, character, references: rawReferences } = (await request.json()) as VisualImageRequest;
+    const characterSheet = Boolean(character);
+    if (!project?.title || (!page && !characterSheet)) return NextResponse.json({ error: "Complete the visual project and storyboard first." }, { status: 400 });
     const comic = project.mode === "comic";
-    if (comic && !panel) return NextResponse.json({ error: "Choose a comic panel to illustrate." }, { status: 400 });
+    if (comic && !panel && !characterSheet) return NextResponse.json({ error: "Choose a comic panel to illustrate." }, { status: 400 });
+    if (characterSheet && !String(character?.description ?? "").trim()) {
+      return NextResponse.json({ error: "Describe the character before drawing its reference." }, { status: 400 });
+    }
+    const references = characterSheet ? [] : decodeReferenceImages(rawReferences);
+    if ("error" in references) return NextResponse.json({ error: references.error }, { status: 400 });
     const style = comic
       ? COMIC_STYLE_DIRECTIONS[project.comicFormat] ?? COMIC_STYLE_DIRECTIONS["graphic-novel"]
       : buildVisualArtworkDirection(
@@ -91,23 +106,44 @@ export async function POST(request: Request) {
           },
           project.visualStyle,
         );
-    const scene = comic ? panel?.scene : page.imagePrompt;
+    const scene = comic ? panel?.scene : page?.imagePrompt;
     const camera = comic ? panel?.camera : "portrait editorial composition";
-    const size = comic && project.comicFormat !== "webtoon" ? "1024x1024" : "1024x1536";
-    const prompt = buildVisualImagePrompt({
-      comic,
-      scene: scene ?? "",
-      camera: camera ?? "",
-      style,
-      characterBible: project.characterBible ?? "",
-      palette: project.palette ?? "",
-    });
+    const size = characterSheet || (comic && project.comicFormat !== "webtoon") ? "1024x1024" : "1024x1536";
+    const prompt = characterSheet
+      ? characterSheetPrompt({
+          name: String(character?.name ?? ""),
+          description: String(character?.description ?? ""),
+          style,
+          palette: project.palette ?? "",
+        })
+      : buildVisualImagePrompt({
+          comic,
+          scene: scene ?? "",
+          camera: camera ?? "",
+          style,
+          characterBible: project.characterBible ?? "",
+          palette: project.palette ?? "",
+          referenceNames: references.map((reference) => reference.name),
+        });
     const [width, height] = size.split("x").map(Number);
+    // Character references only work on the Cloudflare FLUX.2 model, and a
+    // character's reference picture must come from the same model that will
+    // copy it. Both go straight to Cloudflare when it is set up.
+    if ((characterSheet || references.length > 0) && cloudflareImageConfigured()) {
+      try {
+        const drawn = await generateCloudflareImage(prompt, width, height, references);
+        return NextResponse.json({ imageData: drawn.imageData, imageProvider: "cloudflare", referencesUsed: references.length });
+      } catch (cloudflareError) {
+        const detail = cloudflareError instanceof Error ? cloudflareError.message : "Cloudflare could not generate the image.";
+        console.error("EB Studio Pro reference image generation failed", detail);
+        return NextResponse.json({ code: "reference_image_failed", error: `${detail} Your storyboard is safe.` }, { status: 502 });
+      }
+    }
     const tryBackup = async (openAIFailure: ReturnType<typeof classifyOpenAIImageError>) => {
       try {
         const backup = await generateCloudflareImage(prompt, width, height);
         console.warn("Visual image used the Cloudflare backup", openAIFailure.kind, backup.model);
-        return NextResponse.json({ imageData: backup.imageData, imageProvider: "cloudflare" });
+        return NextResponse.json({ imageData: backup.imageData, imageProvider: "cloudflare", referencesUsed: 0 });
       } catch (cloudflareError) {
         return NextResponse.json({ code: openAIFailure.code, error: bothProvidersFailedMessage(openAIFailure, cloudflareError) }, { status: openAIFailure.status });
       }
@@ -133,7 +169,7 @@ export async function POST(request: Request) {
       console.error("EB Studio Pro visual image generation failed", response.status, code);
       return NextResponse.json({ code, error }, { status: response.status >= 400 ? response.status : 502 });
     }
-    return NextResponse.json({ imageData: `data:image/jpeg;base64,${data.data[0].b64_json}`, imageProvider: "openai" });
+    return NextResponse.json({ imageData: `data:image/jpeg;base64,${data.data[0].b64_json}`, imageProvider: "openai", referencesUsed: 0 });
   } catch (error) {
     console.error("EB Studio Pro visual image request failed", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "This page image could not be generated. Your storyboard is safe." }, { status: 500 });

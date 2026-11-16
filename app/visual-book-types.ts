@@ -1,3 +1,4 @@
+import type { CharacterRef } from "./character-refs";
 import type { ActiveAIProvider } from "./book-types";
 
 export type VisualProjectMode = "visual" | "comic";
@@ -9,7 +10,7 @@ export type ComicDialogue = { speaker: string; text: string };
 export type ComicPanel = { id: string; order: number; scene: string; camera: string; dialogue: ComicDialogue[]; caption: string; soundEffect: string; imageData?: string };
 export type VisualBookPage = { id: string; pageNumber: number; role: "cover" | "content" | "cta"; title: string; body: string; imagePrompt: string; imageData?: string; layout: "full-bleed" | "image-top" | "image-left" | "image-right" | "quote"; panels: ComicPanel[] };
 export type VisualBookBrief = { mode: VisualProjectMode; title: string; subtitle: string; author: string; kind: VisualBookKind; comicFormat: ComicFormat; premise: string; audience: string; pageCount: VisualPageCount; visualStyle: VisualStyle; characterBible: string; palette: string };
-export type VisualBookProject = VisualBookBrief & { id: string; createdAt: string; updatedAt: string; pages: VisualBookPage[]; providersUsed?: ActiveAIProvider[] };
+export type VisualBookProject = VisualBookBrief & { id: string; createdAt: string; updatedAt: string; pages: VisualBookPage[]; providersUsed?: ActiveAIProvider[]; characterRefs?: CharacterRef[] };
 
 export const VISUAL_BOOK_KINDS: Array<{ id: VisualBookKind; label: string; note: string }> = [
   { id: "illustrated-story", label: "Illustrated Story", note: "A complete visual short story." },

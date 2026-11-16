@@ -4155,3 +4155,139 @@ body:has(.fab-book-images) .account-chip {
   font-size: 0.74rem;
   font-weight: 650;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.character-refs {
+  display: grid;
+  gap: 12px;
+  margin: -8px 0 24px;
+  padding: 16px;
+  border: 1px solid rgba(64, 86, 74, 0.25);
+  background: var(--white);
+}
+
+.character-refs-head {
+  display: grid;
+  gap: 4px;
+}
+
+.character-refs-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--sage);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.character-refs-head small,
+.character-refs-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.character-refs-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.character-refs-list li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.character-ref-art {
+  display: flex;
+  width: 96px;
+  height: 96px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--muted);
+}
+
+.character-ref-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.character-ref-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.character-ref-copy strong {
+  font-size: 0.86rem;
+}
+
+.character-ref-copy textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.character-ref-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.character-ref-actions button,
+.character-refs-build,
+.character-refs-redraw {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid var(--sage);
+  background: var(--white);
+  color: var(--sage);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.character-refs-build {
+  min-height: 46px;
+  background: var(--sage);
+  color: var(--white);
+}
+
+.character-refs-redraw {
+  width: 100%;
+  min-height: 46px;
+  margin: -12px 0 24px;
+}
+
+.character-ref-actions button:disabled,
+.character-refs-build:disabled,
+.character-refs-redraw:disabled {
+  opacity: 0.55;
+}

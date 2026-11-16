@@ -80,9 +80,27 @@ export function isSizeNotSupportedError(message: string) {
   return /\b(width|height)\b/i.test(message) && /(not allowed|unevaluated|additional|unknown|unexpected)/i.test(message);
 }
 
-export async function generateCloudflareImage(prompt: string, width: number, height: number): Promise<GeneratedImage> {
+export type CloudflareReferenceImage = { bytes: Uint8Array; mime: string };
+
+/**
+ * Reference images only work on FLUX.2 models. If another model is configured,
+ * requests that carry references use the default FLUX.2 model instead of
+ * silently dropping the references.
+ */
+export function cloudflareModelFor(referenceCount: number) {
+  const configured = cloudflareImageModel();
+  return referenceCount > 0 && !usesMultipartInput(configured) ? DEFAULT_CLOUDFLARE_IMAGE_MODEL : configured;
+}
+
+export async function generateCloudflareImage(
+  prompt: string,
+  width: number,
+  height: number,
+  referenceImages: CloudflareReferenceImage[] = [],
+): Promise<GeneratedImage> {
   if (!cloudflareImageConfigured()) throw new CloudflareImageError("Cloudflare image generation is not configured.", 503);
-  const model = cloudflareImageModel();
+  const references = referenceImages.slice(0, 4);
+  const model = cloudflareModelFor(references.length);
   const size = cloudflareSize(width, height);
   const text = compactPrompt(prompt);
   const url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID!.trim()}/ai/run/${model}`;
@@ -93,6 +111,10 @@ export async function generateCloudflareImage(prompt: string, width: number, hei
     if (usesMultipartInput(model)) {
       const form = new FormData();
       form.append("prompt", text);
+      references.forEach((image, index) => {
+        const extension = image.mime.split("/")[1] ?? "jpeg";
+        form.append(`input_image_${index}`, new Blob([image.bytes as BlobPart], { type: image.mime }), `reference-${index}.${extension}`);
+      });
       if (includeSize) {
         form.append("width", String(size.width));
         form.append("height", String(size.height));

@@ -1,3 +1,5 @@
+import { referenceInstruction } from "./character-refs";
+
 /**
  * Prompt for one visual-book illustration or comic panel.
  *
@@ -13,16 +15,20 @@ export type VisualImagePromptInput = {
   style: string;
   characterBible: string;
   palette: string;
+  /** Names of the characters whose reference drawings are sent with this request, in order. */
+  referenceNames?: string[];
 };
 
 // Fixed wording is about 420 characters; these keep the whole prompt under 2,000.
 const LIMITS = { scene: 360, camera: 90, style: 200, cast: 700, palette: 160 };
 
 export function buildVisualImagePrompt(input: VisualImagePromptInput) {
-  const cast = clip(input.characterBible, LIMITS.cast);
+  // The reference instruction needs room, so the written cast lock gets less when it is present.
+  const cast = clip(input.characterBible, input.referenceNames?.length ? LIMITS.cast - 320 : LIMITS.cast);
   const lines = [
     `One original ${input.comic ? "comic panel illustration" : "book illustration"}, artwork only.`,
     "No text in the image: no words, letters, numbers, titles, speech bubbles, captions, signs, labels, logos, or watermarks. Any sign or book is blank.",
+    referenceInstruction(input.referenceNames ?? []),
     cast
       ? `Locked cast, draw each exactly as described, same kind of being, shape, colors, and size: ${cast}`
       : "Keep every visible character specific and believable.",

@@ -2,6 +2,8 @@
 
 import { bubbleSide, bubbleSpeakerLabel, spokenLines } from "./comic-bubbles";
 import { mergeCharacterLock } from "./visual-image-prompt";
+import CharacterRefsPanel from "./character-refs-panel";
+import { referencesForScene } from "./character-refs";
 import {
   BookOpen,
   Check,
@@ -66,9 +68,10 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [syncState, setSyncState] = useState<SyncState>("syncing");
+  const [castBusy, setCastBusy] = useState(false);
 
   const page = project?.pages[activePage] ?? null;
-  const locked = Boolean(busy);
+  const locked = Boolean(busy) || castBusy;
 
   useEffect(() => {
     let dead = false;
@@ -346,8 +349,16 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
     }
   }
 
-  async function generateAll() {
+  async function generateAll(redraw = false) {
     if (!project) return;
+    if (
+      redraw &&
+      !window.confirm(
+        `Redraw all ${imageProgress.total} images with the character references? This replaces the current art and uses image credits for each one.`,
+      )
+    ) {
+      return;
+    }
     setBusy("all-images");
     setError("");
     let working = project;
@@ -356,7 +367,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
         const selectedPage = working.pages[pageIndex];
         if (working.mode === "comic") {
           for (let panelIndex = 0; panelIndex < selectedPage.panels.length; panelIndex += 1) {
-            if (working.pages[pageIndex].panels[panelIndex].imageData) continue;
+            if (!redraw && working.pages[pageIndex].panels[panelIndex].imageData) continue;
             setBusyTarget(`${selectedPage.pageNumber}-${panelIndex}`);
             const imageData = await visualImage(
               working,
@@ -375,7 +386,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
             };
             setProject(working);
           }
-        } else if (!selectedPage.imageData) {
+        } else if (redraw || !selectedPage.imageData) {
           setBusyTarget(`${selectedPage.pageNumber}`);
           const imageData = await visualImage(working, selectedPage);
           working = {
@@ -544,6 +555,27 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
             {project?.characterBible ? <b><Check size={14} /> Character design locked</b> : null}
           </div>
 
+          {project ? (
+            <CharacterRefsPanel
+              brief={projectBrief(project)}
+              pages={project.pages}
+              refs={project.characterRefs ?? []}
+              onChange={characterRefs =>
+                setProject(current =>
+                  current ? { ...current, characterRefs, updatedAt: new Date().toISOString() } : current,
+                )
+              }
+              provider={provider}
+              disabled={locked}
+              onBusyChange={setCastBusy}
+            />
+          ) : null}
+          {project?.characterRefs?.some(ref => ref.imageData) && imageProgress.complete > 0 ? (
+            <button className="character-refs-redraw" type="button" onClick={() => generateAll(true)} disabled={locked}>
+              <RotateCcw size={15} /> Redraw all art with these references
+            </button>
+          ) : null}
+
           {error ? <p className="form-error">{error}</p> : null}
           {notice ? <p className="visual-notice"><Check size={15} />{notice}</p> : null}
 
@@ -554,7 +586,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
             </button>
           ) : (
             <div className="visual-production-actions">
-              <button className="visual-primary-action" type="button" onClick={generateAll} disabled={locked || imageProgress.complete === imageProgress.total}>
+              <button className="visual-primary-action" type="button" onClick={() => generateAll()} disabled={locked || imageProgress.complete === imageProgress.total}>
                 {busy === "all-images" ? <LoaderCircle className="spin" /> : <ImageIcon />}
                 {busy === "all-images"
                   ? `Creating art ${imageProgress.complete + 1} of ${imageProgress.total}`
@@ -778,7 +810,12 @@ async function api(url: string, body: unknown) {
 }
 
 async function visualImage(project: VisualBookProject, page: VisualBookPage, panel?: ComicPanel) {
-  const data = await api("/api/visual-image", { project: projectBrief(project), page, panel });
+  // Send the reference drawing of every character this page or panel names.
+  const sceneText = panel
+    ? `${panel.scene} ${panel.dialogue.map(line => line.speaker).join(" ")}`
+    : page.imagePrompt;
+  const references = referencesForScene(project.characterRefs, sceneText);
+  const data = await api("/api/visual-image", { project: projectBrief(project), page, panel, references });
   const imageData = String(data.imageData ?? "");
   if (!imageData) throw new Error("The image generator returned no usable image.");
   return imageData;

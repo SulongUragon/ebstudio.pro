@@ -1,3 +1,4 @@
+import { MAX_CHARACTER_REFS, normalizeCast } from "../../character-refs";
 import { visualPlaybookBlock } from "../../visual-playbooks";
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
@@ -37,7 +38,7 @@ import {
 class RevisionError extends Error {}
 
 type RequestBody = {
-  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "revise_section" | "back_cover_blurb" | "voice_profile";
+  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "visual_cast" | "revise_section" | "back_cover_blurb" | "voice_profile";
   mode: Mode;
   sourceMode?: Mode;
   brief: BookBrief;
@@ -245,6 +246,9 @@ export async function POST(request: Request) {
     }
     if (body.action === "visual_storyboard" && body.visualProject) {
       return NextResponse.json(await createVisualStoryboard(body));
+    }
+    if (body.action === "visual_cast" && body.visualProject) {
+      return NextResponse.json(await createVisualCast(body));
     }
     if (body.action === "visual_page" && body.visualProject?.page) {
       return NextResponse.json(await rewriteVisualPage(body));
@@ -660,6 +664,48 @@ Visual style: ${project.visualStyle}
 Character lock from the author: ${project.characterBible || "none supplied"}
 Cast lock rule: every recurring character, creature, or object-character in the story needs a locked visual description (what kind of being it is, size, body shape, exact colors, and one or two distinguishing marks), one sentence each, starting with its name. ${project.characterBible ? "The author already described some of the cast above. In character_bible return ONLY the locks for recurring characters the author did not describe, or an empty string if none are missing. Never restate or change the author's descriptions." : "In character_bible return the lock for the whole recurring cast."} Use those exact names in every panel scene and image prompt so each drawing names who is in it.
 Color and lighting palette: ${project.palette || "Create one coherent palette and lighting direction"}`;
+}
+
+/** Lists the recurring characters worth drawing a reference picture for. */
+async function createVisualCast(body: RequestBody) {
+  const project = body.visualProject!;
+  const scenes = (project.pages ?? [])
+    .flatMap((page) => [page.imagePrompt, ...page.panels.map((panel) => panel.scene)])
+    .map((scene) => String(scene ?? "").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 80)
+    .join("\n")
+    .slice(0, 7000);
+  const generated = await generateJson({
+    name: "visual_book_cast",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        characters: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: { name: { type: "string" }, description: { type: "string" } },
+            required: ["name", "description"],
+          },
+        },
+      },
+      required: ["characters"],
+    },
+    instructions:
+      "You are the character designer inside EB Studio Pro. You list the recurring characters of a visual book so each can be drawn once and copied on every page. Never use the em dash character.",
+    input: `${visualProjectContext(project)}
+
+Scenes in the book:
+${scenes || "No scenes yet."}
+
+List the recurring characters that appear in more than one scene, most important first, at most ${MAX_CHARACTER_REFS}. A character is a person, animal, creature, or an object that acts like a character. Never list places, props, weather, or the narrator.
+For each: name is the exact name the scenes use for it. description is one or two sentences a painter could draw from with no other context: what kind of being it is, its size, body shape, exact colors, face, clothing if any, and one or two marks that make it unmistakable. Keep everything the author's character lock already says about that character, and only add detail where the lock is silent. Do not describe actions, feelings, or the setting. If the book has no recurring characters, return an empty list.`,
+    maxOutputTokens: 1200,
+  }, body.provider ?? "auto", body.preferredProvider);
+  return { provider: generated.provider, characters: normalizeCast(generated.output.characters).map((ref) => ({ ...ref, description: removeDashes(ref.description) })) };
 }
 
 async function createTitleSuggestions(
