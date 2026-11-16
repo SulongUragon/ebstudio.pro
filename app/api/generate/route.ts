@@ -18,7 +18,7 @@ import {
   sanitizeChapterOpenerDeck,
   sanitizeChapterOpenerMetadata,
 } from "../../longform-chapter-openers";
-import type { VisualBookBrief, VisualBookPage } from "../../visual-book-types";
+import { COMICS_REMOVED_MESSAGE, isRetiredComicRequest, type VisualBookBrief, type VisualBookPage } from "../../visual-book-types";
 import { BLURB_MAX_WORDS, BLURB_MIN_WORDS, removeDashes } from "../../back-cover-copy";
 import {
   normalizeVoice,
@@ -165,14 +165,9 @@ const visualPageSchema = {
   type: "object", additionalProperties: false,
   properties: {
     page_number: { type: "integer" }, title: { type: "string" }, body: { type: "string" }, image_prompt: { type: "string" },
-    layout: { type: "string", enum: ["full-bleed", "image-top", "image-left", "image-right", "quote"] }, panel_count: { type: "integer" },
-    panels: { type: "array", items: { type: "object", additionalProperties: false, properties: {
-      scene: { type: "string" }, camera: { type: "string" },
-      dialogue: { type: "array", items: { type: "object", additionalProperties: false, properties: { speaker: { type: "string" }, text: { type: "string" } }, required: ["speaker", "text"] } },
-      caption: { type: "string" }, sound_effect: { type: "string" },
-    }, required: ["scene", "camera", "dialogue", "caption", "sound_effect"] } },
+    layout: { type: "string", enum: ["full-bleed", "image-top", "image-left", "image-right", "quote"] },
   },
-  required: ["page_number", "title", "body", "image_prompt", "layout", "panel_count", "panels"],
+  required: ["page_number", "title", "body", "image_prompt", "layout"],
 } as const;
 
 export async function POST(request: Request) {
@@ -243,6 +238,9 @@ export async function POST(request: Request) {
     if (body.action === "optimize_ebook_section" && body.existingBook?.sectionText?.trim()) {
       const result = await optimizeExistingEbookSection(body);
       return NextResponse.json(result);
+    }
+    if (isRetiredComicRequest(body.visualProject)) {
+      return NextResponse.json({ code: "comics_removed", error: COMICS_REMOVED_MESSAGE }, { status: 410 });
     }
     if (body.action === "visual_storyboard" && body.visualProject) {
       return NextResponse.json(await createVisualStoryboard(body));
@@ -583,32 +581,24 @@ async function createVisualStoryboard(body: RequestBody) {
   const pageCount = Number.isFinite(requestedPageCount)
     ? Math.min(50, Math.max(3, requestedPageCount))
     : 7;
-  const comic = project.mode === "comic";
-  const visualDirectionGuidance = comic
-    ? ""
-    : `${buildCopywritingGuidance(visualCreativeContext(project))} ${buildVisualArtworkDirection(visualCreativeContext(project), project.visualStyle)}`;
+  const visualDirectionGuidance = `${buildCopywritingGuidance(visualCreativeContext(project))} ${buildVisualArtworkDirection(visualCreativeContext(project), project.visualStyle)}`;
   const generated = await generateJson({
-    name: comic ? "comic_short_storyboard" : "visual_mini_ebook_storyboard",
+    name: "visual_mini_ebook_storyboard",
     schema: { type: "object", additionalProperties: false, properties: { refined_subtitle: { type: "string" }, character_bible: { type: "string" }, palette: { type: "string" }, pages: { type: "array", items: visualPageSchema } }, required: ["refined_subtitle", "character_bible", "palette", "pages"] },
-    instructions: comic
-      ? "You are the graphic-story director inside EB Studio Pro. Create concise, visually clear, original comic storyboards with consistent characters, deliberate panel rhythm, readable dialogue, and a complete emotional arc. Never imitate a living artist or copyrighted franchise. Never use the em dash character."
-      : `You are the visual publishing director inside EB Studio Pro. Create premium, content-rich mini ebooks where every page has one clear job, substantial publication-ready copy, and art direction that materially supports the text. Every page must earn its place and give the reader real narrative, emotional, practical, or reflective value. Never pad pages with generic slogans, repeated ideas, invented facts, research, credentials, or statistics. Never use the em dash character. ${visualDirectionGuidance}`,
+    instructions: `You are the visual publishing director inside EB Studio Pro. Create premium, content-rich mini ebooks where every page has one clear job, substantial publication-ready copy, and art direction that materially supports the text. Every page must earn its place and give the reader real narrative, emotional, practical, or reflective value. Never pad pages with generic slogans, repeated ideas, invented facts, research, credentials, or statistics. Never use the em dash character. ${visualDirectionGuidance}`,
     input: `${visualProjectContext(project)}
 
 ${visualPlaybookBlock(project)}
 
-${comic ? "" : `Creative and copy direction:\n${visualDirectionGuidance}\n`}
+Creative and copy direction:
+${visualDirectionGuidance}
 
 Create exactly ${pageCount} total pages, including the cover. Page 1 is the cover. The final page must provide a satisfying resolution for a story, or a focused takeaway and call to action for a guide, teaser, lead magnet, or product book.
 
-${comic
-  ? `This is a comic. Every non-cover page must contain 1 to 4 panels. Use the selected ${project.comicFormat} format. Put all spoken words in dialogue, narration in caption, and optional short impact lettering in sound_effect. Keep every dialogue line concise enough to fit in a speech bubble. The page body may contain a one-sentence page note but must not repeat the dialogue. For the cover return one panel. Each panel scene must describe only the visible art, without speech bubbles, captions, lettering, written signs, watermarks, or logos.`
-  : `This is an image-rich mini ebook, not a chapter book. Keep the cover body to a focused 12 to 28 word hook. Every non-cover page must contain 90 to 150 words across 4 to 7 complete sentences. Build one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflective observations that can become designed takeaway sections. For fiction and memoir, use concrete scene detail, interiority, and consequence. For guides, workbooks, lead magnets, and self-help, use explanation, practical application, and a meaningful reflection or takeaway. Use the available page space fully, but never repeat an idea merely to increase length. Return an empty panels array and panel_count 0 on every page. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks.`}
+This is an image-rich mini ebook, not a chapter book. Keep the cover body to a focused 12 to 28 word hook. Every non-cover page must contain 90 to 150 words across 4 to 7 complete sentences. Build one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflective observations that can become designed takeaway sections. For fiction and memoir, use concrete scene detail, interiority, and consequence. For guides, workbooks, lead magnets, and self-help, use explanation, practical application, and a meaningful reflection or takeaway. Use the available page space fully, but never repeat an idea merely to increase length. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks.
 
 Maintain a single narrative or instructional progression with no repeated page purpose. The title supplied by the author is authoritative and must not be changed. If the subtitle is blank, create one in refined_subtitle. If the author supplied one, return it exactly. Strengthen the character bible and palette only when their fields are blank. Return exactly ${pageCount} page objects numbered 1 through ${pageCount}.`,
-    maxOutputTokens: comic
-      ? Math.min(30000, Math.max(9000, pageCount * 600))
-      : Math.min(30000, Math.max(8000, pageCount * 700)),
+    maxOutputTokens: Math.min(30000, Math.max(8000, pageCount * 700)),
   }, body.provider ?? "auto", body.preferredProvider);
   const pages = Array.isArray(generated.output.pages) ? generated.output.pages : [];
   if (pages.length !== pageCount) throw new ProviderRequestError(generated.provider, 502, "invalid_response", `The visual storyboard did not contain exactly ${pageCount} pages.`);
@@ -619,22 +609,18 @@ async function rewriteVisualPage(body: RequestBody) {
   const project = body.visualProject;
   const page = project?.page;
   if (!project || !page) throw new Error("Missing visual page details.");
-  const comic = project.mode === "comic";
   const pageMap = (project.pages ?? []).map((item) => `${item.pageNumber}. ${item.title}: ${item.body}`).join("\n");
-  const visualDirectionGuidance = comic
-    ? ""
-    : `${buildCopywritingGuidance(visualCreativeContext(project))} ${buildVisualArtworkDirection(visualCreativeContext(project), project.visualStyle)}`;
+  const visualDirectionGuidance = `${buildCopywritingGuidance(visualCreativeContext(project))} ${buildVisualArtworkDirection(visualCreativeContext(project), project.visualStyle)}`;
   const generated = await generateJson({
-    name: comic ? "rewrite_comic_page" : "rewrite_visual_ebook_page",
+    name: "rewrite_visual_ebook_page",
     schema: { type: "object", additionalProperties: false, properties: { page: visualPageSchema }, required: ["page"] },
-    instructions: comic
-      ? "You are the graphic-story editor inside EB Studio Pro. Rewrite one comic page while preserving continuity, character identity, reading order, and the story's ending. Keep dialogue short and natural. Never use the em dash character."
-      : `You are the visual mini-book editor inside EB Studio Pro. Rewrite one page for clarity, emotional force, and visual rhythm without changing the book's central promise. Never invent factual claims. Never use the em dash character. ${visualDirectionGuidance}`,
+    instructions: `You are the visual mini-book editor inside EB Studio Pro. Rewrite one page for clarity, emotional force, and visual rhythm without changing the book's central promise. Never invent factual claims. Never use the em dash character. ${visualDirectionGuidance}`,
     input: `${visualProjectContext(project)}
 
 ${visualPlaybookBlock(project)}
 
-${comic ? "" : `Creative and copy direction:\n${visualDirectionGuidance}\n`}
+Creative and copy direction:
+${visualDirectionGuidance}
 
 Full page map:
 ${pageMap || "Only one page is available."}
@@ -644,25 +630,23 @@ Current title: ${page.title}
 Current body: ${page.body}
 Current art direction: ${page.imagePrompt}
 
-Preserve its role in the complete book and return the same page_number. ${comic
-  ? "Return 1 to 4 panels. Put spoken words only in dialogue, narration only in caption, and visible impact lettering only in sound_effect. Panel scene art directions must exclude all written words, speech bubbles, signs, logos, and watermarks."
-  : "Return no panels and panel_count 0. Unless this is the cover, return 90 to 150 words across 4 to 7 complete sentences: one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflections. Use concrete story detail for fiction and practical value for guides. Fill the page meaningfully without generic padding or repeated ideas. The image_prompt must exclude all words, lettering, typography, logos, and watermarks."}`,
-    maxOutputTokens: comic ? 3400 : 2400,
+Preserve its role in the complete book and return the same page_number. Unless this is the cover, return 90 to 150 words across 4 to 7 complete sentences: one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflections. Use concrete story detail for fiction and practical value for guides. Fill the page meaningfully without generic padding or repeated ideas. The image_prompt must exclude all words, lettering, typography, logos, and watermarks.`,
+    maxOutputTokens: 2400,
   }, body.provider ?? "auto", body.preferredProvider);
   return { ...generated.output, provider: generated.provider };
 }
 
 function visualProjectContext(project: VisualBookBrief) {
-  return `Visual project mode: ${project.mode === "comic" ? "comic and graphic story" : "visual mini ebook"}
+  return `Visual project mode: visual mini ebook
 Title: ${project.title}
 Subtitle: ${project.subtitle || "Create one if useful"}
 Author: ${project.author}
-Content type: ${project.mode === "comic" ? project.comicFormat : project.kind}
+Content type: ${project.kind}
 Premise or core promise: ${project.premise}
 Target reader: ${project.audience || "General readers"}
 Visual style: ${project.visualStyle}
 Character lock from the author: ${project.characterBible || "none supplied"}
-Cast lock rule: every recurring character, creature, or object-character in the story needs a locked visual description (what kind of being it is, size, body shape, exact colors, and one or two distinguishing marks), one sentence each, starting with its name. ${project.characterBible ? "The author already described some of the cast above. In character_bible return ONLY the locks for recurring characters the author did not describe, or an empty string if none are missing. Never restate or change the author's descriptions." : "In character_bible return the lock for the whole recurring cast."} Use those exact names in every panel scene and image prompt so each drawing names who is in it.
+Cast lock rule: every recurring character, creature, or object-character in the story needs a locked visual description (what kind of being it is, size, body shape, exact colors, and one or two distinguishing marks), one sentence each, starting with its name. ${project.characterBible ? "The author already described some of the cast above. In character_bible return ONLY the locks for recurring characters the author did not describe, or an empty string if none are missing. Never restate or change the author's descriptions." : "In character_bible return the lock for the whole recurring cast."} Use those exact names in every image prompt so each drawing names who is in it.
 Color and lighting palette: ${project.palette || "Create one coherent palette and lighting direction"}`;
 }
 
@@ -670,7 +654,7 @@ Color and lighting palette: ${project.palette || "Create one coherent palette an
 async function createVisualCast(body: RequestBody) {
   const project = body.visualProject!;
   const scenes = (project.pages ?? [])
-    .flatMap((page) => [page.imagePrompt, ...page.panels.map((panel) => panel.scene)])
+    .map((page) => page.imagePrompt)
     .map((scene) => String(scene ?? "").replace(/\s+/g, " ").trim())
     .filter(Boolean)
     .slice(0, 80)

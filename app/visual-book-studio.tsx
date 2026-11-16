@@ -1,6 +1,5 @@
 "use client";
 
-import { bubbleSide, bubbleSpeakerLabel, spokenLines } from "./comic-bubbles";
 import { mergeCharacterLock } from "./visual-image-prompt";
 import CharacterRefsPanel from "./character-refs-panel";
 import { referencesForScene } from "./character-refs";
@@ -15,7 +14,6 @@ import {
   Image as ImageIcon,
   LayoutGrid,
   LoaderCircle,
-  MessageCircle,
   Plus,
   RotateCcw,
   Save,
@@ -25,16 +23,14 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ActiveAIProvider, AIProvider } from "./book-types";
 import {
-  COMIC_FORMATS,
   VISUAL_BOOK_KINDS,
   VISUAL_STYLES,
   blankVisualBookBrief,
-  type ComicPanel,
+  isRetiredComicRequest,
   type VisualBookBrief,
   type VisualBookPage,
   type VisualBookProject,
   type VisualPageCount,
-  type VisualProjectMode,
 } from "./visual-book-types";
 import { normalizeVisualPages } from "./visual-book-utils";
 import {
@@ -58,7 +54,6 @@ import VisualCreativeAssistant from "./visual-creative-assistant";
 type Busy = "" | "storyboard" | "page" | "image" | "all-images" | "pdf" | "zip";
 
 export default function VisualBookStudio({ provider }: { provider: AIProvider }) {
-  const [mode, setMode] = useState<VisualProjectMode>("visual");
   const [brief, setBrief] = useState<VisualBookBrief>(() => blankVisualBookBrief("visual"));
   const [project, setProject] = useState<VisualBookProject | null>(null);
   const [projects, setProjects] = useState<VisualBookProject[]>([]);
@@ -79,9 +74,11 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
       .then(async local => {
         const synced = await syncCloudProjects("visual", local);
         if (dead) return;
-        setProjects(synced.projects);
+        // Comics were removed from the app; a comic saved earlier is not listed or opened.
+        const visualProjects = synced.projects.filter(item => !isRetiredComicRequest(item));
+        setProjects(visualProjects);
         setSyncState(synced.state);
-        await Promise.all(synced.projects.map(saveVisualProject));
+        await Promise.all(visualProjects.map(saveVisualProject));
       })
       .catch(() => {
         if (!dead) setError("Saved visual projects could not be loaded from this browser.");
@@ -112,28 +109,11 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
 
   const imageProgress = useMemo(() => {
     if (!project) return { complete: 0, total: 0 };
-    if (project.mode === "comic") {
-      const panels = project.pages.flatMap(item => item.panels);
-      return {
-        complete: panels.filter(item => item.imageData).length,
-        total: panels.length,
-      };
-    }
     return {
       complete: project.pages.filter(item => item.imageData).length,
       total: project.pages.length,
     };
   }, [project]);
-
-  function chooseMode(next: VisualProjectMode) {
-    if (locked || next === mode) return;
-    setMode(next);
-    setBrief(blankVisualBookBrief(next));
-    setProject(null);
-    setActivePage(0);
-    setError("");
-    setNotice("");
-  }
 
   function updateBrief<K extends keyof VisualBookBrief>(key: K, value: VisualBookBrief[K]) {
     setBrief(current => ({ ...current, [key]: value }));
@@ -156,7 +136,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
 
   function reset() {
     setProject(null);
-    setBrief(blankVisualBookBrief(mode));
+    setBrief(blankVisualBookBrief());
     setActivePage(0);
     setError("");
     setNotice("");
@@ -191,7 +171,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
         id: project?.id ?? crypto.randomUUID(),
         createdAt: project?.createdAt ?? now,
         updatedAt: now,
-        pages: normalizeVisualPages(data.pages, refined.pageCount, refined.mode),
+        pages: normalizeVisualPages(data.pages, refined.pageCount),
         providersUsed: data.provider ? [data.provider as ActiveAIProvider] : [],
       };
       setBrief(refined);
@@ -216,70 +196,6 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
     });
   }
 
-  function updatePanel(index: number, patch: Partial<ComicPanel>) {
-    if (!page) return;
-    updatePage({
-      panels: page.panels.map((item, panelIndex) =>
-        panelIndex === index ? { ...item, ...patch } : item,
-      ),
-    });
-  }
-
-  function addPanel() {
-    if (!page || page.panels.length >= 4) return;
-    updatePage({
-      panels: [
-        ...page.panels,
-        {
-          id: `panel-${crypto.randomUUID()}`,
-          order: page.panels.length + 1,
-          scene: "",
-          camera: "medium cinematic composition",
-          dialogue: [],
-          caption: "",
-          soundEffect: "",
-        },
-      ],
-    });
-  }
-
-  function removePanel(index: number) {
-    if (!page || page.panels.length <= 1) return;
-    updatePage({
-      panels: page.panels
-        .filter((_, panelIndex) => panelIndex !== index)
-        .map((item, panelIndex) => ({ ...item, order: panelIndex + 1 })),
-    });
-  }
-
-  function addDialogue(index: number) {
-    if (!page) return;
-    updatePanel(index, {
-      dialogue: [...page.panels[index].dialogue, { speaker: "", text: "" }].slice(0, 3),
-    });
-  }
-
-  function updateDialogue(
-    panelIndex: number,
-    dialogueIndex: number,
-    key: "speaker" | "text",
-    value: string,
-  ) {
-    if (!page) return;
-    updatePanel(panelIndex, {
-      dialogue: page.panels[panelIndex].dialogue.map((item, index) =>
-        index === dialogueIndex ? { ...item, [key]: value } : item,
-      ),
-    });
-  }
-
-  function removeDialogue(panelIndex: number, dialogueIndex: number) {
-    if (!page) return;
-    updatePanel(panelIndex, {
-      dialogue: page.panels[panelIndex].dialogue.filter((_, index) => index !== dialogueIndex),
-    });
-  }
-
   async function rewrite() {
     if (!project || !page) return;
     setBusy("page");
@@ -293,16 +209,12 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
         preferredProvider: project.providersUsed?.at(-1),
         visualProject: { ...project, page },
       });
-      const rewritten = normalizeVisualPages([data.page], 1, project.mode)[0];
+      const rewritten = normalizeVisualPages([data.page], 1)[0];
       updatePage({
         ...rewritten,
         id: page.id,
         pageNumber: page.pageNumber,
         role: page.role,
-        panels: rewritten.panels.map((item, index) => ({
-          ...item,
-          imageData: page.panels[index]?.imageData,
-        })),
       });
       setNotice(`Page ${page.pageNumber} was rewritten. Existing art stays until you regenerate it.`);
     } catch (caught) {
@@ -312,33 +224,20 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
     }
   }
 
-  async function generateImage(pageIndex: number, panelIndex?: number) {
+  async function generateImage(pageIndex: number) {
     if (!project) return;
     const selectedPage = project.pages[pageIndex];
-    const selectedPanel =
-      typeof panelIndex === "number" ? selectedPage.panels[panelIndex] : undefined;
     setBusy("image");
-    setBusyTarget(
-      selectedPanel ? `${selectedPage.pageNumber}-${panelIndex}` : `${selectedPage.pageNumber}`,
-    );
+    setBusyTarget(`${selectedPage.pageNumber}`);
     setError("");
     try {
-      const imageData = await visualImage(project, selectedPage, selectedPanel);
+      const imageData = await visualImage(project, selectedPage);
       setProject(current => {
         if (!current) return current;
         return {
           ...current,
           updatedAt: new Date().toISOString(),
-          pages: current.pages.map((item, index) => {
-            if (index !== pageIndex) return item;
-            if (typeof panelIndex !== "number") return { ...item, imageData };
-            return {
-              ...item,
-              panels: item.panels.map((panelItem, panelNumber) =>
-                panelNumber === panelIndex ? { ...panelItem, imageData } : panelItem,
-              ),
-            };
-          }),
+          pages: current.pages.map((item, index) => (index === pageIndex ? { ...item, imageData } : item)),
         };
       });
     } catch (caught) {
@@ -365,28 +264,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
     try {
       for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
         const selectedPage = working.pages[pageIndex];
-        if (working.mode === "comic") {
-          for (let panelIndex = 0; panelIndex < selectedPage.panels.length; panelIndex += 1) {
-            if (!redraw && working.pages[pageIndex].panels[panelIndex].imageData) continue;
-            setBusyTarget(`${selectedPage.pageNumber}-${panelIndex}`);
-            const imageData = await visualImage(
-              working,
-              selectedPage,
-              selectedPage.panels[panelIndex],
-            );
-            const panels = working.pages[pageIndex].panels.map((item, index) =>
-              index === panelIndex ? { ...item, imageData } : item,
-            );
-            working = {
-              ...working,
-              updatedAt: new Date().toISOString(),
-              pages: working.pages.map((item, index) =>
-                index === pageIndex ? { ...item, panels } : item,
-              ),
-            };
-            setProject(working);
-          }
-        } else if (redraw || !selectedPage.imageData) {
+        if (redraw || !selectedPage.imageData) {
           setBusyTarget(`${selectedPage.pageNumber}`);
           const imageData = await visualImage(working, selectedPage);
           working = {
@@ -399,7 +277,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
           setProject(working);
         }
       }
-      setNotice("All page art is complete. Dialogue and captions remain editable.");
+      setNotice("All page art is complete. Page text remains editable.");
     } catch (caught) {
       setProject(working);
       setError(`${message(caught, "Image generation stopped.")} Finished images were saved.`);
@@ -442,7 +320,6 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
   }
 
   function open(saved: VisualBookProject) {
-    setMode(saved.mode);
     setBrief(projectBrief(saved));
     setProject(saved);
     setActivePage(0);
@@ -462,22 +339,11 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
         <div>
           <span className="eyebrow"><LayoutGrid size={18} /> Page-based creator</span>
           <h1>Build a visual mini book.</h1>
-          <p>Five to fifteen designed pages with editable text, consistent art, and comic-ready panels.</p>
+          <p>Three to fifty designed pages with editable text and consistent art.</p>
         </div>
         {project ? (
           <button className="visual-new-button" onClick={reset}><Plus size={16} /> New visual project</button>
         ) : null}
-      </div>
-
-      <div className="visual-mode-switch" role="tablist">
-        <button className={mode === "visual" ? "selected" : ""} onClick={() => chooseMode("visual")} disabled={locked}>
-          <FileImage size={18} />
-          <span>Visual Mini eBook<small>Image-rich designed pages</small></span>
-        </button>
-        <button className={mode === "comic" ? "selected" : ""} onClick={() => chooseMode("comic")} disabled={locked}>
-          <MessageCircle size={18} />
-          <span>Comics & Graphic Story<small>Panels, dialogue, captions</small></span>
-        </button>
       </div>
 
       <div className="visual-workspace">
@@ -493,18 +359,14 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
           <Field label="Author" value={brief.author} set={value => project ? updateProjectBrief("author", value) : updateBrief("author", value)} placeholder="Author name" disabled={locked} />
 
           <fieldset className="visual-choice-field" disabled={locked || Boolean(project)}>
-            <legend>{mode === "comic" ? "Comic format" : "Mini book type"}</legend>
+            <legend>Mini book type</legend>
             <div className="visual-choice-grid">
-              {(mode === "comic" ? COMIC_FORMATS : VISUAL_BOOK_KINDS).map(option => (
+              {VISUAL_BOOK_KINDS.map(option => (
                 <button
                   type="button"
                   key={option.id}
-                  className={(mode === "comic" ? brief.comicFormat : brief.kind) === option.id ? "selected" : ""}
-                  onClick={() =>
-                    mode === "comic"
-                      ? updateBrief("comicFormat", option.id as VisualBookBrief["comicFormat"])
-                      : updateBrief("kind", option.id as VisualBookBrief["kind"])
-                  }
+                  className={brief.kind === option.id ? "selected" : ""}
+                  onClick={() => updateBrief("kind", option.id)}
                 >
                   <strong>{option.label}</strong><small>{option.note}</small>
                 </button>
@@ -512,7 +374,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
             </div>
           </fieldset>
 
-          <Field textarea label={mode === "comic" ? "Story idea and conflict" : "Story idea or core promise"} value={brief.premise} set={value => project ? updateProjectBrief("premise", value) : updateBrief("premise", value)} placeholder="What should happen, change, or help the reader?" disabled={locked} />
+          <Field textarea label="Story idea or core promise" value={brief.premise} set={value => project ? updateProjectBrief("premise", value) : updateBrief("premise", value)} placeholder="What should happen, change, or help the reader?" disabled={locked} />
           <Field label="Target reader" value={brief.audience} set={value => project ? updateProjectBrief("audience", value) : updateBrief("audience", value)} placeholder="Who is this for?" disabled={locked} />
 
           <fieldset className="visual-inline-options" disabled={locked || Boolean(project)}>
@@ -619,7 +481,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
                   <button key={item.id} className={index === activePage ? "selected" : ""} onClick={() => setActivePage(index)}>
                     <span>{item.pageNumber}</span>
                     <small>{item.role === "cover" ? "Cover" : item.title}</small>
-                    {hasArt(project.mode, item) ? <Check size={12} /> : null}
+                    {hasArt(item) ? <Check size={12} /> : null}
                   </button>
                 ))}
               </div>
@@ -629,55 +491,13 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
                 <div className="visual-page-controls">
                   <div className="visual-page-meta"><span>Page {page.pageNumber}</span><small>{page.role}</small></div>
                   <Field label="Page heading" value={page.title} set={value => updatePage({ title: value })} placeholder="Page heading" disabled={locked} />
-                  <Field textarea label={project.mode === "comic" ? "Page note" : "Page copy"} value={page.body} set={value => updatePage({ body: value })} placeholder="Short page copy" disabled={locked} />
+                  <Field textarea label="Page copy" value={page.body} set={value => updatePage({ body: value })} placeholder="Short page copy" disabled={locked} />
 
-                  {project.mode === "visual" ? (
-                    <>
-                      <Field textarea label="Art direction" value={page.imagePrompt} set={value => updatePage({ imagePrompt: value })} placeholder="Visible scene only" disabled={locked} />
-                      <button className="panel-image-button" type="button" onClick={() => generateImage(activePage)} disabled={locked}>
-                        {busy === "image" && busyTarget === String(page.pageNumber) ? <LoaderCircle className="spin" /> : <ImageIcon />}
-                        {page.imageData ? "Regenerate page art" : "Generate page art"}
-                      </button>
-                    </>
-                  ) : (
-                    <div className="comic-panel-editors">
-                      <div className="comic-panel-count-control">
-                        <span>{page.panels.length} panel{page.panels.length === 1 ? "" : "s"}</span>
-                        {page.panels.length < 4 ? <button type="button" onClick={addPanel}><Plus size={13} /> Add panel</button> : null}
-                      </div>
-                      {page.panels.map((panel, panelIndex) => (
-                        <section key={panel.id}>
-                          <header>
-                            <strong>Panel {panelIndex + 1}</strong>
-                            <div>
-                              {page.panels.length > 1 ? <button className="comic-remove-panel" type="button" onClick={() => removePanel(panelIndex)}><Trash2 size={14} /></button> : null}
-                              <button type="button" onClick={() => generateImage(activePage, panelIndex)} disabled={locked}>
-                                {busy === "image" && busyTarget === `${page.pageNumber}-${panelIndex}` ? <LoaderCircle className="spin" /> : <ImageIcon />}
-                                {panel.imageData ? "Regenerate art" : "Generate art"}
-                              </button>
-                            </div>
-                          </header>
-                          <Field textarea label="Visible scene" value={panel.scene} set={value => updatePanel(panelIndex, { scene: value })} placeholder="Characters, action, setting" disabled={locked} />
-                          <Field label="Camera" value={panel.camera} set={value => updatePanel(panelIndex, { camera: value })} placeholder="Close-up, wide..." disabled={locked} />
-                          <Field label="Narration caption" value={panel.caption} set={value => updatePanel(panelIndex, { caption: value })} placeholder="Optional narration" disabled={locked} />
-                          <Field label="Sound effect" value={panel.soundEffect} set={value => updatePanel(panelIndex, { soundEffect: value })} placeholder="Optional: THUD!" disabled={locked} />
-                          <div className="dialogue-editor">
-                            <div>
-                              <span>Speech bubbles</span>
-                              {panel.dialogue.length < 3 ? <button type="button" onClick={() => addDialogue(panelIndex)}><Plus size={13} /> Add</button> : null}
-                            </div>
-                            {panel.dialogue.map((dialogue, dialogueIndex) => (
-                              <div className="dialogue-row" key={dialogueIndex}>
-                                <input value={dialogue.speaker} onChange={event => updateDialogue(panelIndex, dialogueIndex, "speaker", event.target.value)} placeholder="Speaker" />
-                                <textarea rows={2} value={dialogue.text} onChange={event => updateDialogue(panelIndex, dialogueIndex, "text", event.target.value)} placeholder="Short dialogue" />
-                                <button type="button" onClick={() => removeDialogue(panelIndex, dialogueIndex)}><Trash2 size={14} /></button>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      ))}
-                    </div>
-                  )}
+                  <Field textarea label="Art direction" value={page.imagePrompt} set={value => updatePage({ imagePrompt: value })} placeholder="Visible scene only" disabled={locked} />
+                  <button className="panel-image-button" type="button" onClick={() => generateImage(activePage)} disabled={locked}>
+                    {busy === "image" && busyTarget === String(page.pageNumber) ? <LoaderCircle className="spin" /> : <ImageIcon />}
+                    {page.imageData ? "Regenerate page art" : "Generate page art"}
+                  </button>
 
                   <button className="download-page-button" type="button" onClick={() => runExport("page")} disabled={locked}><Download size={16} /> Download this page JPG</button>
                 </div>
@@ -714,7 +534,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
             {projects.map(saved => (
               <article key={saved.id}>
                 <button className="visual-project-open" onClick={() => open(saved)}>
-                  <span>{saved.mode === "comic" ? "Comic" : "Visual Mini"}</span>
+                  <span>Visual Mini</span>
                   <strong>{saved.title}</strong>
                   <small>{saved.pages.length} pages · {saved.author}</small>
                 </button>
@@ -729,32 +549,6 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
 }
 
 function PagePreview({ project, page }: { project: VisualBookProject; page: VisualBookPage }) {
-  if (project.mode === "comic") {
-    return (
-      <div className={`visual-page-canvas comic-preview panels-${Math.min(4, Math.max(1, page.panels.length))}`}>
-        {page.panels.map(panel => (
-          <div className="comic-preview-panel" key={panel.id} style={panel.imageData ? { backgroundImage: `url(${panel.imageData})` } : undefined}>
-            {!panel.imageData ? <span><ImageIcon /> Art pending</span> : null}
-            <div className="comic-bubbles">
-              {spokenLines(panel.dialogue).map((dialogue, index) => {
-                const label = bubbleSpeakerLabel(panel.dialogue, index);
-                return (
-                  <p key={index} className={`bubble-${bubbleSide(panel.dialogue, index)}`}>
-                    {label ? <b>{label}</b> : null}
-                    {dialogue.text}
-                  </p>
-                );
-              })}
-            </div>
-            {panel.caption ? <small className="comic-caption">{panel.caption}</small> : null}
-            {panel.soundEffect ? <strong className="comic-sfx">{panel.soundEffect}</strong> : null}
-          </div>
-        ))}
-        {page.role === "cover" ? <div className="comic-cover-copy"><h2>{project.title}</h2><p>{project.subtitle}</p><small>{project.author}</small></div> : null}
-      </div>
-    );
-  }
-
   return (
     <div className={`visual-page-canvas visual-layout-${page.layout}${page.role === "cover" ? " visual-cover-preview" : ""}`}>
       <div className="visual-preview-image" style={page.imageData ? { backgroundImage: `url(${page.imageData})` } : undefined}>
@@ -809,13 +603,10 @@ async function api(url: string, body: unknown) {
   return data;
 }
 
-async function visualImage(project: VisualBookProject, page: VisualBookPage, panel?: ComicPanel) {
-  // Send the reference drawing of every character this page or panel names.
-  const sceneText = panel
-    ? `${panel.scene} ${panel.dialogue.map(line => line.speaker).join(" ")}`
-    : page.imagePrompt;
-  const references = referencesForScene(project.characterRefs, sceneText);
-  const data = await api("/api/visual-image", { project: projectBrief(project), page, panel, references });
+async function visualImage(project: VisualBookProject, page: VisualBookPage) {
+  // Send the reference drawing of every character this page names.
+  const references = referencesForScene(project.characterRefs, page.imagePrompt);
+  const data = await api("/api/visual-image", { project: projectBrief(project), page, references });
   const imageData = String(data.imageData ?? "");
   if (!imageData) throw new Error("The image generator returned no usable image.");
   return imageData;
@@ -828,7 +619,6 @@ function projectBrief(project: VisualBookProject): VisualBookBrief {
     subtitle: project.subtitle,
     author: project.author,
     kind: project.kind,
-    comicFormat: project.comicFormat,
     premise: project.premise,
     audience: project.audience,
     pageCount: project.pageCount,
@@ -838,10 +628,8 @@ function projectBrief(project: VisualBookProject): VisualBookBrief {
   };
 }
 
-function hasArt(mode: VisualProjectMode, page: VisualBookPage) {
-  return mode === "comic"
-    ? page.panels.length > 0 && page.panels.every(panel => panel.imageData)
-    : Boolean(page.imageData);
+function hasArt(page: VisualBookPage) {
+  return Boolean(page.imageData);
 }
 
 function message(error: unknown, fallback: string) {

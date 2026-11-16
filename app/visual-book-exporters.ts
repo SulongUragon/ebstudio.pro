@@ -1,5 +1,4 @@
-import { bubbleSide, bubbleSpeakerLabel, spokenLines } from "./comic-bubbles";
-import type { ComicPanel, VisualBookPage, VisualBookProject } from "./visual-book-types";
+import type { VisualBookPage, VisualBookProject } from "./visual-book-types";
 import { visualProjectFilename } from "./visual-book-utils";
 
 const W = 1200;
@@ -121,39 +120,22 @@ export async function renderVisualPage(project: VisualBookProject, page: VisualB
 
   drawPaper(c);
 
-  if (isComicProject(project)) {
-    await drawComic(c, project, page);
-  } else {
-    beginVisualTextAudit(c);
-    try {
-      if (isWarmPracticalGuideProject(project)) {
-        await drawWarmPracticalGuidePage(c, project, page);
-      } else if (isNotebookReflectionProject(project)) {
-        await drawNotebookReflectionPage(c, project, page);
-      } else {
-        await drawEditorialVisual(c, project, page);
-      }
-      finishVisualTextAudit(c);
-    } catch (error) {
-      cancelVisualTextAudit(c);
-      throw error;
+  beginVisualTextAudit(c);
+  try {
+    if (isWarmPracticalGuideProject(project)) {
+      await drawWarmPracticalGuidePage(c, project, page);
+    } else if (isNotebookReflectionProject(project)) {
+      await drawNotebookReflectionPage(c, project, page);
+    } else {
+      await drawEditorialVisual(c, project, page);
     }
+    finishVisualTextAudit(c);
+  } catch (error) {
+    cancelVisualTextAudit(c);
+    throw error;
   }
 
   return canvas.toDataURL("image/jpeg", 0.94);
-}
-
-/**
- * The persisted project mode is the routing contract. Panel data is deliberately
- * ignored here because stale or partially rewritten panels must never turn a
- * Visual Mini eBook into a comic export.
- */
-export function isComicProject(project: Pick<VisualBookProject, "mode">) {
-  return project.mode === "comic";
-}
-
-export function isEditorialVisualProject(project: Pick<VisualBookProject, "mode">) {
-  return !isComicProject(project);
 }
 
 export function getVisualTemplate(project: VisualBookProject): string {
@@ -166,11 +148,11 @@ export function getVisualTemplate(project: VisualBookProject): string {
 }
 
 export function isNotebookReflectionProject(project: VisualBookProject) {
-  return !isComicProject(project) && getVisualTemplate(project) === "notebook-reflection";
+  return getVisualTemplate(project) === "notebook-reflection";
 }
 
 export function isWarmPracticalGuideProject(project: VisualBookProject) {
-  return !isComicProject(project) && getVisualTemplate(project) === "warm-practical-guide";
+  return getVisualTemplate(project) === "warm-practical-guide";
 }
 
 export function resolveEditorialLayout(
@@ -1239,158 +1221,6 @@ function drawSmallMark(c: CanvasRenderingContext2D, x: number, y: number, color:
   c.fill();
 }
 
-async function drawComic(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage) {
-  if (page.role === "cover") {
-    await imageCover(c, page.panels?.[0]?.imageData ?? page.imageData, 0, 0, W, H, "#17211d");
-
-    const g = c.createLinearGradient(0, H * 0.36, 0, H);
-    g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,.91)");
-    c.fillStyle = g;
-    c.fillRect(0, 0, W, H);
-
-    c.fillStyle = "#fff9ed";
-    c.font = "700 96px Georgia";
-    wrap(c, project.title, 88, 1270, 1024, 105, 4);
-
-    c.font = "700 27px Arial";
-    c.fillText(project.author.toUpperCase(), 92, 1708);
-    return;
-  }
-
-  c.fillStyle = "#121413";
-  c.fillRect(0, 0, W, H);
-
-  const panels = page.panels?.length ? page.panels : [emptyPanel()];
-  const boxes = panelBoxes(panels.length);
-
-  for (let i = 0; i < panels.length; i++) {
-    const p = panels[i];
-    const b = boxes[i];
-
-    await imageCover(c, p.imageData, b.x, b.y, b.w, b.h, "#2e3330");
-    c.strokeStyle = "#f8f1e5";
-    c.lineWidth = 10;
-    c.strokeRect(b.x, b.y, b.w, b.h);
-
-    panelWords(c, p, b);
-  }
-
-  c.fillStyle = "#f8f1e5";
-  c.font = "700 23px Arial";
-  c.fillText(`${page.pageNumber}  ${page.title}`.toUpperCase(), 46, 1762);
-}
-
-function panelWords(c: CanvasRenderingContext2D, p: ComicPanel, b: { x: number; y: number; w: number; h: number }) {
-  let y = b.y + 26;
-  const lines = spokenLines(p.dialogue);
-
-  lines.forEach((line, index) => {
-    const label = bubbleSpeakerLabel(p.dialogue, index);
-    const side = bubbleSide(p.dialogue, index);
-    const maxTextWidth = Math.min(b.w - 120, 400);
-
-    // Size the bubble to its words so it covers as little art as possible.
-    c.font = "700 23px Arial";
-    const textLines = wrappedLines(c, line.text.replace(/\s+/g, " ").trim(), maxTextWidth).slice(0, 5);
-    let textWidth = Math.max(...textLines.map((text) => c.measureText(text).width), 40);
-    if (label) {
-      c.font = "700 15px Arial";
-      textWidth = Math.max(textWidth, c.measureText(label.toUpperCase()).width);
-    }
-    const bw = Math.ceil(textWidth) + 48;
-    const bh = textLines.length * 29 + (label ? 22 : 0) + 30;
-    const bx = side === "left" ? b.x + 26 : b.x + b.w - 26 - bw;
-    const tailX = side === "left" ? bx + 34 : bx + bw - 34;
-
-    // Tail first, then the body over it, so the outline reads as one shape.
-    c.fillStyle = "#ffffff";
-    c.strokeStyle = "#141514";
-    c.lineWidth = 4;
-    c.lineJoin = "round";
-    c.beginPath();
-    c.moveTo(tailX - 13, y + bh - 4);
-    c.lineTo(tailX + (side === "left" ? -4 : 4), y + bh + 22);
-    c.lineTo(tailX + 13, y + bh - 4);
-    c.closePath();
-    c.stroke();
-    c.fill();
-    roundedRect(c, bx, y, bw, bh, 24);
-    c.stroke();
-    c.fill();
-    c.fillRect(tailX - 10, y + bh - 8, 20, 8);
-
-    c.fillStyle = "#141514";
-    let textY = y + 34;
-    if (label) {
-      c.font = "700 15px Arial";
-      c.fillText(label.toUpperCase(), bx + 24, y + 26);
-      textY += 22;
-    }
-    c.font = "700 23px Arial";
-    textLines.forEach((text, lineIndex) => c.fillText(text, bx + 24, textY + lineIndex * 29));
-
-    y += bh + 34;
-  });
-
-  if (p.caption) {
-    c.fillStyle = "rgba(248,235,191,.94)";
-    c.fillRect(b.x + 24, b.y + b.h - 100, b.w - 48, 74);
-
-    c.fillStyle = "#171817";
-    c.font = "italic 21px Georgia";
-    wrap(c, p.caption, b.x + 40, b.y + b.h - 71, b.w - 80, 27, 2);
-  }
-
-  if (p.soundEffect) {
-    c.save();
-    c.translate(b.x + b.w - 36, b.y + b.h * 0.55);
-    c.rotate(-0.13);
-    c.textAlign = "right";
-    c.font = "900 53px Arial";
-    c.lineWidth = 11;
-    c.strokeStyle = "#111";
-    c.strokeText(p.soundEffect.toUpperCase(), 0, 0);
-    c.fillStyle = "#f5b541";
-    c.fillText(p.soundEffect.toUpperCase(), 0, 0);
-    c.restore();
-  }
-}
-
-function panelBoxes(count: number) {
-  const gap = 22;
-  const m = 38;
-  const uw = W - m * 2;
-  const uh = H - 120;
-
-  if (count <= 1) return [{ x: m, y: 34, w: uw, h: uh }];
-
-  if (count === 2) {
-    const h = (uh - gap) / 2;
-    return [0, 1].map((i) => ({ x: m, y: 34 + i * (h + gap), w: uw, h }));
-  }
-
-  if (count === 3) {
-    const th = uh * 0.54;
-    const bh = uh - th - gap;
-    return [
-      { x: m, y: 34, w: uw, h: th },
-      { x: m, y: 34 + th + gap, w: (uw - gap) / 2, h: bh },
-      { x: m + (uw + gap) / 2, y: 34 + th + gap, w: (uw - gap) / 2, h: bh },
-    ];
-  }
-
-  const w = (uw - gap) / 2;
-  const h = (uh - gap) / 2;
-
-  return [0, 1, 2, 3].map((i) => ({
-    x: m + (i % 2) * (w + gap),
-    y: 34 + Math.floor(i / 2) * (h + gap),
-    w,
-    h,
-  }));
-}
-
 async function imageCover(
   c: CanvasRenderingContext2D,
   data: string | undefined,
@@ -1428,10 +1258,9 @@ function drawImagePlaceholder(
   c.fillRect(x, y, w, h);
 
   const wash = c.createLinearGradient(x, y, x + w, y + h);
-  const comicPlaceholder = fallback === "#17211d" || fallback === "#2e3330";
   wash.addColorStop(0, "rgba(255,248,235,.18)");
-  wash.addColorStop(0.52, comicPlaceholder ? "rgba(169,130,74,.10)" : "rgba(15,93,59,.12)");
-  wash.addColorStop(1, comicPlaceholder ? "rgba(122,20,40,.12)" : "rgba(10,58,116,.14)");
+  wash.addColorStop(0.52, "rgba(15,93,59,.12)");
+  wash.addColorStop(1, "rgba(10,58,116,.14)");
   c.fillStyle = wash;
   c.fillRect(x, y, w, h);
 
@@ -1489,8 +1318,7 @@ type VisualTextAuditState = VisualTextAuditReport & {
 const VISUAL_TEXT_AUDITS = new WeakMap<CanvasRenderingContext2D, VisualTextAuditState>();
 
 /**
- * Installs the final visual-only canvas guard. Comic pages deliberately never
- * install it, so the comic renderer and its legacy lettering remain untouched.
+ * Installs the final canvas guard that checks every line of text before it is drawn.
  */
 export function beginVisualTextAudit(c: CanvasRenderingContext2D) {
   if (VISUAL_TEXT_AUDITS.has(c)) throw new Error("A visual text audit is already active for this canvas.");
@@ -2176,50 +2004,6 @@ function wrappedLines(c: CanvasRenderingContext2D, source: string, maxWidth: num
   return lines;
 }
 
-function wrap(
-  c: CanvasRenderingContext2D,
-  text: unknown,
-  x: number,
-  y: number,
-  max: number,
-  lh: number,
-  limit: number,
-) {
-  const words = String(text).replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
-  const lines: string[] = [];
-  let line = "";
-  let consumed = 0;
-
-  for (; consumed < words.length; consumed += 1) {
-    const word = words[consumed];
-    const test = line ? `${line} ${word}` : word;
-
-    if (c.measureText(test).width > max && line) {
-      lines.push(line);
-      line = word;
-      if (lines.length === limit) {
-        line = "";
-        break;
-      }
-    } else {
-      line = test;
-    }
-  }
-
-  if (line && lines.length < limit) lines.push(line);
-
-  if (consumed < words.length && lines.length) {
-    let last = lines[lines.length - 1].replace(/[.,;:!?]+$/, "");
-    while (last && c.measureText(`${last}…`).width > max) {
-      last = last.replace(/\s*\S+$/, "");
-    }
-    lines[lines.length - 1] = `${last || lines[lines.length - 1]}…`;
-  }
-
-  lines.forEach((s, i) => c.fillText(s, x, y + i * lh));
-  return y + lines.length * lh;
-}
-
 export function buildVisualPageSections(source: unknown, _title = "") {
   void _title; // Keep the existing call contract without using a headline as body-copy fallback.
   const clean = cleanTruncatedText(source);
@@ -2268,20 +2052,6 @@ function visualWordCount(source: unknown) {
   return String(source).trim().split(/\s+/).filter(Boolean).length;
 }
 
-function roundedRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  c.beginPath();
-  c.moveTo(x + r, y);
-  c.lineTo(x + w - r, y);
-  c.quadraticCurveTo(x + w, y, x + w, y + r);
-  c.lineTo(x + w, y + h - r);
-  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  c.lineTo(x + r, y + h);
-  c.quadraticCurveTo(x, y + h, x, y + h - r);
-  c.lineTo(x, y + r);
-  c.quadraticCurveTo(x, y, x + r, y);
-  c.closePath();
-}
-
 function loadImage(data: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const im = new Image();
@@ -2291,15 +2061,10 @@ function loadImage(data: string) {
   });
 }
 
-function emptyPanel(): ComicPanel {
-  return { id: "empty", order: 1, scene: "", camera: "", dialogue: [], caption: "", soundEffect: "" };
-}
-
 function stripImages(page: VisualBookPage) {
   return {
     ...page,
     imageData: undefined,
-    panels: page.panels?.map((p) => ({ ...p, imageData: undefined })) ?? [],
   };
 }
 

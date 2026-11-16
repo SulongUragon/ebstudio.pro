@@ -57,7 +57,6 @@ test("prompts tell the model which reference is which, and still fit the 2,000 c
   assert.equal(referenceInstruction([]), "");
   assert.match(referenceInstruction(["Luma", "Pip"]), /image 1 is Luma, image 2 is Pip/);
   const prompt = buildVisualImagePrompt({
-    comic: true,
     scene: "s ".repeat(900),
     camera: "c ".repeat(300),
     style: "t ".repeat(600),
@@ -69,7 +68,7 @@ test("prompts tell the model which reference is which, and still fit the 2,000 c
   assert.equal(compactPrompt(prompt), prompt.replace(/\s+/g, " ").trim());
   assert.ok(prompt.indexOf("Reference images:") < prompt.indexOf("Scene:"));
 
-  const sheet = characterSheetPrompt({ name: "Luma", description: luma.description, style: "friendly children's comic", palette: "warm gold" });
+  const sheet = characterSheetPrompt({ name: "Luma", description: luma.description, style: "friendly rounded storybook art", palette: "warm gold" });
   assert.match(sheet, /One character, full body/);
   assert.match(sheet, /No text in the image/);
   assert.ok(sheet.includes(luma.description));
@@ -109,16 +108,15 @@ async function withCloudflare(model: string | undefined, run: (calls: Call[]) =>
   }
 }
 
-const project = { ...blankVisualBookBrief("comic"), title: "Luma and the Shy Shadow", comicFormat: "children", characterBible: "Luma: a round lantern-bug.", palette: "warm gold" };
-const panel = { id: "a", order: 1, scene: "Luma and Pip hover by the shed.", camera: "wide", dialogue: [], caption: "", soundEffect: "" };
-const page = { id: "p2", pageNumber: 2, role: "content", title: "Cozy Glow", body: "", imagePrompt: "", layout: "full-bleed", panels: [panel] };
+const project = { ...blankVisualBookBrief(), title: "Luma and the Shy Shadow", kind: "children-story", characterBible: "Luma: a round lantern-bug.", palette: "warm gold" };
+const page = { id: "p2", pageNumber: 2, role: "content", title: "Cozy Glow", body: "", imagePrompt: "Luma and Pip hover by the shed.", layout: "full-bleed" };
 const imageRequest = (body: Record<string, unknown>) =>
   authorizedRequest("http://localhost/api/visual-image", { method: "POST", body: JSON.stringify({ project, ...body }) });
 
-test("a panel with references sends the pictures to FLUX.2, even when OpenAI is set up or an older model is configured", async () => {
+test("a page with references sends the pictures to FLUX.2, even when OpenAI is set up or an older model is configured", async () => {
   assert.equal(cloudflareModelFor(0), "@cf/black-forest-labs/flux-2-klein-9b");
   await withCloudflare("@cf/black-forest-labs/flux-1-schnell", async (calls) => {
-    const response = await visualImagePost(await imageRequest({ page, panel, references: [{ name: "Luma", imageData: JPEG }, { name: "Pip", imageData: JPEG }] }));
+    const response = await visualImagePost(await imageRequest({ page, references: [{ name: "Luma", imageData: JPEG }, { name: "Pip", imageData: JPEG }] }));
     const data = await response.json();
     assert.equal(response.status, 200, JSON.stringify(data));
     assert.equal(data.referencesUsed, 2);
@@ -133,9 +131,9 @@ test("a panel with references sends the pictures to FLUX.2, even when OpenAI is 
   }, true);
 });
 
-test("a panel without references is drawn as before", async () => {
+test("a page without references is drawn as before", async () => {
   await withCloudflare(undefined, async (calls) => {
-    const response = await visualImagePost(await imageRequest({ page, panel }));
+    const response = await visualImagePost(await imageRequest({ page }));
     assert.equal((await response.json()).referencesUsed, 0);
     const form = calls[0].body as FormData;
     assert.equal(form.get("input_image_0"), null);
@@ -156,7 +154,7 @@ test("a character reference is drawn square, alone, from its description", async
   await withCloudflare(undefined, async (calls) => {
     const bad = await visualImagePost(await imageRequest({ character: { name: "Pip", description: " " } }));
     assert.equal(bad.status, 400);
-    const badRef = await visualImagePost(await imageRequest({ page, panel, references: [{ name: "Luma", imageData: "not-a-picture" }] }));
+    const badRef = await visualImagePost(await imageRequest({ page, references: [{ name: "Luma", imageData: "not-a-picture" }] }));
     assert.equal(badRef.status, 400);
     assert.equal(calls.length, 0, "nothing was sent to the image model");
   });

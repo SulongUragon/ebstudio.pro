@@ -54,7 +54,7 @@ export function mergeCast(existing: CharacterRef[] | undefined, fresh: Character
   return merged.slice(0, MAX_CHARACTER_REFS);
 }
 
-/** The drawn characters that this scene names, in cast order. A scene that names nobody gets none. */
+/** The drawn characters that this page names, in cast order. A scene that names nobody gets none. */
 export function referencesForScene(refs: CharacterRef[] | undefined, sceneText: string) {
   const text = String(sceneText ?? "");
   return (refs ?? [])

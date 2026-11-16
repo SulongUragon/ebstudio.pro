@@ -1,7 +1,7 @@
 import { referenceInstruction } from "./character-refs";
 
 /**
- * Prompt for one visual-book illustration or comic panel.
+ * Prompt for one visual-book illustration.
  *
  * Image models draw any words they are given, and the backup model keeps only
  * the first 2,000 characters. So the prompt never contains the book title, page
@@ -9,7 +9,6 @@ import { referenceInstruction } from "./character-refs";
  * cast) come first where they cannot be cut off.
  */
 export type VisualImagePromptInput = {
-  comic: boolean;
   scene: string;
   camera: string;
   style: string;
@@ -26,8 +25,8 @@ export function buildVisualImagePrompt(input: VisualImagePromptInput) {
   // The reference instruction needs room, so the written cast lock gets less when it is present.
   const cast = clip(input.characterBible, input.referenceNames?.length ? LIMITS.cast - 320 : LIMITS.cast);
   const lines = [
-    `One original ${input.comic ? "comic panel illustration" : "book illustration"}, artwork only.`,
-    "No text in the image: no words, letters, numbers, titles, speech bubbles, captions, signs, labels, logos, or watermarks. Any sign or book is blank.",
+    "One original book illustration, artwork only.",
+    "No text in the image: no words, letters, numbers, titles, captions, signs, labels, logos, or watermarks. Any sign or book is blank.",
     referenceInstruction(input.referenceNames ?? []),
     cast
       ? `Locked cast, draw each exactly as described, same kind of being, shape, colors, and size: ${cast}`

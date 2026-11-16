@@ -1,5 +1,6 @@
 import { characterSheetPrompt, decodeReferenceImages } from "../../character-refs";
 import { buildVisualImagePrompt } from "../../visual-image-prompt";
+import { COMICS_REMOVED_MESSAGE, isRetiredComicRequest } from "../../visual-book-types";
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
 import { buildVisualArtworkDirection } from "../../creative-direction";
@@ -10,31 +11,19 @@ import {
   shouldUseImageFallback,
 } from "../../image-providers";
 import { classifyOpenAIImageError } from "../../openai-image-errors";
-import type { ComicPanel, VisualBookBrief, VisualBookPage } from "../../visual-book-types";
+import type { VisualBookBrief, VisualBookPage } from "../../visual-book-types";
 export const maxDuration = 300;
 type VisualImageRequest = {
   project: VisualBookBrief;
   page?: VisualBookPage;
-  panel?: ComicPanel;
-  /** Draw one character's reference picture instead of a page or panel. */
+  /** Draw one character's reference picture instead of a page. */
   character?: { name?: string; description?: string };
-  /** Reference pictures of the characters this page or panel names. */
+  /** Reference pictures of the characters this page names. */
   references?: unknown;
 };
 type ImageResponsePayload = { data?: Array<{ b64_json?: string }>; error?: { message?: string; code?: string } };
 const IMAGE_RETRY_DELAYS_MS = [15_000, 30_000, 60_000];
 const QUOTA_ERROR_CODES = new Set(["billing_hard_limit_reached", "insufficient_quota"]);
-const COMIC_STYLE_DIRECTIONS: Record<string, string> = {
-  classic: "polished contemporary comic-book art, confident ink contours, dimensional color, clear action staging",
-  "graphic-novel": "mature cinematic graphic-novel art, sophisticated composition, textured shadow, restrained premium color",
-  romance: "expressive romance-comic art, emotionally precise faces, elegant fashion detail, intimate cinematic lighting",
-  noir: "dark noir comic art, hard directional light, deep blacks, rain-slick atmosphere, tense visual storytelling",
-  manga: "original manga-inspired black-and-white sequential art, expressive clean linework, screentone texture, dynamic framing",
-  children: "friendly children's comic illustration, bright clean color, rounded forms, highly readable action and emotion",
-  webtoon: "premium vertical webtoon illustration, clean digital linework, expressive character acting, luminous color and depth",
-  "comic-strip": "clean modern comic-strip illustration, strong silhouettes, concise visual storytelling, readable character acting",
-};
-
 async function requestImageWithRetry(prompt: string, size: string) {
   const attempts = IMAGE_RETRY_DELAYS_MS.length + 1;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -81,34 +70,27 @@ export async function POST(request: Request) {
   if (denied) return denied;
   try {
     if (!process.env.OPENAI_API_KEY && !cloudflareImageConfigured()) return NextResponse.json({ error: "No image provider is configured." }, { status: 503 });
-    const { project, page, panel, character, references: rawReferences } = (await request.json()) as VisualImageRequest;
+    const { project, page, character, references: rawReferences } = (await request.json()) as VisualImageRequest;
     const characterSheet = Boolean(character);
     if (!project?.title || (!page && !characterSheet)) return NextResponse.json({ error: "Complete the visual project and storyboard first." }, { status: 400 });
-    const comic = project.mode === "comic";
-    if (comic && !panel && !characterSheet) return NextResponse.json({ error: "Choose a comic panel to illustrate." }, { status: 400 });
+    if (isRetiredComicRequest(project)) return NextResponse.json({ code: "comics_removed", error: COMICS_REMOVED_MESSAGE }, { status: 410 });
     if (characterSheet && !String(character?.description ?? "").trim()) {
       return NextResponse.json({ error: "Describe the character before drawing its reference." }, { status: 400 });
     }
     const references = characterSheet ? [] : decodeReferenceImages(rawReferences);
     if ("error" in references) return NextResponse.json({ error: references.error }, { status: 400 });
-    const style = comic
-      ? COMIC_STYLE_DIRECTIONS[project.comicFormat] ?? COMIC_STYLE_DIRECTIONS["graphic-novel"]
-      : buildVisualArtworkDirection(
-          {
-            mode: ["illustrated-story", "children-story", "book-teaser"].includes(project.kind)
-              ? "fiction"
-              : "nonfiction",
-            title: project.title,
-            subtitle: project.subtitle,
-            premise: project.premise,
-            audience: project.audience,
-            kind: project.kind,
-          },
-          project.visualStyle,
-        );
-    const scene = comic ? panel?.scene : page?.imagePrompt;
-    const camera = comic ? panel?.camera : "portrait editorial composition";
-    const size = characterSheet || (comic && project.comicFormat !== "webtoon") ? "1024x1024" : "1024x1536";
+    const style = buildVisualArtworkDirection(
+      {
+        mode: ["illustrated-story", "children-story", "book-teaser"].includes(project.kind) ? "fiction" : "nonfiction",
+        title: project.title,
+        subtitle: project.subtitle,
+        premise: project.premise,
+        audience: project.audience,
+        kind: project.kind,
+      },
+      project.visualStyle,
+    );
+    const size = characterSheet ? "1024x1024" : "1024x1536";
     const prompt = characterSheet
       ? characterSheetPrompt({
           name: String(character?.name ?? ""),
@@ -117,9 +99,8 @@ export async function POST(request: Request) {
           palette: project.palette ?? "",
         })
       : buildVisualImagePrompt({
-          comic,
-          scene: scene ?? "",
-          camera: camera ?? "",
+          scene: page?.imagePrompt ?? "",
+          camera: "portrait editorial composition",
           style,
           characterBible: project.characterBible ?? "",
           palette: project.palette ?? "",

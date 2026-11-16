@@ -1,7 +1,7 @@
-import type { ComicFormat, VisualBookBrief, VisualBookKind } from "./visual-book-types";
+import type { VisualBookBrief, VisualBookKind } from "./visual-book-types";
 
 /**
- * A storytelling playbook for each Mini Book Type and Comic Format. The type
+ * A storytelling playbook for each Mini Book Type. The type
  * the author picks decides how the book hooks, paces, turns pages, and ends,
  * so two types never produce the same shaped book.
  */
@@ -13,7 +13,7 @@ export type VisualPlaybook = {
   shape: string;
   /** How a page ends so the reader wants the next one. */
   pageTurn: string;
-  /** Sentence, panel, and dialogue rhythm. */
+  /** Sentence rhythm and tone. */
   voice: string;
   /** What the final page must do. */
   ending: string;
@@ -86,82 +86,13 @@ export const VISUAL_KIND_PLAYBOOKS: Record<VisualBookKind, VisualPlaybook> = {
   },
 };
 
-export const COMIC_FORMAT_PLAYBOOKS: Record<ComicFormat, VisualPlaybook> = {
-  classic: {
-    label: "Classic Comic",
-    hook: "Open on action or a bold situation in the first panel, with the hero's goal clear by the end of the first content page.",
-    shape: "Setup with a clear goal, rising trouble, a setback, a turn where the hero uses something planted earlier, and a clean payoff.",
-    pageTurn: "End each page on a mini cliffhanger panel: a reveal, a threat arriving, or a decision about to be made.",
-    voice: "Two to four panels per page with one clear action each. Snappy dialogue under fifteen words a bubble, captions only for time and place, and a sound effect where impact matters.",
-    ending: "A satisfying final panel that pays off the goal, with a closing line or small visual button that makes the reader smile or sit up.",
-  },
-  "graphic-novel": {
-    label: "Graphic Novel",
-    hook: "Open with a wide, atmospheric establishing panel and a single line of narration that carries a secret, regret, or question.",
-    shape: "A quiet opening, an inciting disturbance, deepening conflict shown through character choices, a silent or near-silent emotional low point, and a resolution that changes the lead.",
-    pageTurn: "End pages on a held image or an unfinished line, trusting the reader to feel the weight before turning.",
-    voice: "One to three large panels per page. Sparse, literary captions and subtext-heavy dialogue. Use at least one wordless panel in the story where the art alone carries the emotion.",
-    ending: "An ending that is earned and a little open, closing on an image that mirrors or reverses the first panel.",
-  },
-  romance: {
-    label: "Romance Comic",
-    hook: "Open with the two leads colliding (a meeting, a clash, or an awkward reunion) and an instant spark of tension.",
-    shape: "Spark, growing closeness through small shared moments, a misunderstanding or fear that pulls them apart, a vulnerable honest moment, and a heartfelt coming together.",
-    pageTurn: "End pages on a charged look, an almost-touch, an interrupted confession, or a line that could be read two ways.",
-    voice: "Two to three panels per page with frequent close-ups on faces and hands. Dialogue with subtext and gentle banter, plus short inner-thought captions that show what a character cannot say aloud.",
-    ending: "A warm emotional payoff that is earned by the honesty before it, keeping affection tender and non-explicit.",
-  },
-  noir: {
-    label: "Dark Noir",
-    hook: "Open with a hard-boiled first-person caption over a shadowed scene, and a problem that walks in the door.",
-    shape: "A case or trouble arrives, each page uncovers a clue that complicates it, a betrayal or reversal, a confrontation in the dark, and a bittersweet truth.",
-    pageTurn: "End each page on a new question, a new danger, or a detail that does not fit what the lead believed.",
-    voice: "Two to three panels per page. Short, dry narration captions in the lead's voice, clipped dialogue where people hide what they mean, and silence used as tension.",
-    ending: "The truth comes out but costs something. Close on a wry or weary final caption rather than a clean victory.",
-  },
-  manga: {
-    label: "Manga-Inspired",
-    hook: "Open with a striking moment of motion or emotion, and a lead whose determination or flaw shows at once.",
-    shape: "An ordinary beat disrupted, a challenge that tests the lead's flaw, a moment of doubt, a burst of resolve, and a decisive emotional or physical breakthrough.",
-    pageTurn: "Place a quiet, small panel just before a big reveal, and end pages on the reveal or on a reaction close-up.",
-    voice: "Vary panel count sharply: several quick small beats, then one large impact panel. Lean on reaction close-ups, brief inner monologue, expressive sound effects, and minimal dialogue during action.",
-    ending: "A cathartic final beat that shows growth, closing on the lead's expression or a quiet aftermath panel.",
-  },
-  children: {
-    label: "Children's Comic",
-    hook: "Open with a friendly character in a funny or curious situation that a child understands in one glance.",
-    shape: "A simple problem, two playful attempts that go wrong in funny ways, a helpful friend or clever idea, and a happy solution everyone shares.",
-    pageTurn: "End pages on a silly surprise or a 'what will happen?' moment that makes a child want to turn the page.",
-    voice: "One to three big clear panels per page. Very short bubbles of simple words, fun sound effects, and visual gags a non-reader can follow. Kind humor only, nothing scary left unresolved.",
-    ending: "A cheerful ending with a small laugh and a gentle feeling of friendship or bravery, without a lecture.",
-  },
-  webtoon: {
-    label: "Webtoon",
-    hook: "Open on a single arresting vertical moment with a hook line that makes scrolling irresistible.",
-    shape: "Hook, quick setup of who and what is at stake, escalating beats with one twist, an emotional peak, and a strong episode-style ending.",
-    pageTurn: "Make the last panel of every page a cliffhanger, a reveal, or a line that reframes the scene.",
-    voice: "One story beat per panel, with room to breathe between beats. Short modern dialogue, inner thoughts in brief captions, and dramatic pauses created by a wordless panel before key moments.",
-    ending: "A punchy closing panel that resolves this episode's question while leaving one thread that makes the reader want more.",
-  },
-  "comic-strip": {
-    label: "Comic Strip",
-    hook: "Establish the situation and the character's attitude in the very first panel, with no warm-up.",
-    shape: "Each page is a self-contained gag built as setup, build, and punchline, while the pages together follow one light running theme with a callback at the end.",
-    pageTurn: "The final panel of each page is the punchline or twist. Never explain the joke after it lands.",
-    voice: "Three or four panels per page. Tight dialogue with the fewest possible words, a beat panel before the punchline when timing needs it, and humor that comes from character.",
-    ending: "The last page calls back to the first gag with a twist, ending the set on its strongest laugh.",
-  },
-};
-
-/** The playbook for the type or format the author picked. */
-export function visualPlaybookFor(project: Pick<VisualBookBrief, "mode" | "kind" | "comicFormat">): VisualPlaybook {
-  return project.mode === "comic"
-    ? COMIC_FORMAT_PLAYBOOKS[project.comicFormat] ?? COMIC_FORMAT_PLAYBOOKS["graphic-novel"]
-    : VISUAL_KIND_PLAYBOOKS[project.kind] ?? VISUAL_KIND_PLAYBOOKS["illustrated-story"];
+/** The playbook for the type the author picked. */
+export function visualPlaybookFor(project: Pick<VisualBookBrief, "kind">): VisualPlaybook {
+  return VISUAL_KIND_PLAYBOOKS[project.kind] ?? VISUAL_KIND_PLAYBOOKS["illustrated-story"];
 }
 
 /** Prompt text that makes the chosen type shape the whole book. */
-export function visualPlaybookBlock(project: Pick<VisualBookBrief, "mode" | "kind" | "comicFormat">) {
+export function visualPlaybookBlock(project: Pick<VisualBookBrief, "kind">) {
   const playbook = visualPlaybookFor(project);
   return `READER ENGAGEMENT PLAYBOOK for ${playbook.label}. Follow it closely; it is what makes this type different from every other type.
 Hook: ${playbook.hook}
@@ -169,5 +100,5 @@ Story shape: ${playbook.shape} Scale these beats to the page count so none is sk
 Page endings: ${playbook.pageTurn}
 Voice and rhythm: ${playbook.voice}
 Final page: ${playbook.ending}
-The playbook never overrides the author's title, premise, facts, or the word and panel limits given below.`;
+The playbook never overrides the author's title, premise, facts, or the word limits given below.`;
 }

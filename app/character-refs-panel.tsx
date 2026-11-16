@@ -17,9 +17,9 @@ type Props = {
 };
 
 /**
- * Draws each recurring character once. Every later page or panel that names a
- * character sends that drawing to the image model so the character stays the
- * same from page to page.
+ * Draws each recurring character once. Every later page that names a character
+ * sends that drawing to the image model so the character stays the same from
+ * page to page.
  */
 export default function CharacterRefsPanel({ brief, pages, refs, onChange, provider, disabled, onBusyChange }: Props) {
   const [busy, setBusy] = useState<"" | "cast" | string>("");
@@ -94,8 +94,8 @@ export default function CharacterRefsPanel({ brief, pages, refs, onChange, provi
       <div className="character-refs-head">
         <span><Users size={15} /> Character references</span>
         <small>
-          Each character is drawn once. Every page or panel that names a character then copies that drawing, so the
-          cast stays the same through the book.
+          Each character is drawn once. Every page that names a character then copies that drawing, so the cast
+          stays the same through the book.
         </small>
       </div>
 
@@ -161,7 +161,7 @@ export default function CharacterRefsPanel({ brief, pages, refs, onChange, provi
 }
 
 function withoutArt(page: VisualBookPage): VisualBookPage {
-  return { ...page, imageData: undefined, panels: page.panels.map((panel) => ({ ...panel, imageData: undefined })) };
+  return { ...page, imageData: undefined };
 }
 
 async function post(url: string, body: unknown) {

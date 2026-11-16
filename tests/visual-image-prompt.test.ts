@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { POST as visualImagePost } from "../app/api/visual-image/route";
-import { bubbleSide, bubbleSpeakerLabel, spokenLines } from "../app/comic-bubbles";
 import { compactPrompt } from "../app/image-providers";
 import { buildVisualImagePrompt, mergeCharacterLock } from "../app/visual-image-prompt";
 import { blankVisualBookBrief } from "../app/visual-book-types";
 import { authorizedRequest } from "./helpers/api-access";
 
-// The real brief from the "Luma and the Shy Shadow" comic that drew its own title into the art.
+// A real brief whose title was once drawn into the art by the image model.
 const LUMA = {
   title: "Luma and the Shy Shadow",
   premise:
@@ -20,10 +19,9 @@ const LUMA = {
 
 const lumaPrompt = () =>
   buildVisualImagePrompt({
-    comic: true,
     scene: "Luma hovers at the edge of the dark shed corner, glowing nervously, antennae drooping.",
     camera: "medium shot, low angle",
-    style: "Friendly rounded children's comic art with bright clean shapes.",
+    style: "Friendly rounded storybook art with bright clean shapes.",
     characterBible: `${LUMA.characterBible} Pip: a smaller lantern-bug half Luma's size with a paler yellow glow and one bent antenna.`,
     palette: LUMA.palette,
   });
@@ -42,7 +40,6 @@ test("the whole prompt survives the backup model's 2,000 character limit", () =>
   assert.ok(sent.length <= 2000);
   assert.equal(sent, prompt.replace(/\s+/g, " ").trim(), "nothing was cut off");
   const long = buildVisualImagePrompt({
-    comic: false,
     scene: "s ".repeat(900),
     camera: "c ".repeat(300),
     style: "t ".repeat(600),
@@ -75,12 +72,11 @@ test("the image request sent to the backup model carries no book or page title",
     return new Response(JSON.stringify({ success: true, result: { image: "/9j/AAAA" } }), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   try {
-    const panel = { id: "a", order: 1, scene: "Luma glows beside the shed.", camera: "wide", dialogue: [], caption: "", soundEffect: "" };
-    const page = { id: "p6", pageNumber: 6, role: "content", title: "Just an Old Friend", body: "", imagePrompt: "", layout: "full-bleed", panels: [panel] };
+    const page = { id: "p6", pageNumber: 6, role: "content", title: "Just an Old Friend", body: "", imagePrompt: "Luma glows beside the shed.", layout: "full-bleed" };
     const response = await visualImagePost(
       await authorizedRequest("http://localhost/api/visual-image", {
         method: "POST",
-        body: JSON.stringify({ project: { ...blankVisualBookBrief("comic"), ...LUMA, comicFormat: "children" }, page, panel }),
+        body: JSON.stringify({ project: { ...blankVisualBookBrief(), ...LUMA, kind: "children-story" }, page }),
       }),
     );
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
@@ -91,19 +87,4 @@ test("the image request sent to the backup model carries no book or page title",
     globalThis.fetch = originalFetch;
     process.env = saved;
   }
-});
-
-test("speech bubbles drop the name tag for a lone speaker and split a conversation left and right", () => {
-  const solo = [{ speaker: "Luma", text: "I can do this... maybe." }];
-  assert.equal(bubbleSpeakerLabel(solo, 0), "");
-  assert.equal(bubbleSide(solo, 0), "left");
-
-  const talk = [
-    { speaker: "Pip", text: "Wheee! Follow me!" },
-    { speaker: "Luma", text: "Pip, wait!" },
-    { speaker: "Pip", text: "Catch me!" },
-  ];
-  assert.deepEqual(talk.map((_, index) => bubbleSpeakerLabel(talk, index)), ["Pip", "Luma", "Pip"]);
-  assert.deepEqual(talk.map((_, index) => bubbleSide(talk, index)), ["left", "right", "left"]);
-  assert.equal(spokenLines([{ speaker: "Luma", text: "  " }, ...solo]).length, 1);
 });

@@ -4,7 +4,7 @@ import { Check, LoaderCircle, MessageCircle, RotateCcw, Send, Sparkles, X } from
 import { FormEvent, useMemo, useState } from "react";
 import type { AIProvider } from "./book-types";
 import { resolveVisualBookKindId, resolveVisualStyleId } from "./creative-direction";
-import type { ComicPanel, VisualBookBrief, VisualBookPage, VisualBookProject } from "./visual-book-types";
+import type { VisualBookBrief, VisualBookPage, VisualBookProject } from "./visual-book-types";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type FieldSuggestion = { field: string; value: string };
@@ -43,25 +43,18 @@ export default function VisualCreativeAssistant({
     if (!project) {
       return [
         "Fill every missing setup box for me",
-        brief.mode === "comic" ? "Sharpen my comic concept and conflict" : "Sharpen my visual mini-book concept",
+        "Sharpen my visual mini-book concept",
         "Build my character and world lock",
         "Choose a stronger audience and visual direction",
       ];
     }
-    return brief.mode === "comic"
-      ? [
-          "Improve this page and its comic beats",
-          "Make the dialogue sharper and more natural",
-          "Check character consistency",
-          "Find what I forgot on this page",
-        ]
-      : [
-          "Improve this page",
-          "Strengthen the page copy and art direction",
-          "Check visual consistency",
-          "Find what I forgot on this page",
-        ];
-  }, [brief.mode, project]);
+    return [
+      "Improve this page",
+      "Strengthen the page copy and art direction",
+      "Check visual consistency",
+      "Find what I forgot on this page",
+    ];
+  }, [project]);
 
   async function ask(event?: FormEvent<HTMLFormElement>, quickPrompt?: string) {
     event?.preventDefault();
@@ -160,7 +153,7 @@ export default function VisualCreativeAssistant({
 
   return (
     <>
-      <button className="assistant-launcher" type="button" onClick={() => setOpen(true)} aria-label="Open Ask EB for Visuals and Comics" title="Ask EB" aria-expanded={open}>
+      <button className="assistant-launcher" type="button" onClick={() => setOpen(true)} aria-label="Open Ask EB for Visual Mini eBooks" title="Ask EB" aria-expanded={open}>
         <Sparkles size={20} />
         <span>Ask EB</span>
       </button>
@@ -170,7 +163,7 @@ export default function VisualCreativeAssistant({
           <header className="assistant-header">
             <div>
               <span><Sparkles size={15} /> Ask EB · Visual Director</span>
-              <small>{project ? `Working on page ${page?.pageNumber ?? 1} of “${project.title}”` : brief.mode === "comic" ? "Comics & Graphic Story setup" : "Visual Mini eBook setup"}</small>
+              <small>{project ? `Working on page ${page?.pageNumber ?? 1} of “${project.title}”` : "Visual Mini eBook setup"}</small>
             </div>
             <div>
               <button type="button" onClick={resetChat} aria-label="Reset conversation"><RotateCcw size={16} /></button>
@@ -234,7 +227,7 @@ function assistantBrief(brief: VisualBookBrief) {
     title: brief.title.trim() || "Untitled visual project",
     subtitle: brief.subtitle,
     author: brief.author,
-    genre: brief.mode === "comic" ? "Comics & Graphic Story" : "Visual Mini eBook",
+    genre: "Visual Mini eBook",
     premise: brief.premise,
     audience: brief.audience,
     description: brief.premise,
@@ -242,8 +235,7 @@ function assistantBrief(brief: VisualBookBrief) {
 }
 
 function visualInstruction(question: string, brief: VisualBookBrief, project: VisualBookProject | null, page: VisualBookPage | null) {
-  const panelContext = page?.panels?.length ? page.panels.map((panel: ComicPanel, index) => `Panel ${index + 1}: scene=${panel.scene}; camera=${panel.camera}; caption=${panel.caption}; dialogue=${panel.dialogue.map(d => `${d.speaker}: ${d.text}`).join(" | ")}`).join("\n") : "";
-  return `${question}\n\nYou are Ask EB inside EBStudio.Pro Visuals & Comics. Be a senior book editor, comic director, visual storyteller, copy chief, and publishing strategist. Do not merely agree: identify omissions, weak logic, continuity issues, generic phrasing, and stronger choices. Infer the most precise genre or subgenre supported by the title and premise before choosing copy or art direction.\n\nReturn fieldSuggestions using these exact field labels whenever they should be filled or improved: Title, Subtitle, Author, Mini book type, Story idea and conflict, Target reader, Visual direction, Character & world lock, Palette and lighting lock, Page heading, Page copy, Art direction. Do not invent unrelated form fields. Prefer suggestions that can be applied directly. For Mini book type, return exactly one existing label: Illustrated Story, Children's Story, Visual How-To, Motivational, Recipe / Activity, Book Teaser, Lead Magnet, or Product Guide. For Visual direction, return exactly one existing label: Cinematic Editorial, Warm Storybook, Dark Luxury, Clean Modern, Bold Color, Ink Noir, or Notebook Reflection. Premium directions such as Gothic Literary or Cinematic Mystery map to Cinematic Editorial; Emotional Memoir maps to Cinematic Editorial or Notebook Reflection; Premium Nonfiction and Founder/Business Authority map to Clean Modern.\n\nFiction subtitles must be atmospheric, emotionally specific, cover-readable, and must not repeat the title. Non-fiction subtitles must name the intended reader, credible outcome, and practical method. Avoid generic phrases such as a story about, a journey of discovery, unlock your potential, and transform your life. Strengthen the story idea or core promise with concrete stakes, change, or reader value. Art direction must name one focal subject, foreground, midground, background, motivated lighting, restrained palette, and what to avoid. Never request duplicate title text, fake readable text, internal labels, watermarks, publisher marks, random crop bands, or visual clutter.\n\nCURRENT VISUAL BRIEF:\n${JSON.stringify(brief)}\n\nCURRENT PROJECT:\n${project ? JSON.stringify({ title: project.title, mode: project.mode, kind: project.kind, visualStyle: project.visualStyle, pages: project.pages.map(p => ({ pageNumber: p.pageNumber, role: p.role, title: p.title })) }) : "Not created yet"}\n\nCURRENT PAGE:\n${page ? JSON.stringify({ pageNumber: page.pageNumber, role: page.role, title: page.title, body: page.body, imagePrompt: page.imagePrompt }) : "None"}\n${panelContext ? `\nPANELS:\n${panelContext}` : ""}`;
+  return `${question}\n\nYou are Ask EB inside EBStudio.Pro Visual Mini eBooks. Be a senior book editor, visual storyteller, copy chief, and publishing strategist. Do not merely agree: identify omissions, weak logic, continuity issues, generic phrasing, and stronger choices. Infer the most precise genre or subgenre supported by the title and premise before choosing copy or art direction.\n\nReturn fieldSuggestions using these exact field labels whenever they should be filled or improved: Title, Subtitle, Author, Mini book type, Story idea and conflict, Target reader, Visual direction, Character & world lock, Palette and lighting lock, Page heading, Page copy, Art direction. Do not invent unrelated form fields. Prefer suggestions that can be applied directly. For Mini book type, return exactly one existing label: Illustrated Story, Children's Story, Visual How-To, Motivational, Recipe / Activity, Book Teaser, Lead Magnet, or Product Guide. For Visual direction, return exactly one existing label: Cinematic Editorial, Warm Storybook, Dark Luxury, Clean Modern, Bold Color, Ink Noir, or Notebook Reflection. Premium directions such as Gothic Literary or Cinematic Mystery map to Cinematic Editorial; Emotional Memoir maps to Cinematic Editorial or Notebook Reflection; Premium Nonfiction and Founder/Business Authority map to Clean Modern.\n\nFiction subtitles must be atmospheric, emotionally specific, cover-readable, and must not repeat the title. Non-fiction subtitles must name the intended reader, credible outcome, and practical method. Avoid generic phrases such as a story about, a journey of discovery, unlock your potential, and transform your life. Strengthen the story idea or core promise with concrete stakes, change, or reader value. Art direction must name one focal subject, foreground, midground, background, motivated lighting, restrained palette, and what to avoid. Never request duplicate title text, fake readable text, internal labels, watermarks, publisher marks, random crop bands, or visual clutter.\n\nCURRENT VISUAL BRIEF:\n${JSON.stringify(brief)}\n\nCURRENT PROJECT:\n${project ? JSON.stringify({ title: project.title, mode: project.mode, kind: project.kind, visualStyle: project.visualStyle, pages: project.pages.map(p => ({ pageNumber: p.pageNumber, role: p.role, title: p.title })) }) : "Not created yet"}\n\nCURRENT PAGE:\n${page ? JSON.stringify({ pageNumber: page.pageNumber, role: page.role, title: page.title, body: page.body, imagePrompt: page.imagePrompt }) : "None"}\n`;
 }
 
 function normalizeSuggestions(value: unknown): FieldSuggestion[] {

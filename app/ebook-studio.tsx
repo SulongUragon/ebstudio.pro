@@ -1562,7 +1562,7 @@ export default function EbookStudio() {
                 <Plus size={17} /> Long-Form Book
               </button>
               <button role="tab" aria-selected={creatorMode === "visual"} className={creatorMode === "visual" ? "selected" : ""} onClick={() => setCreatorMode("visual")}>
-                <BookMarked size={17} /> Visual & Comics
+                <BookMarked size={17} /> Visual Mini eBook
               </button>
               <button role="tab" aria-selected={creatorMode === "optimize"} className={creatorMode === "optimize" ? "selected" : ""} onClick={() => setCreatorMode("optimize")}>
                 <Sparkles size={17} /> Optimize Existing Ebook

@@ -1,15 +1,13 @@
 import type { CharacterRef } from "./character-refs";
 import type { ActiveAIProvider } from "./book-types";
 
-export type VisualProjectMode = "visual" | "comic";
+/** Visual books have one format. The field stays on saved projects so older ones still open. */
+export type VisualProjectMode = "visual";
 export type VisualBookKind = "illustrated-story" | "children-story" | "visual-guide" | "motivational" | "recipe-activity" | "book-teaser" | "lead-magnet" | "product-guide";
-export type ComicFormat = "classic" | "graphic-novel" | "romance" | "noir" | "manga" | "children" | "webtoon" | "comic-strip";
 export type VisualPageCount = number;
 export type VisualStyle = "cinematic-editorial" | "warm-storybook" | "dark-luxury" | "clean-modern" | "bold-color" | "ink-noir" | "notebook-reflection" | "warm-practical-guide";
-export type ComicDialogue = { speaker: string; text: string };
-export type ComicPanel = { id: string; order: number; scene: string; camera: string; dialogue: ComicDialogue[]; caption: string; soundEffect: string; imageData?: string };
-export type VisualBookPage = { id: string; pageNumber: number; role: "cover" | "content" | "cta"; title: string; body: string; imagePrompt: string; imageData?: string; layout: "full-bleed" | "image-top" | "image-left" | "image-right" | "quote"; panels: ComicPanel[] };
-export type VisualBookBrief = { mode: VisualProjectMode; title: string; subtitle: string; author: string; kind: VisualBookKind; comicFormat: ComicFormat; premise: string; audience: string; pageCount: VisualPageCount; visualStyle: VisualStyle; characterBible: string; palette: string };
+export type VisualBookPage = { id: string; pageNumber: number; role: "cover" | "content" | "cta"; title: string; body: string; imagePrompt: string; imageData?: string; layout: "full-bleed" | "image-top" | "image-left" | "image-right" | "quote" };
+export type VisualBookBrief = { mode: VisualProjectMode; title: string; subtitle: string; author: string; kind: VisualBookKind; premise: string; audience: string; pageCount: VisualPageCount; visualStyle: VisualStyle; characterBible: string; palette: string };
 export type VisualBookProject = VisualBookBrief & { id: string; createdAt: string; updatedAt: string; pages: VisualBookPage[]; providersUsed?: ActiveAIProvider[]; characterRefs?: CharacterRef[] };
 
 export const VISUAL_BOOK_KINDS: Array<{ id: VisualBookKind; label: string; note: string }> = [
@@ -22,16 +20,6 @@ export const VISUAL_BOOK_KINDS: Array<{ id: VisualBookKind; label: string; note:
   { id: "lead-magnet", label: "Lead Magnet", note: "A fast-value download built to convert." },
   { id: "product-guide", label: "Product Guide", note: "A concise visual offer or service guide." },
 ];
-export const COMIC_FORMATS: Array<{ id: ComicFormat; label: string; note: string }> = [
-  { id: "classic", label: "Classic Comic", note: "One to four clean panels per page." },
-  { id: "graphic-novel", label: "Graphic Novel", note: "Large cinematic panels and mature pacing." },
-  { id: "romance", label: "Romance Comic", note: "Expressive close-ups and emotional tension." },
-  { id: "noir", label: "Dark Noir", note: "High contrast, shadow, danger, and mystery." },
-  { id: "manga", label: "Manga-Inspired", note: "Dynamic monochrome storytelling." },
-  { id: "children", label: "Children's Comic", note: "Colorful, friendly, and easy to follow." },
-  { id: "webtoon", label: "Webtoon", note: "Vertical scenes with generous breathing room." },
-  { id: "comic-strip", label: "Comic Strip", note: "Fast three or four beat stories." },
-];
 export const VISUAL_STYLES: Array<{ id: VisualStyle; label: string }> = [
   { id: "cinematic-editorial", label: "Cinematic Editorial" }, { id: "warm-storybook", label: "Warm Storybook" },
   { id: "dark-luxury", label: "Dark Luxury" }, { id: "clean-modern", label: "Clean Modern" },
@@ -39,4 +27,10 @@ export const VISUAL_STYLES: Array<{ id: VisualStyle; label: string }> = [
   { id: "notebook-reflection", label: "Notebook Reflection" },
   { id: "warm-practical-guide", label: "Warm Practical Guide" },
 ];
-export const blankVisualBookBrief = (mode: VisualProjectMode): VisualBookBrief => ({ mode, title: "", subtitle: "", author: "Sulong", kind: "illustrated-story", comicFormat: "graphic-novel", premise: "", audience: "", pageCount: 7, visualStyle: mode === "comic" ? "dark-luxury" : "cinematic-editorial", characterBible: "", palette: "" });
+export const blankVisualBookBrief = (mode: VisualProjectMode = "visual"): VisualBookBrief => ({ mode, title: "", subtitle: "", author: "Sulong", kind: "illustrated-story", premise: "", audience: "", pageCount: 7, visualStyle: "cinematic-editorial", characterBible: "", palette: "" });
+
+/** Comics and graphic stories were removed from the app; requests for them are refused before any AI is called. */
+export const COMICS_REMOVED_MESSAGE = "Comics and graphic stories are no longer part of EB Studio Pro. Visual Mini eBooks are still available.";
+export function isRetiredComicRequest(project: unknown) {
+  return (project as { mode?: unknown } | null | undefined)?.mode === "comic";
+}
