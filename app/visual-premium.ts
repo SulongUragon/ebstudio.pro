@@ -562,13 +562,15 @@ export function drawIngredientList(c: CanvasRenderingContext2D, groups: Ingredie
       const quantityW = row.quantity ? Math.min(colW * 0.42, measure(c, row.quantity, `italic ${style.itemWeight} ${size}px ${style.itemFont}`) ) : 0;
       const itemOptions = {
         x: at.x, y: at.y + size, maxWidth: colW - quantityW - 40, maxLines: 1,
-        fontSize: size, minFontSize: 17, lineHeight: rowH,
+        fontSize: size, minFontSize: Math.round(size * 0.88), lineHeight: rowH,
         fontFamily: style.itemFont, fontWeight: style.itemWeight, preserveAll: true, textRole: "headline" as const,
       };
-      let itemFit = text(c, row.item, itemOptions);
+      // Items start with a capital letter on the page, whatever case the list was typed in.
+      const item = row.item.charAt(0).toUpperCase() + row.item.slice(1);
+      let itemFit = text(c, item, itemOptions);
       // A long name wraps onto a second row instead of disappearing.
       if (!itemFit.lines.length) {
-        itemFit = text(c, row.item, { ...itemOptions, maxLines: 2 });
+        itemFit = text(c, item, { ...itemOptions, maxLines: 2 });
         if (itemFit.lines.length > 1) line += 1;
       }
       c.font = `${style.itemWeight} ${itemFit.fontSize}px ${style.itemFont}`;

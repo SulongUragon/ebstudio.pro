@@ -185,7 +185,7 @@ test("recipe books carry an editable ingredients list on page 3, without dashes"
   assert.equal(ingredientsPageIndex("recipe-activity", 7), 2);
   assert.equal(ingredientsPageIndex("recipe-activity", 3), -1);
   assert.equal(ingredientsPageIndex("visual-guide", 7), -1);
-  const pages = markIngredientsPage([{}, {}, {}, {}, {}], "recipe-activity");
+  const pages = markIngredientsPage<{ ingredientsPage?: boolean }>([{}, {}, {}, {}, {}], "recipe-activity");
   assert.deepEqual(pages.map(page => page.ingredientsPage), [false, false, true, false, false]);
 });
 
