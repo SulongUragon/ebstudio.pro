@@ -396,10 +396,12 @@ async function drawSplit(c: CanvasRenderingContext2D, t: Theme, page: VisualBook
 async function drawFullBleed(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage, ctx: SheetContext) {
   const copy = buildVisualPageSections(page.body, page.title);
   await imageCover(c, page.imageData, 0, 0, W, H, "#1a1814");
-  const shade = c.createLinearGradient(0, H * 0.3, 0, H);
+  // Darkens from the upper third so the title and copy stay readable on bright art.
+  const shade = c.createLinearGradient(0, H * 0.22, 0, H);
   shade.addColorStop(0, "rgba(10,9,8,0)");
-  shade.addColorStop(0.45, "rgba(10,9,8,.58)");
-  shade.addColorStop(1, "rgba(10,9,8,.95)");
+  shade.addColorStop(0.3, "rgba(10,9,8,.62)");
+  shade.addColorStop(0.55, "rgba(10,9,8,.84)");
+  shade.addColorStop(1, "rgba(10,9,8,.96)");
   c.fillStyle = shade;
   c.fillRect(0, 0, W, H);
 
