@@ -159,7 +159,7 @@ async function drawSheet(c: CanvasRenderingContext2D, t: Theme, project: VisualB
   const ctx = { folio: sheet.folio, chapter: sheet.chapter };
   if (page.role === "cta") return drawClosing(c, t, project, page, ctx);
   const layout = resolveEditorialLayout(page);
-  if (layout === "full-bleed") return drawFullBleed(c, project, page, ctx);
+  if (layout === "full-bleed") return drawFullBleed(c, page, ctx);
   if (layout === "image-left") return drawSplit(c, t, page, "left", ctx);
   if (layout === "image-right") return drawSplit(c, t, page, "right", ctx);
   if (layout === "quote") return drawQuote(c, t, page, ctx);
@@ -393,7 +393,7 @@ async function drawSplit(c: CanvasRenderingContext2D, t: Theme, page: VisualBook
   centerFolio(c, t, ctx.folio, colX + colW / 2);
 }
 
-async function drawFullBleed(c: CanvasRenderingContext2D, project: VisualBookProject, page: VisualBookPage, ctx: SheetContext) {
+async function drawFullBleed(c: CanvasRenderingContext2D, page: VisualBookPage, ctx: SheetContext) {
   const copy = buildVisualPageSections(page.body, page.title);
   await imageCover(c, page.imageData, 0, 0, W, H, "#1a1814");
   // Darkens from the upper third so the title and copy stay readable on bright art.
@@ -419,8 +419,8 @@ async function drawFullBleed(c: CanvasRenderingContext2D, project: VisualBookPro
   c.textAlign = "left";
   bodyWithQuote(c, onImage, page, copy.body, { x: 170, y: title.endY + 64, maxWidth: 860, bottom: H - 150, dropCap: true, noQuote: true });
   c.textAlign = "center";
+  // No running title on top: it would sit on the brightest part of the art.
   c.fillStyle = "#cfc4b0";
-  label(c, project.title.toUpperCase(), W / 2, 92, 14, 7);
   label(c, String(ctx.folio).padStart(2, "0"), W / 2, H - 82, 15, 4);
   c.textAlign = "left";
 }
