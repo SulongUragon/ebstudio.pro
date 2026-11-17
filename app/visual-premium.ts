@@ -161,6 +161,7 @@ async function drawSheet(c: CanvasRenderingContext2D, t: Theme, project: VisualB
   if (page.role === "cta") return drawClosing(c, t, project, page, ctx);
   const ingredients = page.ingredientsPage ? parseIngredients(project.ingredients) : [];
   if (ingredients.length) return drawIngredientsPage(c, t, page, ingredients, ctx);
+  if (page.layout === "fade-top" || page.layout === "fade-bottom") return drawFade(c, t, page, page.layout === "fade-top" ? "top" : "bottom", ctx);
   const layout = resolveEditorialLayout(page);
   if (layout === "full-bleed") return drawFullBleed(c, page, ctx);
   if (layout === "image-left") return drawSplit(c, t, page, "left", ctx);
@@ -474,6 +475,63 @@ async function drawClosing(c: CanvasRenderingContext2D, t: Theme, project: Visua
   label(c, project.author.toUpperCase(), W / 2, H - 132, 15, 7);
   c.fillStyle = t.muted;
   label(c, String(ctx.folio).padStart(2, "0"), W / 2, H - 82, 15, 4);
+  c.textAlign = "left";
+}
+
+/* ---------- fade layouts ---------- */
+
+/** Height of the picture band on fade pages; its last 45 percent blends into the paper. */
+const FADE_ART_H = 1000;
+
+/**
+ * Wide art runs edge to edge across one half of the page and dissolves into the
+ * paper (ivory, or black on Dark Luxury). The copy sits on clear paper beyond it.
+ */
+async function drawFade(c: CanvasRenderingContext2D, t: Theme, page: VisualBookPage, side: "top" | "bottom", ctx: SheetContext) {
+  const copy = buildVisualPageSections(page.body, page.title);
+  // At the bottom the band is shorter, so the copy above it keeps clear paper.
+  const bandH = side === "top" ? FADE_ART_H : 880;
+  const artY = side === "top" ? 0 : H - bandH;
+  if (page.imageData) {
+    const band = document.createElement("canvas");
+    band.width = W;
+    band.height = bandH;
+    const b = band.getContext("2d");
+    if (b) {
+      b.imageSmoothingEnabled = true;
+      b.imageSmoothingQuality = "high";
+      await imageCover(b, page.imageData, 0, 0, W, bandH, t.paper, side === "top" ? 0.35 : 0.65);
+      // Keep the picture solid near the page edge, then let it dissolve toward the copy.
+      b.globalCompositeOperation = "destination-in";
+      const mask = side === "top" ? b.createLinearGradient(0, 0, 0, bandH) : b.createLinearGradient(0, bandH, 0, 0);
+      mask.addColorStop(0, "rgba(0,0,0,1)");
+      mask.addColorStop(0.55, "rgba(0,0,0,1)");
+      mask.addColorStop(0.8, "rgba(0,0,0,.45)");
+      mask.addColorStop(1, "rgba(0,0,0,0)");
+      b.fillStyle = mask;
+      b.fillRect(0, 0, W, bandH);
+      c.drawImage(band, 0, artY);
+    }
+  }
+
+  // The copy only ever sits on clear paper, never on the visible picture.
+  const textTop = side === "top" ? FADE_ART_H - 40 : 170;
+  const textBottom = side === "top" ? H - 150 : artY + 40;
+  c.textAlign = "center";
+  c.fillStyle = t.accent;
+  label(c, chapterLabel(ctx.chapter), W / 2, textTop, 15, 7);
+  c.fillStyle = t.ink;
+  const title = text(c, page.title, {
+    x: W / 2, y: textTop + 82, maxWidth: 900, maxLines: 2,
+    fontSize: 64, minFontSize: 44, lineHeight: 70,
+    fontFamily: SERIF, fontWeight: "500", preserveAll: true, textRole: "headline",
+  });
+  ornamentRule(c, W / 2, title.endY - 12, t.accent);
+  c.textAlign = "left";
+  bodyWithQuote(c, t, page, copy.body, { x: 150, y: title.endY + 60, maxWidth: 900, bottom: textBottom, dropCap: true, noQuote: side === "bottom" });
+  c.textAlign = "center";
+  c.fillStyle = t.muted;
+  label(c, String(ctx.folio).padStart(2, "0"), W / 2, side === "top" ? H - 82 : 92, 15, 4);
   c.textAlign = "left";
 }
 
@@ -849,7 +907,7 @@ function drawPaper(c: CanvasRenderingContext2D, t: Theme) {
   for (let i = 0; i < 9000; i += 1) c.fillRect(rand() * W, rand() * H, 1.4, 1.4);
 }
 
-async function imageCover(c: CanvasRenderingContext2D, data: string | undefined, x: number, y: number, w: number, h: number, fallback: string) {
+async function imageCover(c: CanvasRenderingContext2D, data: string | undefined, x: number, y: number, w: number, h: number, fallback: string, focusY = 0.5) {
   c.fillStyle = fallback;
   c.fillRect(x, y, w, h);
   if (!data) return;
@@ -863,7 +921,7 @@ async function imageCover(c: CanvasRenderingContext2D, data: string | undefined,
     const scale = Math.max(w / image.width, h / image.height);
     const sw = w / scale;
     const sh = h / scale;
-    c.drawImage(image, (image.width - sw) / 2, (image.height - sh) / 2, sw, sh, x, y, w, h);
+    c.drawImage(image, (image.width - sw) / 2, (image.height - sh) * focusY, sw, sh, x, y, w, h);
   } catch {
     // The paper-colored placeholder keeps the export usable when stored image data is incomplete.
   }

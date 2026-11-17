@@ -6,7 +6,11 @@ export type VisualProjectMode = "visual";
 export type VisualBookKind = "illustrated-story" | "children-story" | "visual-guide" | "motivational" | "recipe-activity" | "book-teaser" | "lead-magnet" | "product-guide";
 export type VisualPageCount = number;
 export type VisualStyle = "cinematic-editorial" | "warm-storybook" | "dark-luxury" | "clean-modern" | "bold-color" | "ink-noir" | "notebook-reflection" | "warm-practical-guide";
-export type VisualBookPage = { id: string; pageNumber: number; role: "cover" | "content" | "cta"; title: string; body: string; imagePrompt: string; imageData?: string; pullQuote?: string; ingredientsPage?: boolean; layout: "full-bleed" | "image-top" | "image-left" | "image-right" | "quote" };
+export type VisualBookPage = { id: string; pageNumber: number; role: "cover" | "content" | "cta"; title: string; body: string; imagePrompt: string; imageData?: string; pullQuote?: string; ingredientsPage?: boolean; layout: "full-bleed" | "image-top" | "image-left" | "image-right" | "quote" | "fade-top" | "fade-bottom" };
+/** Fade layouts run wide art edge to edge and blend it into the paper; their art is drawn 3:2. */
+export function isFadeLayout(layout: string | undefined) {
+  return layout === "fade-top" || layout === "fade-bottom";
+}
 export type ArtLook = "photographic" | "painting" | "illustrated";
 export type VisualBookBrief = { mode: VisualProjectMode; title: string; subtitle: string; author: string; kind: VisualBookKind; premise: string; audience: string; pageCount: VisualPageCount; visualStyle: VisualStyle; characterBible: string; palette: string; artLook?: ArtLook; ingredients?: string };
 export type VisualBookProject = VisualBookBrief & { id: string; createdAt: string; updatedAt: string; pages: VisualBookPage[]; providersUsed?: ActiveAIProvider[]; characterRefs?: CharacterRef[] };

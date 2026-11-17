@@ -1,6 +1,6 @@
 import type { VisualBookPage } from "./visual-book-types";
 type RawObject = Record<string, unknown>;
-const VISUAL_LAYOUTS: VisualBookPage["layout"][] = ["full-bleed", "image-top", "image-left", "image-right", "quote"];
+const VISUAL_LAYOUTS: VisualBookPage["layout"][] = ["full-bleed", "image-top", "image-left", "image-right", "quote", "fade-top", "fade-bottom"];
 
 export function normalizeVisualPages(rawPages: unknown, pageCount: number): VisualBookPage[] {
   const source = Array.isArray(rawPages) ? rawPages : [];

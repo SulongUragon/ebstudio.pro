@@ -197,3 +197,14 @@ test("only recipe storyboards are asked for an ingredients list", async () => {
   assert.match(recipe, /Page 3 is the ingredients page/);
   assert.match(recipe, /never a dash/);
 });
+
+test("fade layouts are accepted from the storyboard and ask for wide art", async () => {
+  const { isFadeLayout } = await import("../app/visual-book-types");
+  const { falAspectRatio } = await import("../app/fal-image");
+  assert.equal(isFadeLayout("fade-top"), true);
+  assert.equal(isFadeLayout("fade-bottom"), true);
+  assert.equal(isFadeLayout("image-top"), false);
+  const [, page] = normalizeVisualPages([{ title: "Cover" }, { title: "Wide", body: "Body.", layout: "fade-bottom" }], 2);
+  assert.equal(page.layout, "fade-bottom");
+  assert.equal(falAspectRatio(1536, 1024), "3:2");
+});

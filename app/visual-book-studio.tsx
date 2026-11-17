@@ -24,6 +24,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ActiveAIProvider, AIProvider } from "./book-types";
 import {
   ART_LOOKS,
+  isFadeLayout,
   VISUAL_BOOK_KINDS,
   VISUAL_STYLES,
   resolveArtLook,
@@ -525,6 +526,15 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
                   <Field label="Page heading" value={page.title} set={value => updatePage({ title: value })} placeholder="Page heading" disabled={locked} />
                   <Field textarea label="Page copy" value={page.body} set={value => updatePage({ body: value })} placeholder="Short page copy" disabled={locked} />
 
+                  {page.role === "content" ? (
+                    <label className="field visual-field">
+                      <span>Page layout</span>
+                      <select value={page.layout} onChange={event => updatePage({ layout: event.target.value as VisualBookPage["layout"] })} disabled={locked}>
+                        {PAGE_LAYOUTS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                      </select>
+                      <WideArtHint page={page} />
+                    </label>
+                  ) : null}
                   {page.role !== "cover" ? (
                     <Field label="Pull quote (one sentence from the page copy)" value={page.pullQuote ?? ""} set={value => updatePage({ pullQuote: value })} placeholder="Leave blank and EB picks one" disabled={locked} />
                   ) : null}
@@ -581,6 +591,31 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
       ) : null}
     </div>
   );
+}
+
+const PAGE_LAYOUTS: Array<{ id: VisualBookPage["layout"]; label: string }> = [
+  { id: "image-top", label: "Picture above the text" },
+  { id: "image-left", label: "Picture on the left" },
+  { id: "image-right", label: "Picture on the right" },
+  { id: "full-bleed", label: "Full-page picture" },
+  { id: "quote", label: "Framed picture with quote title" },
+  { id: "fade-top", label: "Fade top: wide picture blending down" },
+  { id: "fade-bottom", label: "Fade bottom: wide picture blending up" },
+];
+
+/** Fade layouts need wide art; tall art made for another layout gets its top and bottom cut. */
+function WideArtHint({ page }: { page: VisualBookPage }) {
+  const [measured, setMeasured] = useState<{ src: string; tall: boolean } | null>(null);
+  const fade = isFadeLayout(page.layout);
+  useEffect(() => {
+    if (!fade || !page.imageData) return;
+    const src = page.imageData;
+    const image = new Image();
+    image.onload = () => setMeasured({ src, tall: image.naturalHeight > image.naturalWidth });
+    image.src = src;
+  }, [fade, page.imageData]);
+  if (!fade || !measured || measured.src !== page.imageData || !measured.tall) return null;
+  return <small>This art was drawn tall for another layout. Regenerate page art for a wide picture.</small>;
 }
 
 function PagePreview({ project, page }: { project: VisualBookProject; page: VisualBookPage }) {

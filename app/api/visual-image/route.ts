@@ -2,7 +2,7 @@ import { characterSheetPrompt, decodeReferenceImages } from "../../character-ref
 import { checkVisualArt, promptWithCorrections } from "../../art-check";
 import { falImageConfigured, generateFalImage } from "../../fal-image";
 import { artLookFinish, buildVisualImagePrompt } from "../../visual-image-prompt";
-import { COMICS_REMOVED_MESSAGE, isRetiredComicRequest, resolveArtLook } from "../../visual-book-types";
+import { COMICS_REMOVED_MESSAGE, isFadeLayout, isRetiredComicRequest, resolveArtLook } from "../../visual-book-types";
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
 import { buildVisualArtworkDirection } from "../../creative-direction";
@@ -93,7 +93,8 @@ export async function POST(request: Request) {
       project.visualStyle,
     );
     const look = resolveArtLook(project);
-    const size = characterSheet ? "1024x1024" : "1024x1536";
+    // Fade pages show a wide picture across the page, so their art is drawn landscape.
+    const size = characterSheet ? "1024x1024" : isFadeLayout(page?.layout) ? "1536x1024" : "1024x1536";
     const prompt = characterSheet
       ? characterSheetPrompt({
           name: String(character?.name ?? ""),
@@ -104,7 +105,9 @@ export async function POST(request: Request) {
         })
       : buildVisualImagePrompt({
           scene: page?.imagePrompt ?? "",
-          camera: "portrait editorial composition",
+          camera: isFadeLayout(page?.layout)
+            ? "wide landscape composition, main subject near the upper middle, calm open space at the bottom edge"
+            : "portrait editorial composition",
           style,
           characterBible: project.characterBible ?? "",
           palette: project.palette ?? "",
