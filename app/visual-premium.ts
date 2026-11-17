@@ -165,7 +165,7 @@ async function drawSheet(c: CanvasRenderingContext2D, t: Theme, project: VisualB
     const asContent = { ...page, layout: page.closingLayout };
     await drawStoryLayout(c, t, project, asContent, closing);
     const fadeBottom = page.closingLayout === "fade-bottom";
-    drawSignature(c, t, project, fadeBottom ? H - FADE_BOTTOM_BAND_H - 40 : H - 162, page.closingLayout === "full-bleed" || (t.dark && !fadeBottom));
+    drawSignature(c, t, project, fadeBottom ? H - FADE_BOTTOM_BAND_H - 20 : H - 162, page.closingLayout === "full-bleed" || (t.dark && !fadeBottom));
     return;
   }
   const ingredients = page.ingredientsPage ? parseIngredients(project.ingredients) : [];
@@ -186,7 +186,7 @@ async function drawStoryLayout(c: CanvasRenderingContext2D, t: Theme, project: V
 type SheetContext = { folio: number; chapter: number; reserve: number };
 
 /** Space kept at the foot of a last page for the author's name and imprint. */
-const SIGNATURE_RESERVE = 120;
+const SIGNATURE_RESERVE = 150;
 const FADE_BOTTOM_BAND_H = 880;
 
 /** Author name with the imprint (for example ROBANO | STUDIO) set beneath it. */
