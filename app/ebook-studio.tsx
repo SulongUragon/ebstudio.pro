@@ -3104,11 +3104,17 @@ async function readResponse(response: Response) {
   return data;
 }
 
+/** Turns *text* and _text_ into real italics; bold and code markers are removed, as before. */
 function stripInlineMarkdown(text: string): ReactNode {
-  return text
+  const plain = text
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/__(.*?)__/g, "$1")
     .replace(/`(.*?)`/g, "$1");
+  const parts = plain.split(/(\*[^*\n]+\*|(?<![A-Za-z0-9])_[^_\n]+_(?![A-Za-z0-9]))/g);
+  if (parts.length === 1) return plain;
+  return parts.map((part, index) =>
+    index % 2 === 1 ? <em key={index}>{part.slice(1, -1)}</em> : part,
+  );
 }
 
 function providerLabel(provider: ActiveAIProvider) {
