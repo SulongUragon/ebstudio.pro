@@ -3021,6 +3021,125 @@ p {
   font-weight: 650;
 }
 
+.proofread-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  text-align: left;
+}
+
+.proofread-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #33312c;
+  font-size: 0.8rem;
+}
+
+.proofread-panel button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--white);
+  color: #50514d;
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.proofread-panel button:hover:not(:disabled) {
+  border-color: var(--rust);
+  color: var(--rust);
+}
+
+.proofread-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.proofread-note {
+  color: var(--sage);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.proofread-panel ol {
+  display: grid;
+  max-height: 460px;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.proofread-panel li {
+  display: grid;
+  gap: 5px;
+  padding: 10px 11px;
+  border: 1px solid #ece7dd;
+  border-radius: 3px;
+  background: #fbf9f5;
+}
+
+.proofread-kind {
+  color: var(--rust);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.proofread-context {
+  margin: 0;
+  color: #4a463f;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.proofread-context del {
+  padding: 0 2px;
+  background: #f6dcd2;
+  color: #8b2f17;
+  text-decoration: line-through;
+  white-space: pre-wrap;
+}
+
+.proofread-context ins {
+  margin-left: 3px;
+  padding: 0 2px;
+  background: #dcebd9;
+  color: #2f5a2a;
+  text-decoration: none;
+  white-space: pre-wrap;
+}
+
+.proofread-reason {
+  margin: 0;
+  color: #77736b;
+  font-size: 0.72rem;
+}
+
+.proofread-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.proofread-panel .proofread-ignore {
+  border-color: transparent;
+  background: transparent;
+}
+
 .section-repair-state {
   display: grid;
   min-height: 420px;

@@ -21,6 +21,7 @@ import {
   Undo2,
   WandSparkles,
   Expand as ExpandIcon,
+  SpellCheck,
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import type {
@@ -62,6 +63,16 @@ import {
   type RevisionMode,
 } from "./section-revision";
 import { setBookVoice } from "./voice-style";
+import {
+  PROOF_KIND_LABELS,
+  applyAllIssues,
+  applyIssue,
+  findLocalIssues,
+  issuePreview,
+  mergeIssues,
+  shiftIssues,
+  type ProofIssue,
+} from "./proofread";
 import {
   exportPaperbackCover,
   frontCoverPixels,
@@ -1444,6 +1455,55 @@ export default function EbookStudio() {
     setRevisionNotice({ index, text: "Last change undone." });
   }
 
+  /** Checks one chapter for spacing, spelling, abbreviation, and wrong-word problems. Changes nothing. */
+  async function proofreadSection(index: number): Promise<ProofIssue[] | null> {
+    const current = manuscript?.sections[index];
+    if (!manuscript || !current?.content?.trim()) return null;
+    const content = current.content;
+    setError("");
+    const local = findLocalIssues(content);
+    try {
+      const preferredProvider =
+        provider === "auto" ? manuscript.providersUsed?.at(-1) ?? activeProvider ?? undefined : undefined;
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "proofread_section",
+          mode: manuscript.mode,
+          brief: manuscript.brief,
+          proofread: { content, title: manuscript.plan[index]?.title ?? current.title },
+          provider,
+          preferredProvider,
+        }),
+      });
+      const data = await readResponse(response);
+      const ai = Array.isArray(data.issues) ? (data.issues as ProofIssue[]) : [];
+      return mergeIssues(local, ai);
+    } catch (proofError) {
+      setError(
+        `${proofError instanceof Error ? proofError.message : "EB could not finish the spelling check."} Spacing problems are still listed.`,
+      );
+      return local;
+    }
+  }
+
+  /** Saves proofread fixes. The first fix keeps the pre-proofread text so Undo restores it. */
+  function saveProofFix(index: number, content: string, firstFix: boolean) {
+    const current = manuscript?.sections[index];
+    if (!manuscript || !current) return;
+    let updated: Manuscript;
+    if (firstFix) {
+      updated = applySectionRevision(manuscript, index, { content, summary: current.summary });
+    } else {
+      const sections = [...manuscript.sections];
+      sections[index] = { ...current, content };
+      updated = { ...manuscript, sections };
+    }
+    setManuscript(updated);
+    saveBook(updated);
+  }
+
   async function createCompanionBook(source: Manuscript) {
     if (isCreatingCompanion) return;
 
@@ -2016,6 +2076,8 @@ export default function EbookStudio() {
             revisionNotice={revisionNotice?.index === activeSection ? revisionNotice.text : ""}
             onReviseSection={reviseSection}
             onUndoSection={undoSection}
+            onProofreadSection={proofreadSection}
+            onProofFix={saveProofFix}
             isCreatingCompanion={isCreatingCompanion}
             onCreateCompanion={createCompanionBook}
             resumeFrom={singleResume ? singleResume.nextIndex : null}
@@ -2211,6 +2273,8 @@ function BookPreview({
   revisionNotice = "",
   onReviseSection,
   onUndoSection,
+  onProofreadSection,
+  onProofFix,
   isCreatingCompanion,
   onCreateCompanion,
   resumeFrom,
@@ -2240,6 +2304,8 @@ function BookPreview({
   revisionNotice?: string;
   onReviseSection?: (index: number, mode: RevisionMode, instruction?: string) => void;
   onUndoSection?: (index: number) => void;
+  onProofreadSection?: (index: number) => Promise<ProofIssue[] | null>;
+  onProofFix?: (index: number, content: string, firstFix: boolean) => void;
   isCreatingCompanion: boolean;
   onCreateCompanion: (source: Manuscript) => void;
   resumeFrom?: number | null;
@@ -2579,6 +2645,9 @@ function BookPreview({
                       notice={revisionNotice}
                       onRevise={(mode, note) => onReviseSection(activeSection, mode, note)}
                       onUndo={() => onUndoSection?.(activeSection)}
+                      content={selected.content}
+                      onProofread={onProofreadSection ? () => onProofreadSection(activeSection) : undefined}
+                      onProofFix={(content, firstFix) => onProofFix?.(activeSection, content, firstFix)}
                     />
                   ) : null}
                 </div>
@@ -2623,6 +2692,9 @@ function ChapterEditor({
   notice,
   onRevise,
   onUndo,
+  content,
+  onProofread,
+  onProofFix,
 }: {
   busy: boolean;
   activeMode: RevisionMode | "rewrite" | null;
@@ -2630,8 +2702,63 @@ function ChapterEditor({
   notice: string;
   onRevise: (mode: RevisionMode, note?: string) => void;
   onUndo: () => void;
+  content: string;
+  onProofread?: () => Promise<ProofIssue[] | null>;
+  onProofFix: (content: string, firstFix: boolean) => void;
 }) {
   const [note, setNote] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [issues, setIssues] = useState<ProofIssue[] | null>(null);
+  const [fixedCount, setFixedCount] = useState(0);
+  const [proofStarted, setProofStarted] = useState(false);
+  const locked = busy || checking;
+
+  async function runProofread() {
+    if (!onProofread || locked) return;
+    setChecking(true);
+    setFixedCount(0);
+    setProofStarted(false);
+    try {
+      setIssues(await onProofread());
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  function fixOne(issue: ProofIssue) {
+    const remaining = (issues ?? []).filter((item) => item.id !== issue.id);
+    const result = applyIssue(content, issue);
+    if (!result) {
+      setIssues(remaining);
+      return;
+    }
+    onProofFix(result.content, !proofStarted);
+    setProofStarted(true);
+    setFixedCount((count) => count + 1);
+    setIssues(shiftIssues(remaining, result.at, result.delta));
+  }
+
+  function fixAll() {
+    if (!issues?.length) return;
+    const result = applyAllIssues(content, issues);
+    if (result.applied) {
+      onProofFix(result.content, !proofStarted);
+      setProofStarted(true);
+      setFixedCount((count) => count + result.applied);
+    }
+    setIssues([]);
+  }
+
+  function ignore(issue: ProofIssue) {
+    setIssues((current) => (current ?? []).filter((item) => item.id !== issue.id));
+  }
+
+  function undo() {
+    setIssues(null);
+    setFixedCount(0);
+    setProofStarted(false);
+    onUndo();
+  }
   const spinner = (mode: RevisionMode) =>
     activeMode === mode ? <LoaderCircle className="spin" size={15} /> : null;
 
@@ -2648,26 +2775,78 @@ function ChapterEditor({
         disabled={busy}
       />
       <div className="chapter-editor-actions">
-        <button onClick={() => onRevise("instruction", note)} disabled={busy || !note.trim()}>
+        <button onClick={() => onRevise("instruction", note)} disabled={locked || !note.trim()}>
           {spinner("instruction") ?? <WandSparkles size={15} />}
           {activeMode === "instruction" ? "Applying note" : "Apply my note"}
         </button>
-        <button onClick={() => onRevise("expand")} disabled={busy}>
+        <button onClick={() => onRevise("expand")} disabled={locked}>
           {spinner("expand") ?? <ExpandIcon size={15} />}
           {activeMode === "expand" ? "Expanding" : "Expand"}
         </button>
-        <button onClick={() => onRevise("tighten")} disabled={busy}>
+        <button onClick={() => onRevise("tighten")} disabled={locked}>
           {spinner("tighten") ?? <Shrink size={15} />}
           {activeMode === "tighten" ? "Tightening" : "Tighten"}
         </button>
+        {onProofread ? (
+          <button onClick={runProofread} disabled={locked}>
+            {checking ? <LoaderCircle className="spin" size={15} /> : <SpellCheck size={15} />}
+            {checking ? "Proofreading" : "Proofread"}
+          </button>
+        ) : null}
         {canUndo ? (
-          <button className="chapter-undo" onClick={onUndo} disabled={busy}>
+          <button className="chapter-undo" onClick={undo} disabled={locked}>
             <Undo2 size={15} />
             Undo last change
           </button>
         ) : null}
       </div>
       {notice ? <p className="chapter-editor-notice" role="status">{notice}</p> : null}
+      {issues ? (
+        <div className="proofread-panel" role="region" aria-label="Proofread results">
+          <div className="proofread-head">
+            <strong>
+              {issues.length
+                ? `${issues.length} ${issues.length === 1 ? "thing" : "things"} to check`
+                : fixedCount
+                  ? `All done. ${fixedCount} ${fixedCount === 1 ? "fix" : "fixes"} applied.`
+                  : "No spelling, abbreviation, or spacing problems found."}
+            </strong>
+            {issues.length > 1 ? (
+              <button onClick={fixAll} disabled={locked}>
+                <Check size={14} /> Fix all
+              </button>
+            ) : null}
+          </div>
+          {fixedCount && issues.length ? (
+            <p className="proofread-note">{fixedCount} fixed so far. Undo last change restores the chapter from before proofreading.</p>
+          ) : null}
+          <ol>
+            {issues.map((issue) => {
+              const preview = issuePreview(content, issue);
+              return (
+                <li key={issue.id}>
+                  <span className="proofread-kind">{PROOF_KIND_LABELS[issue.kind]}</span>
+                  <p className="proofread-context">
+                    {preview.before}
+                    <del>{preview.match}</del>
+                    <ins>{preview.replacement}</ins>
+                    {preview.after}
+                  </p>
+                  <p className="proofread-reason">{issue.reason}</p>
+                  <div className="proofread-actions">
+                    <button onClick={() => fixOne(issue)} disabled={locked}>
+                      <Check size={13} /> Fix
+                    </button>
+                    <button className="proofread-ignore" onClick={() => ignore(issue)} disabled={locked}>
+                      Ignore
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ) : null}
     </div>
   );
 }

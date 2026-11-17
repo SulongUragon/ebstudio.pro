@@ -33,12 +33,19 @@ import {
   validateRevisionRequest,
   type RevisionRequest,
 } from "../../section-revision";
+import {
+  MAX_AI_ISSUES_PER_CHUNK,
+  MAX_PROOFREAD_CHARACTERS,
+  splitForProofread,
+  validateAiIssues,
+  type RawAiIssue,
+} from "../../proofread";
 
 /** A revision the writer could not complete. The message is safe to show the author. */
 class RevisionError extends Error {}
 
 type RequestBody = {
-  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "visual_cast" | "revise_section" | "back_cover_blurb" | "voice_profile";
+  action: "title" | "brief" | "companion" | "dual_seed" | "dual_brief" | "outline" | "section" | "assistant" | "ebook_audit" | "optimize_ebook_section" | "visual_storyboard" | "visual_page" | "visual_cast" | "revise_section" | "proofread_section" | "back_cover_blurb" | "voice_profile";
   mode: Mode;
   sourceMode?: Mode;
   brief: BookBrief;
@@ -49,6 +56,7 @@ type RequestBody = {
   sectionIndex?: number;
   previousSummaries?: string[];
   revision?: Partial<RevisionRequest>;
+  proofread?: { content?: string; title?: string };
   voice?: { sample?: string; notes?: string };
   assistantPrompt?: string;
   assistantHistory?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -274,6 +282,21 @@ export async function POST(request: Request) {
       } catch (error) {
         if (error instanceof RevisionError) {
           return NextResponse.json({ error: error.message, code: "blurb_incomplete", retryable: true }, { status: 422 });
+        }
+        throw error;
+      }
+    }
+    if (body.action === "proofread_section") {
+      const content = body.proofread?.content ?? "";
+      if (!content.trim()) return NextResponse.json({ error: "This chapter has no text to proofread yet." }, { status: 400 });
+      if (content.length > MAX_PROOFREAD_CHARACTERS) {
+        return NextResponse.json({ error: "This chapter is too long to proofread in one pass." }, { status: 400 });
+      }
+      try {
+        return NextResponse.json(await proofreadSection(body, content));
+      } catch (error) {
+        if (error instanceof RevisionError) {
+          return NextResponse.json({ error: error.message, code: "proofread_incomplete", retryable: true }, { status: 422 });
         }
         throw error;
       }
@@ -1517,6 +1540,75 @@ Narrate this section in the past tense, the same as every other section of this 
 `
     : ""
 }`;
+}
+
+const PROOFREAD_INSTRUCTIONS = `You are the copy editor inside EB Studio Pro. You proofread one chapter of a finished book and report only clear, objective errors.
+
+Report:
+- spelling: misspelled words and typos.
+- abbreviation: abbreviations written wrongly or inconsistently with the rest of the text, such as "Dr" for "Dr.", "Mr" for "Mr.", "e.g" for "e.g.", "a.m" for "a.m.", "U.S" for "U.S.", "etc" without its period.
+- word_choice: a real word used in place of the intended one, such as their/there, its/it's, your/you're, then/than, lose/loose, affect/effect, a missing word that breaks the sentence.
+- punctuation: a clearly missing or wrong punctuation mark, such as a missing closing quotation mark or a sentence with no end mark.
+
+Never report:
+- spacing or blank lines (another check handles them).
+- style, word choice you merely prefer, sentence fragments used for effect, repetition used for rhythm, or anything that is a matter of taste.
+- dialect, slang, accents, or informal grammar inside dialogue or in a narrator's deliberate voice.
+- character names, place names, invented words, spells, or terms that belong to the book's world, unless the same name is spelled two different ways in this text.
+- British versus American spelling, unless the text mixes both for the same word.
+
+For each error:
+- original: copy the exact text from the chapter, character for character, including the error and 2 to 5 surrounding words so it can be found. Never paraphrase it.
+- replacement: the same text with only the error corrected. Change nothing else.
+- type: one of spelling, abbreviation, word_choice, punctuation.
+- reason: one short plain sentence.
+
+Never use the em dash or en dash character. If the text has no errors, return an empty list. Precision matters more than recall: when unsure, leave it out.`;
+
+async function proofreadSection(body: RequestBody, content: string) {
+  const chunks = splitForProofread(content);
+  const genre = body.mode === "fiction" ? `a ${body.brief?.genre || "fiction"} novel` : "a non-fiction book";
+  const results = await Promise.all(
+    chunks.map(async (chunk, index) => {
+      const request: JsonRequest = {
+        name: "proofread_section",
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            issues: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  original: { type: "string" },
+                  replacement: { type: "string" },
+                  type: { type: "string", enum: ["spelling", "abbreviation", "word_choice", "punctuation"] },
+                  reason: { type: "string" },
+                },
+                required: ["original", "replacement", "type", "reason"],
+              },
+            },
+          },
+          required: ["issues"],
+        },
+        instructions: PROOFREAD_INSTRUCTIONS,
+        input: `Proofread ${chunks.length > 1 ? `part ${index + 1} of ${chunks.length} of ` : ""}the chapter "${body.proofread?.title ?? ""}" from ${genre} titled "${body.brief?.title ?? ""}". Report at most ${MAX_AI_ISSUES_PER_CHUNK} errors.
+
+Chapter text:
+"""
+${chunk}
+"""`,
+        maxOutputTokens: 6000,
+      };
+      const generated = await generateJson(request, body.provider ?? "auto", body.preferredProvider);
+      const raw = Array.isArray(generated.output.issues) ? (generated.output.issues as RawAiIssue[]) : [];
+      return { raw: raw.slice(0, MAX_AI_ISSUES_PER_CHUNK), provider: generated.provider };
+    }),
+  );
+  const issues = validateAiIssues(content, results.flatMap((result) => result.raw));
+  return { issues, provider: results[0]?.provider };
 }
 
 async function reviseSection(body: RequestBody) {
