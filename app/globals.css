@@ -2807,6 +2807,17 @@ p {
   white-space: nowrap;
 }
 
+.contents-rail > button em .rail-label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--rust);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .contents-rail > button em small {
   display: block;
   overflow: hidden;

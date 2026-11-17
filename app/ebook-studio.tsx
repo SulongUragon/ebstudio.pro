@@ -2518,6 +2518,7 @@ function BookPreview({
                   {finished ? <Check size={13} /> : repairable ? <RotateCcw size={13} /> : current ? <LoaderCircle className="spin" size={13} /> : index + 1}
                 </span>
                 <em>
+                  <b className="rail-label">{railSectionLabel(manuscript.plan, index)}</b>
                   {section.title}
                   {section.pov ? <small>{section.pov}</small> : null}
                 </em>
@@ -2710,6 +2711,14 @@ function sectionLabel(section: SectionContent) {
     : section.kind === "introduction"
       ? "Introduction"
       : "Conclusion";
+}
+
+function railSectionLabel(plan: SectionPlan[], index: number) {
+  const section = plan[index];
+  if (section.kind === "introduction") return "Introduction";
+  if (section.kind === "conclusion") return "Conclusion";
+  const counted = plan.slice(0, index + 1).filter((item) => item.kind === "chapter").length;
+  return `Chapter ${section.number ?? counted}`;
 }
 
 function shouldShowSectionTitle(section: SectionContent) {
