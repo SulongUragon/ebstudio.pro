@@ -37,6 +37,7 @@ import {
   exportVisualPageJpeg,
   exportVisualPagesZip,
   exportVisualPdf,
+  renderVisualPage,
 } from "./visual-book-exporters";
 import {
   deleteVisualProject,
@@ -493,6 +494,9 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
                   <Field label="Page heading" value={page.title} set={value => updatePage({ title: value })} placeholder="Page heading" disabled={locked} />
                   <Field textarea label="Page copy" value={page.body} set={value => updatePage({ body: value })} placeholder="Short page copy" disabled={locked} />
 
+                  {page.role !== "cover" ? (
+                    <Field label="Pull quote (one sentence from the page copy)" value={page.pullQuote ?? ""} set={value => updatePage({ pullQuote: value })} placeholder="Leave blank and EB picks one" disabled={locked} />
+                  ) : null}
                   <Field textarea label="Art direction" value={page.imagePrompt} set={value => updatePage({ imagePrompt: value })} placeholder="Visible scene only" disabled={locked} />
                   <button className="panel-image-button" type="button" onClick={() => generateImage(activePage)} disabled={locked}>
                     {busy === "image" && busyTarget === String(page.pageNumber) ? <LoaderCircle className="spin" /> : <ImageIcon />}
@@ -549,18 +553,35 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
 }
 
 function PagePreview({ project, page }: { project: VisualBookProject; page: VisualBookPage }) {
+  // The preview is the exported page itself, so what you see is what you download.
+  const [rendered, setRendered] = useState("");
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void renderVisualPage(project, page)
+        .then(url => {
+          if (cancelled) return;
+          setRendered(url);
+          setFailed(false);
+        })
+        .catch(() => {
+          if (!cancelled) setFailed(true);
+        });
+    }, 320);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [project, page]);
   return (
-    <div className={`visual-page-canvas visual-layout-${page.layout}${page.role === "cover" ? " visual-cover-preview" : ""}`}>
-      <div className="visual-preview-image" style={page.imageData ? { backgroundImage: `url(${page.imageData})` } : undefined}>
-        {!page.imageData ? <span><ImageIcon /> Art pending</span> : null}
-      </div>
-      <div className="visual-preview-copy">
-        {page.role === "cover" ? (
-          <><h2>{project.title}</h2><p>{project.subtitle}</p><small>{project.author}</small></>
-        ) : (
-          <><em>{project.title}</em><h2>{page.title}</h2><p>{page.body}</p><small>{page.pageNumber}</small></>
-        )}
-      </div>
+    <div className="visual-page-canvas visual-page-rendered">
+      {rendered ? (
+        // eslint-disable-next-line @next/next/no-img-element -- a rendered data URL, not a remote asset
+        <img className="visual-page-render" src={rendered} alt={`Page ${page.pageNumber} preview`} />
+      ) : (
+        <div className="visual-preview-image"><span>{failed ? "Preview unavailable" : <><LoaderCircle className="spin" size={16} /> Rendering page</>}</span></div>
+      )}
     </div>
   );
 }

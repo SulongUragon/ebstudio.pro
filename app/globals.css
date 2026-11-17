@@ -4289,3 +4289,5 @@ body:has(.fab-book-images) .account-chip {
 .character-refs-redraw:disabled {
   opacity: 0.55;
 }
+
+.visual-page-rendered{background:#f4efe6}.visual-page-rendered .visual-preview-image{height:100%}.visual-page-render{display:block;width:100%;height:100%;object-fit:cover}

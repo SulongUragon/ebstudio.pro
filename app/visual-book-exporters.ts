@@ -1,5 +1,13 @@
 import type { VisualBookPage, VisualBookProject } from "./visual-book-types";
 import { visualProjectFilename } from "./visual-book-utils";
+import {
+  exportPremiumPdf,
+  isPremiumProject,
+  premiumSequence,
+  premiumSheetFilename,
+  premiumSheetForPage,
+  renderPremiumSheet,
+} from "./visual-premium";
 
 const W = 1200;
 const H = 1800;
@@ -69,6 +77,10 @@ const PRACTICAL = {
 };
 
 export async function exportVisualPdf(project: VisualBookProject) {
+  if (isPremiumProject(project)) {
+    await exportPremiumPdf(project, visualProjectFilename(project.title, "Visual-Edition.pdf"));
+    return;
+  }
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [W, H] });
 
@@ -84,7 +96,11 @@ export async function exportVisualPagesZip(project: VisualBookProject) {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
 
-  for (const page of project.pages) {
+  if (isPremiumProject(project)) {
+    for (const sheet of premiumSequence(project)) {
+      zip.file(premiumSheetFilename(sheet), (await renderPremiumSheet(project, sheet)).split(",")[1], { base64: true });
+    }
+  } else for (const page of project.pages) {
     zip.file(
       `page-${String(page.pageNumber).padStart(2, "0")}.jpg`,
       (await renderVisualPage(project, page)).split(",")[1],
@@ -108,6 +124,7 @@ export async function exportVisualPageJpeg(project: VisualBookProject, page: Vis
 }
 
 export async function renderVisualPage(project: VisualBookProject, page: VisualBookPage) {
+  if (isPremiumProject(project)) return renderPremiumSheet(project, premiumSheetForPage(project, page));
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -1467,6 +1484,19 @@ function auditVisualTextBlock(c: CanvasRenderingContext2D, source: unknown, text
   return safe;
 }
 
+/**
+ * Draws one already-validated line exactly as given (used for justified and
+ * drop-cap body text, where a line may hold part of a sentence).
+ */
+export function drawVerbatimVisualLine(c: CanvasRenderingContext2D, line: string, x: number, y: number) {
+  const clean = String(line ?? "");
+  if (!clean.trim() || VISIBLE_ELLIPSIS.test(clean)) return "";
+  const state = VISUAL_TEXT_AUDITS.get(c);
+  if (state) state.logicalBlocks.push(clean);
+  drawAuditedCanvasText(c, clean, x, y);
+  return clean;
+}
+
 function drawAuditedCanvasText(
   c: CanvasRenderingContext2D,
   text: string,
@@ -1540,8 +1570,9 @@ export function rejectDanglingSentenceEnding(source: unknown) {
     .trim();
   if (!clean) return true;
   const danglingEndings = [
-    /\b(?:a|an|and|as|at|because|but|by|for|from|how|if|in|of|on|or|that|the|their|these|this|those|to|what|when|where|which|while|who|whose|with|without|your)$/i,
-    /\b(?:about|because of|the cost of|the limits of|with a|with an|with the|about a|about an|about the|as if|as if a|as if an|as if the|and a|and an|and the|or a|or an|or the|but a|but an|but the|where a|where an|where the)$/i,
+    // Words such as "about", "for", and "from" end real sentences ("what she was waiting for."), so they are not listed.
+    /\b(?:a|an|and|as|because|but|how|if|of|or|that|the|their|these|this|those|to|what|when|where|which|while|who|whose|with|your)$/i,
+    /\b(?:because of|the cost of|the limits of|with a|with an|with the|about a|about an|about the|as if|as if a|as if an|as if the|and a|and an|and the|or a|or an|or the|but a|but an|but the|where a|where an|where the)$/i,
     /\b(?:about|for|from|of|with)\s+(?:what|which|that)\s+(?:a|an|the)?\s*[a-z][a-z'-]*$/i,
     /\b(?:the shape of|the way)(?:\s+(?:a|an|the))?$/i,
   ];

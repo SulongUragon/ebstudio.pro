@@ -9,7 +9,7 @@ export function normalizeVisualPages(rawPages: unknown, pageCount: number): Visu
     const isCover = index === 0;
     const isCta = index === pageCount - 1 && pageCount > 1;
     const requestedLayout = String(raw.layout ?? "") as VisualBookPage["layout"];
-    return { id: cryptoId("page", index), pageNumber: index + 1, role: isCover ? "cover" : isCta ? "cta" : "content", title: cleanText(raw.title) || (isCover ? "Cover" : `Page ${index + 1}`), body: cleanText(raw.body), imagePrompt: cleanText(raw.image_prompt), layout: VISUAL_LAYOUTS.includes(requestedLayout) ? requestedLayout : isCover ? "full-bleed" : VISUAL_LAYOUTS[1 + ((index - 1) % 3)] };
+    return { id: cryptoId("page", index), pageNumber: index + 1, role: isCover ? "cover" : isCta ? "cta" : "content", title: cleanText(raw.title) || (isCover ? "Cover" : `Page ${index + 1}`), body: cleanText(raw.body), imagePrompt: cleanText(raw.image_prompt), pullQuote: cleanText(raw.pull_quote), layout: VISUAL_LAYOUTS.includes(requestedLayout) ? requestedLayout : isCover ? "full-bleed" : VISUAL_LAYOUTS[1 + ((index - 1) % 3)] };
   });
 }
 export function visualProjectFilename(title: string, suffix: string) { const stem = title.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "visual-mini-book"; return `${stem}-${suffix}`; }

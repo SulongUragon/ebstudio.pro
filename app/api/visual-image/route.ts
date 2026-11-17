@@ -1,5 +1,5 @@
 import { characterSheetPrompt, decodeReferenceImages } from "../../character-refs";
-import { buildVisualImagePrompt } from "../../visual-image-prompt";
+import { buildVisualImagePrompt, premiumArtFinish } from "../../visual-image-prompt";
 import { COMICS_REMOVED_MESSAGE, isRetiredComicRequest } from "../../visual-book-types";
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
@@ -104,6 +104,7 @@ export async function POST(request: Request) {
           style,
           characterBible: project.characterBible ?? "",
           palette: project.palette ?? "",
+          finish: premiumArtFinish(String(project.visualStyle ?? "")),
           referenceNames: references.map((reference) => reference.name),
         });
     const [width, height] = size.split("x").map(Number);

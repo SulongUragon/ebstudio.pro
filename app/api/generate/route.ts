@@ -164,10 +164,10 @@ function visualCreativeContext(project: VisualBookBrief) {
 const visualPageSchema = {
   type: "object", additionalProperties: false,
   properties: {
-    page_number: { type: "integer" }, title: { type: "string" }, body: { type: "string" }, image_prompt: { type: "string" },
+    page_number: { type: "integer" }, title: { type: "string" }, body: { type: "string" }, image_prompt: { type: "string" }, pull_quote: { type: "string" },
     layout: { type: "string", enum: ["full-bleed", "image-top", "image-left", "image-right", "quote"] },
   },
-  required: ["page_number", "title", "body", "image_prompt", "layout"],
+  required: ["page_number", "title", "body", "image_prompt", "pull_quote", "layout"],
 } as const;
 
 export async function POST(request: Request) {
@@ -595,7 +595,7 @@ ${visualDirectionGuidance}
 
 Create exactly ${pageCount} total pages, including the cover. Page 1 is the cover. The final page must provide a satisfying resolution for a story, or a focused takeaway and call to action for a guide, teaser, lead magnet, or product book.
 
-This is an image-rich mini ebook, not a chapter book. Keep the cover body to a focused 12 to 28 word hook. Every non-cover page must contain 90 to 150 words across 4 to 7 complete sentences. Build one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflective observations that can become designed takeaway sections. For fiction and memoir, use concrete scene detail, interiority, and consequence. For guides, workbooks, lead magnets, and self-help, use explanation, practical application, and a meaningful reflection or takeaway. Use the available page space fully, but never repeat an idea merely to increase length. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks.
+This is an image-rich mini ebook, not a chapter book. Keep the cover body to a focused 12 to 28 word hook. Every non-cover page must contain 90 to 150 words across 4 to 7 complete sentences. Build one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflective observations that can become designed takeaway sections. For fiction and memoir, use concrete scene detail, interiority, and consequence. For guides, workbooks, lead magnets, and self-help, use explanation, practical application, and a meaningful reflection or takeaway. Use the available page space fully, but never repeat an idea merely to increase length. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks. For every non-cover page, pull_quote must copy, word for word, the single most striking complete sentence from that page's body (8 to 22 words), the line a reader would underline; it is set large on the page as a pull quote. For the cover, pull_quote is an empty string.
 
 Maintain a single narrative or instructional progression with no repeated page purpose. The title supplied by the author is authoritative and must not be changed. If the subtitle is blank, create one in refined_subtitle. If the author supplied one, return it exactly. Strengthen the character bible and palette only when their fields are blank. Return exactly ${pageCount} page objects numbered 1 through ${pageCount}.`,
     maxOutputTokens: Math.min(30000, Math.max(8000, pageCount * 700)),
@@ -630,7 +630,7 @@ Current title: ${page.title}
 Current body: ${page.body}
 Current art direction: ${page.imagePrompt}
 
-Preserve its role in the complete book and return the same page_number. Unless this is the cover, return 90 to 150 words across 4 to 7 complete sentences: one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflections. Use concrete story detail for fiction and practical value for guides. Fill the page meaningfully without generic padding or repeated ideas. The image_prompt must exclude all words, lettering, typography, logos, and watermarks.`,
+Preserve its role in the complete book and return the same page_number. Unless this is the cover, return 90 to 150 words across 4 to 7 complete sentences: one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflections. Use concrete story detail for fiction and practical value for guides. Fill the page meaningfully without generic padding or repeated ideas. The image_prompt must exclude all words, lettering, typography, logos, and watermarks. Unless this is the cover, pull_quote must copy, word for word, the single most striking complete sentence from the new body (8 to 22 words); for the cover it is an empty string.`,
     maxOutputTokens: 2400,
   }, body.provider ?? "auto", body.preferredProvider);
   return { ...generated.output, provider: generated.provider };

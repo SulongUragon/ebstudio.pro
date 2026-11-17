@@ -14,12 +14,14 @@ export type VisualImagePromptInput = {
   style: string;
   characterBible: string;
   palette: string;
+  /** Premium finish for the book's visual style; see premiumArtFinish. */
+  finish?: string;
   /** Names of the characters whose reference drawings are sent with this request, in order. */
   referenceNames?: string[];
 };
 
 // Fixed wording is about 420 characters; these keep the whole prompt under 2,000.
-const LIMITS = { scene: 360, camera: 90, style: 200, cast: 700, palette: 160 };
+const LIMITS = { scene: 360, camera: 90, style: 170, cast: 660, palette: 150, finish: 130 };
 
 export function buildVisualImagePrompt(input: VisualImagePromptInput) {
   // The reference instruction needs room, so the written cast lock gets less when it is present.
@@ -35,9 +37,20 @@ export function buildVisualImagePrompt(input: VisualImagePromptInput) {
     `Framing: ${clip(input.camera, LIMITS.camera) || "clear, readable composition"}`,
     `Art style: ${clip(input.style, LIMITS.style)}`,
     `Palette and lighting: ${clip(input.palette, LIMITS.palette) || "one coherent palette drawn from the scene"}`,
+    input.finish ? `Finish: ${clip(input.finish, LIMITS.finish)}` : "",
     "Show only the cast members the scene names. Do not imitate a living artist or protected character.",
   ];
   return lines.filter(Boolean).join("\n");
+}
+
+const PHOTOGRAPHIC_STYLES = new Set(["cinematic-editorial", "dark-luxury", "clean-modern"]);
+const ILLUSTRATED_STYLES = new Set(["warm-storybook", "bold-color", "ink-noir"]);
+
+/** Gallery-grade finishing note that matches the premium page design. */
+export function premiumArtFinish(visualStyle: string) {
+  if (PHOTOGRAPHIC_STYLES.has(visualStyle)) return "fine art editorial photography, natural film grain, subtle filmic color grade, quiet restraint, gallery print quality";
+  if (ILLUSTRATED_STYLES.has(visualStyle)) return "premium hand-crafted illustration, visible artisan texture, refined restraint, gallery print quality";
+  return "";
 }
 
 /**
