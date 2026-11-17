@@ -57,7 +57,7 @@ export const VISUAL_KIND_PLAYBOOKS: Record<VisualBookKind, VisualPlaybook> = {
     hook: "Lead with the finished dish or result, the craving or occasion it fits, and the total time and difficulty in plain words.",
     shape: "The payoff, what you need grouped so it is easy to gather, steps in true working order with one step per page, a doneness or success check, and a way to serve, share, or vary it.",
     pageTurn: "End each step with the sensory cue that says it is ready (color, smell, texture, sound) and a hint of what comes next.",
-    voice: "Friendly and exact. Give real quantities, times, and temperatures where the author supplied them, and never invent ones they did not. Add one helpful swap or shortcut where it fits.",
+    voice: "Friendly and exact. Give real quantities, times, and temperatures where the author supplied them; in the steps, never invent ones they did not (the separate ingredients list may use standard home-kitchen quantities). Add one helpful swap or shortcut where it fits.",
     ending: "The moment of enjoying or sharing it, one variation to try next time, and a warm invitation to make it their own.",
   },
   "book-teaser": {

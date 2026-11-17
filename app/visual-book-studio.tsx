@@ -34,7 +34,7 @@ import {
   type VisualBookProject,
   type VisualPageCount,
 } from "./visual-book-types";
-import { normalizeVisualPages } from "./visual-book-utils";
+import { formatIngredients, markIngredientsPage, normalizeVisualPages } from "./visual-book-utils";
 import {
   exportVisualPageJpeg,
   exportVisualPagesZip,
@@ -168,13 +168,14 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
         subtitle: brief.subtitle.trim() || String(data.refined_subtitle ?? "").trim(),
         characterBible: mergeCharacterLock(brief.characterBible, String(data.character_bible ?? "")),
         palette: brief.palette.trim() || String(data.palette ?? "").trim(),
+        ingredients: brief.kind === "recipe-activity" ? (brief.ingredients?.trim() || formatIngredients(data.ingredients)) : brief.ingredients,
       };
       const next: VisualBookProject = {
         ...refined,
         id: project?.id ?? crypto.randomUUID(),
         createdAt: project?.createdAt ?? now,
         updatedAt: now,
-        pages: normalizeVisualPages(data.pages, refined.pageCount),
+        pages: markIngredientsPage(normalizeVisualPages(data.pages, refined.pageCount), refined.kind),
         providersUsed: data.provider ? [data.provider as ActiveAIProvider] : [],
       };
       setBrief(refined);
@@ -425,6 +426,19 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
             <small>{ART_LOOKS.find(look => look.id === resolveArtLook(brief))?.note} Changing it applies to art you generate next.</small>
           </fieldset>
 
+          {brief.kind === "recipe-activity" ? (
+            <label className="field visual-field">
+              <span>Ingredients (page 3)</span>
+              <textarea
+                rows={7}
+                value={brief.ingredients ?? ""}
+                onChange={event => project ? updateProjectBrief("ingredients", event.target.value) : updateBrief("ingredients", event.target.value)}
+                placeholder={"Leave blank and EB writes the list.\nFor the broth:\nPork ribs | 1 kg\nTamarind | 300 g"}
+                disabled={locked}
+              />
+            </label>
+          ) : null}
+
           <div className="character-lock-block">
             <div>
               <span><Save size={15} /> Character & world lock</span>
@@ -673,6 +687,7 @@ function projectBrief(project: VisualBookProject): VisualBookBrief {
     characterBible: project.characterBible,
     palette: project.palette,
     artLook: project.artLook,
+    ingredients: project.ingredients,
   };
 }
 

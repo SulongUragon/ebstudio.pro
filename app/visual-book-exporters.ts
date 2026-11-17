@@ -1,6 +1,8 @@
 import type { VisualBookPage, VisualBookProject } from "./visual-book-types";
 import { visualProjectFilename } from "./visual-book-utils";
+import { parseIngredients } from "./visual-book-utils";
 import {
+  drawIngredientList,
   exportPremiumPdf,
   isPremiumProject,
   premiumSequence,
@@ -242,6 +244,27 @@ async function drawWarmPracticalGuidePage(
     drawWarmPracticalClosing(c, project, page);
     return;
   }
+  const ingredients = page.ingredientsPage ? parseIngredients(project.ingredients) : [];
+  if (ingredients.length) {
+    drawWarmPracticalHeader(c, project, page);
+    drawWarmPracticalBadge(c, "WHAT YOU NEED");
+    c.fillStyle = PRACTICAL.forest;
+    const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+      x: 76, y: 190, maxWidth: 1000, maxLines: 2,
+      fontSize: 64, minFontSize: 42, lineHeight: 72,
+      fontFamily: "Georgia", fontWeight: "700", preserveAll: true, textRole: "headline",
+    }).endY;
+    c.strokeStyle = PRACTICAL.gold;
+    c.lineWidth = 4;
+    c.beginPath(); c.moveTo(78, afterTitle + 30); c.lineTo(230, afterTitle + 30); c.stroke();
+    drawIngredientList(c, ingredients, {
+      x: 78, y: afterTitle + 100, width: 1044, bottom: H - 130,
+      ink: PRACTICAL.ink, muted: PRACTICAL.muted, accent: PRACTICAL.terracotta, leader: PRACTICAL.sage,
+      itemFont: "Arial", itemWeight: "400", labelFont: "Arial",
+    });
+    drawWarmPracticalFooter(c, project, page);
+    return;
+  }
 
   const copy = buildVisualPageSections(page.body, page.title);
   drawWarmPracticalHeader(c, project, page);
@@ -419,6 +442,25 @@ async function drawNotebookReflectionPage(
 
   if (page.role === "cover") {
     await drawNotebookReflectionCover(c, project, page);
+    return;
+  }
+
+  const ingredients = page.ingredientsPage ? parseIngredients(project.ingredients) : [];
+  if (ingredients.length) {
+    drawHandwrittenNoteLabel(c, "WHAT YOU NEED", 76, 78, NOTEBOOK.green);
+    c.fillStyle = NOTEBOOK.ink;
+    const afterTitle = fitTextWithoutEllipsis(c, page.title, {
+      x: 76, y: 205, maxWidth: 1040, maxLines: 2,
+      fontSize: 72, minFontSize: 44, lineHeight: 78,
+      fontFamily: "Georgia", fontWeight: "700", preserveAll: true, textRole: "headline",
+    }).endY;
+    drawScribbleUnderline(c, 76, afterTitle + 20, 350, NOTEBOOK.green);
+    drawIngredientList(c, ingredients, {
+      x: 78, y: afterTitle + 110, width: 1044, bottom: H - 130,
+      ink: NOTEBOOK.ink, muted: NOTEBOOK.muted, accent: NOTEBOOK.green, leader: NOTEBOOK.line,
+      itemFont: "Georgia", itemWeight: "400", labelFont: "Georgia",
+    });
+    drawNotebookFooter(c, project, page);
     return;
   }
 

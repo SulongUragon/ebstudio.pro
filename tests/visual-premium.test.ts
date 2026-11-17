@@ -167,3 +167,33 @@ test("the storyboard budget leaves room for every page", async () => {
   assert.equal(visualStoryboardBudget(50), 32000);
   assert.equal(truncationRetryBudget("anthropic", visualStoryboardBudget(15)), 32000);
 });
+
+test("recipe books carry an editable ingredients list on page 3, without dashes", async () => {
+  const { formatIngredients, parseIngredients, markIngredientsPage, ingredientsPageIndex } = await import("../app/visual-book-utils");
+  const text = formatIngredients([
+    { group: "For the broth", item: "Pork ribs", quantity: "1 kg" },
+    { group: "For the broth", item: "Fish sauce", quantity: "2–3 tbsp" },
+    { group: "Vegetables", item: "Kangkong", quantity: "1 bunch" },
+    { group: "Vegetables", item: "", quantity: "skip me" },
+  ]);
+  assert.equal(text, "For the broth:\nPork ribs | 1 kg\nFish sauce | 2 to 3 tbsp\nVegetables:\nKangkong | 1 bunch");
+  assert.deepEqual(parseIngredients(text), [
+    { group: "For the broth", rows: [{ item: "Pork ribs", quantity: "1 kg" }, { item: "Fish sauce", quantity: "2 to 3 tbsp" }] },
+    { group: "Vegetables", rows: [{ item: "Kangkong", quantity: "1 bunch" }] },
+  ]);
+  assert.deepEqual(parseIngredients("- Salt\n• Pepper | 1-2 tsp"), [{ group: "", rows: [{ item: "Salt", quantity: "" }, { item: "Pepper", quantity: "1 to 2 tsp" }] }]);
+  assert.equal(ingredientsPageIndex("recipe-activity", 7), 2);
+  assert.equal(ingredientsPageIndex("recipe-activity", 3), -1);
+  assert.equal(ingredientsPageIndex("visual-guide", 7), -1);
+  const pages = markIngredientsPage([{}, {}, {}, {}, {}], "recipe-activity");
+  assert.deepEqual(pages.map(page => page.ingredientsPage), [false, false, true, false, false]);
+});
+
+test("only recipe storyboards are asked for an ingredients list", async () => {
+  const { ingredientsInstruction } = await import("../app/api/generate/route");
+  assert.equal(ingredientsInstruction("illustrated-story", 7), "Return ingredients as an empty array.");
+  const recipe = ingredientsInstruction("recipe-activity", 7);
+  assert.match(recipe, /standard home-kitchen quantities/);
+  assert.match(recipe, /Page 3 is the ingredients page/);
+  assert.match(recipe, /never a dash/);
+});

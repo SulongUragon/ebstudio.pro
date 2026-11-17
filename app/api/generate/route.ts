@@ -169,6 +169,19 @@ function visualCreativeContext(project: VisualBookBrief) {
   };
 }
 
+const ingredientSchema = {
+  type: "object", additionalProperties: false,
+  properties: { group: { type: "string" }, item: { type: "string" }, quantity: { type: "string" } },
+  required: ["group", "item", "quantity"],
+} as const;
+
+/** Recipe books always carry a full ingredients list on page 3; every other kind returns an empty list. */
+export function ingredientsInstruction(kind: string, pageCount: number) {
+  if (kind !== "recipe-activity") return "Return ingredients as an empty array.";
+  const page = pageCount >= 4 ? " Page 3 is the ingredients page: its body is a short 25 to 50 word introduction to what the reader will gather (no list in the body, the list is set separately), and its image_prompt shows the ingredients laid out." : "";
+  return `Ingredients list: return every ingredient or material the reader needs in ingredients, in the order they are used, grouped by purpose with a short group name (for example For the broth, Vegetables, To finish). Give each one a quantity: use the author's quantities when supplied, otherwise standard home-kitchen quantities for the stated servings. Write ranges with the word to, never a dash. For an activity, list the materials.${page}`;
+}
+
 const visualPageSchema = {
   type: "object", additionalProperties: false,
   properties: {
@@ -607,7 +620,7 @@ async function createVisualStoryboard(body: RequestBody) {
   const visualDirectionGuidance = `${buildCopywritingGuidance(visualCreativeContext(project))} ${buildVisualArtworkDirection(visualCreativeContext(project), project.visualStyle)}`;
   const generated = await generateJson({
     name: "visual_mini_ebook_storyboard",
-    schema: { type: "object", additionalProperties: false, properties: { refined_subtitle: { type: "string" }, character_bible: { type: "string" }, palette: { type: "string" }, pages: { type: "array", items: visualPageSchema } }, required: ["refined_subtitle", "character_bible", "palette", "pages"] },
+    schema: { type: "object", additionalProperties: false, properties: { refined_subtitle: { type: "string" }, character_bible: { type: "string" }, palette: { type: "string" }, ingredients: { type: "array", items: ingredientSchema }, pages: { type: "array", items: visualPageSchema } }, required: ["refined_subtitle", "character_bible", "palette", "ingredients", "pages"] },
     instructions: `You are the visual publishing director inside EB Studio Pro. Create premium, content-rich mini ebooks where every page has one clear job, substantial publication-ready copy, and art direction that materially supports the text. Every page must earn its place and give the reader real narrative, emotional, practical, or reflective value. Never pad pages with generic slogans, repeated ideas, invented facts, research, credentials, or statistics. Never use the em dash character. ${visualDirectionGuidance}`,
     input: `${visualProjectContext(project)}
 
@@ -620,7 +633,9 @@ Create exactly ${pageCount} total pages, including the cover. Page 1 is the cove
 
 This is an image-rich mini ebook, not a chapter book. Keep the cover body to a focused 12 to 28 word hook. Every non-cover page must contain 90 to 150 words across 4 to 7 complete sentences. Build one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflective observations that can become designed takeaway sections. For fiction and memoir, use concrete scene detail, interiority, and consequence. For guides, workbooks, lead magnets, and self-help, use explanation, practical application, and a meaningful reflection or takeaway. Use the available page space fully, but never repeat an idea merely to increase length. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks. For every non-cover page, pull_quote must copy, word for word, the single most striking complete sentence from that page's body (8 to 22 words), the line a reader would underline; it is set large on the page as a pull quote. For the cover, pull_quote is an empty string.
 
-Maintain a single narrative or instructional progression with no repeated page purpose. The title supplied by the author is authoritative and must not be changed. If the subtitle is blank, create one in refined_subtitle. If the author supplied one, return it exactly. Strengthen the character bible and palette only when their fields are blank. Return exactly ${pageCount} page objects numbered 1 through ${pageCount}.`,
+Maintain a single narrative or instructional progression with no repeated page purpose. The title supplied by the author is authoritative and must not be changed. If the subtitle is blank, create one in refined_subtitle. If the author supplied one, return it exactly. Strengthen the character bible and palette only when their fields are blank. Return exactly ${pageCount} page objects numbered 1 through ${pageCount}.
+
+${ingredientsInstruction(project.kind, pageCount)}`,
     maxOutputTokens: visualStoryboardBudget(pageCount),
   }, body.provider ?? "auto", body.preferredProvider);
   const pages = Array.isArray(generated.output.pages) ? generated.output.pages : [];
@@ -670,7 +685,7 @@ Target reader: ${project.audience || "General readers"}
 Visual style: ${project.visualStyle}
 Character lock from the author: ${project.characterBible || "none supplied"}
 Cast lock rule: every recurring character, creature, or object-character in the story needs a locked visual description (what kind of being it is, size, body shape, exact colors, and one or two distinguishing marks), one sentence each, starting with its name. ${project.characterBible ? "The author already described some of the cast above. In character_bible return ONLY the locks for recurring characters the author did not describe, or an empty string if none are missing. Never restate or change the author's descriptions." : "In character_bible return the lock for the whole recurring cast."} Use those exact names in every image prompt so each drawing names who is in it.
-Color and lighting palette: ${project.palette || "Create one coherent palette and lighting direction"}`;
+Color and lighting palette: ${project.palette || "Create one coherent palette and lighting direction"}${project.ingredients?.trim() ? `\nIngredients from the author (keep every item and quantity): ${project.ingredients.trim().replace(/\s*\n\s*/g, "; ")}` : ""}`;
 }
 
 /** Lists the recurring characters worth drawing a reference picture for. */

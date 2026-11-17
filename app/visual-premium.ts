@@ -1,4 +1,5 @@
 import type { VisualBookPage, VisualBookProject } from "./visual-book-types";
+import { parseIngredients, type IngredientGroup } from "./visual-book-utils";
 import {
   beginVisualTextAudit,
   buildVisualPageSections,
@@ -158,6 +159,8 @@ async function drawSheet(c: CanvasRenderingContext2D, t: Theme, project: VisualB
   const page = sheet.page;
   const ctx = { folio: sheet.folio, chapter: sheet.chapter };
   if (page.role === "cta") return drawClosing(c, t, project, page, ctx);
+  const ingredients = page.ingredientsPage ? parseIngredients(project.ingredients) : [];
+  if (ingredients.length) return drawIngredientsPage(c, t, page, ingredients, ctx);
   const layout = resolveEditorialLayout(page);
   if (layout === "full-bleed") return drawFullBleed(c, page, ctx);
   if (layout === "image-left") return drawSplit(c, t, page, "left", ctx);
@@ -472,6 +475,128 @@ async function drawClosing(c: CanvasRenderingContext2D, t: Theme, project: Visua
   c.fillStyle = t.muted;
   label(c, String(ctx.folio).padStart(2, "0"), W / 2, H - 82, 15, 4);
   c.textAlign = "left";
+}
+
+/* ---------- recipe ingredients ---------- */
+
+async function drawIngredientsPage(c: CanvasRenderingContext2D, t: Theme, page: VisualBookPage, groups: IngredientGroup[], ctx: SheetContext) {
+  const plateH = 380;
+  const plateW = Math.round(plateH / 1.5);
+  let y = 130;
+  // The art is shown only when the list is short enough to keep one roomy column.
+  const rowCount = groups.reduce((sum, group) => sum + group.rows.length + (group.group ? 1 : 0), 0);
+  if (page.imageData && rowCount <= 10) {
+    await framedImage(c, t, page.imageData, (W - plateW) / 2, y, plateW, plateH);
+    y += plateH + 18;
+  }
+  c.textAlign = "center";
+  c.fillStyle = t.accent;
+  label(c, "WHAT YOU NEED", W / 2, y + 80, 15, 8);
+  c.fillStyle = t.ink;
+  const title = text(c, page.title, {
+    x: W / 2, y: y + 156, maxWidth: 900, maxLines: 2,
+    fontSize: 60, minFontSize: 42, lineHeight: 66,
+    fontFamily: SERIF, fontWeight: "500", preserveAll: true, textRole: "headline",
+  });
+  ornamentRule(c, W / 2, title.endY - 10, t.accent);
+  const intro = validateVisualTextBeforeDraw(page.body, "paragraph");
+  let top = title.endY + 50;
+  if (intro) {
+    c.fillStyle = t.muted;
+    const fit = text(c, intro, {
+      x: W / 2, y: top + 20, maxWidth: 820, maxLines: 3,
+      fontSize: 30, minFontSize: 24, lineHeight: 42,
+      fontFamily: SERIF, fontStyle: "italic", fontWeight: "500",
+    });
+    top = Math.max(top, fit.endY) + 20;
+  }
+  c.textAlign = "left";
+  drawIngredientList(c, groups, {
+    x: 150, y: top + 40, width: W - 300, bottom: H - 140,
+    ink: t.ink, muted: t.muted, accent: t.accent, leader: t.hairline,
+    itemFont: SERIF, itemWeight: "500", labelFont: SANS,
+  });
+  centerFolio(c, t, ctx.folio, W / 2);
+}
+
+export type IngredientListStyle = {
+  x: number; y: number; width: number; bottom: number;
+  ink: string; muted: string; accent: string; leader: string;
+  itemFont: string; itemWeight: string; labelFont: string;
+};
+
+/**
+ * Sets the list: group names in small caps, each item on the left, its quantity on the
+ * right, a dotted leader between. Two columns when one would run past the bottom.
+ */
+export function drawIngredientList(c: CanvasRenderingContext2D, groups: IngredientGroup[], style: IngredientListStyle) {
+  // Each group heading takes a row plus a little air above it.
+  const rows = groups.reduce((sum, group, index) => sum + group.rows.length + (group.group ? (index ? 1.5 : 1) : 0), 0);
+  const available = style.bottom - style.y;
+  const columns = rows * 46 > available ? 2 : 1;
+  const gap = 70;
+  const colW = columns === 2 ? (style.width - gap) / 2 : style.width;
+  const perColumn = Math.ceil(rows / columns);
+  const rowH = Math.max(34, Math.min(56, Math.floor(available / Math.max(1, perColumn))));
+  const size = Math.max(20, Math.min(32, Math.round(rowH * 0.6)));
+  let column = 0;
+  let line = 0;
+  const place = () => ({ x: style.x + column * (colW + gap), y: style.y + line * rowH });
+  const next = () => {
+    line += 1;
+    if (columns === 2 && column === 0 && line >= perColumn) { column = 1; line = 0; }
+  };
+  for (const group of groups) {
+    if (group.group) {
+      if (line > 0 && line >= perColumn - 1 && column === 0 && columns === 2) { column = 1; line = 0; }
+      if (line > 0) line += 0.5;
+      const at = place();
+      c.fillStyle = style.accent;
+      label(c, group.group.toUpperCase(), at.x, at.y + size * 0.95, 14, 5);
+      next();
+    }
+    for (const row of group.rows) {
+      const at = place();
+      c.font = `${style.itemWeight} ${size}px ${style.itemFont}`;
+      c.fillStyle = style.ink;
+      const quantityW = row.quantity ? Math.min(colW * 0.42, measure(c, row.quantity, `italic ${style.itemWeight} ${size}px ${style.itemFont}`) ) : 0;
+      const itemOptions = {
+        x: at.x, y: at.y + size, maxWidth: colW - quantityW - 40, maxLines: 1,
+        fontSize: size, minFontSize: 17, lineHeight: rowH,
+        fontFamily: style.itemFont, fontWeight: style.itemWeight, preserveAll: true, textRole: "headline" as const,
+      };
+      let itemFit = text(c, row.item, itemOptions);
+      // A long name wraps onto a second row instead of disappearing.
+      if (!itemFit.lines.length) {
+        itemFit = text(c, row.item, { ...itemOptions, maxLines: 2 });
+        if (itemFit.lines.length > 1) line += 1;
+      }
+      c.font = `${style.itemWeight} ${itemFit.fontSize}px ${style.itemFont}`;
+      const lastLine = itemFit.lines.at(-1) ?? "";
+      const itemEnd = at.x + c.measureText(lastLine).width;
+      const quantityY = at.y + size + (itemFit.lines.length - 1) * itemFit.lineHeight;
+      if (row.quantity) {
+        c.fillStyle = style.muted;
+        c.textAlign = "right";
+        text(c, row.quantity, {
+          x: at.x + colW, y: quantityY, maxWidth: colW * 0.42, maxLines: 1,
+          fontSize: size, minFontSize: 16, lineHeight: size * 1.2,
+          fontFamily: style.itemFont, fontStyle: "italic", fontWeight: style.itemWeight, preserveAll: true, textRole: "headline",
+        });
+        c.textAlign = "left";
+        dottedLeader(c, itemEnd + 14, at.x + colW - quantityW - 14, quantityY - 6, style.leader);
+      }
+      next();
+    }
+  }
+}
+
+function measure(c: CanvasRenderingContext2D, value: string, font: string) {
+  const before = c.font;
+  c.font = font;
+  const width = c.measureText(value).width;
+  c.font = before;
+  return width;
 }
 
 /* ---------- body text ---------- */
