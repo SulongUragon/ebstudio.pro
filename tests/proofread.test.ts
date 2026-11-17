@@ -131,3 +131,14 @@ test("proofread_section returns only AI findings that match the chapter", async 
     }
   }
 });
+
+test("flat questions and added ellipses are never suggested", () => {
+  const content = `"Meaning what." "How much," she asked. "Marisol" was all she said. It was over`;
+  const issues = validateAiIssues(content, [
+    { original: `"Meaning what."`, replacement: `"Meaning what?"`, type: "punctuation" },
+    { original: `"How much," she asked.`, replacement: `"How much?" she asked.`, type: "punctuation" },
+    { original: `"Marisol" was`, replacement: `"Marisol..." was`, type: "punctuation" },
+    { original: "It was over", replacement: "It was over.", type: "punctuation" },
+  ]);
+  assert.deepEqual(issues.map((issue) => issue.replacement), ["It was over."]);
+});

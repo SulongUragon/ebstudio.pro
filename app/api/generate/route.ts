@@ -1579,6 +1579,8 @@ Never report:
 - dialect, slang, accents, or informal grammar inside dialogue or in a narrator's deliberate voice.
 - character names, place names, invented words, spells, or terms that belong to the book's world, unless the same name is spelled two different ways in this text.
 - British versus American spelling, unless the text mixes both for the same word.
+- questions written with a period or comma instead of a question mark ("Meaning what.", "How much," she asked). Many authors use this on purpose for a flat, toneless delivery. Never suggest adding a question mark.
+- trailing off or added ellipses.
 
 For each error:
 - original: copy the exact text from the chapter, character for character, including the error and 2 to 5 surrounding words so it can be found. Never paraphrase it.

@@ -165,6 +165,13 @@ export function validateAiIssues(content: string, raw: RawAiIssue[]): ProofIssue
     // Spacing-only changes are handled locally, so ignore them here.
     if (match.replace(/\s+/g, " ") === replacement.replace(/\s+/g, " ")) continue;
     if (letters(match) === letters(replacement) && kind === "spelling") continue;
+    // Questions ending in a period or comma are a deliberate flat delivery, and ellipses are style.
+    const bare = (text: string) => text.replace(/[.,?!\u2026]/g, "");
+    const count = (text: string, mark: RegExp) => (text.match(mark) ?? []).length;
+    if (
+      bare(match) === bare(replacement) &&
+      (count(replacement, /\?/g) > count(match, /\?/g) || count(replacement, /\.\.\.|\u2026/g) > count(match, /\.\.\.|\u2026/g))
+    ) continue;
     let start = content.indexOf(match);
     while (start !== -1 && used.has(start)) start = content.indexOf(match, start + 1);
     if (start === -1) continue;
