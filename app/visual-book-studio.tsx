@@ -232,7 +232,10 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
     setBusyTarget(`${selectedPage.pageNumber}`);
     setError("");
     try {
-      const imageData = await visualImage(project, selectedPage);
+      const { imageData, artCheck } = await visualImage(project, selectedPage);
+      const warning = artWarning(selectedPage.pageNumber, artCheck);
+      if (warning) setError(warning);
+      else if (artCheck?.redrawn) setNotice(`Page ${selectedPage.pageNumber} art was redrawn automatically after the check found a problem.`);
       setProject(current => {
         if (!current) return current;
         return {
@@ -262,12 +265,15 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
     setBusy("all-images");
     setError("");
     let working = project;
+    const warnings: string[] = [];
     try {
       for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
         const selectedPage = working.pages[pageIndex];
         if (redraw || !selectedPage.imageData) {
           setBusyTarget(`${selectedPage.pageNumber}`);
-          const imageData = await visualImage(working, selectedPage);
+          const { imageData, artCheck } = await visualImage(working, selectedPage);
+          const warning = artWarning(selectedPage.pageNumber, artCheck);
+          if (warning) warnings.push(warning);
           working = {
             ...working,
             updatedAt: new Date().toISOString(),
@@ -279,6 +285,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
         }
       }
       setNotice("All page art is complete. Page text remains editable.");
+      if (warnings.length) setError(warnings.join(" "));
     } catch (caught) {
       setProject(working);
       setError(`${message(caught, "Image generation stopped.")} Finished images were saved.`);
@@ -630,7 +637,16 @@ async function visualImage(project: VisualBookProject, page: VisualBookPage) {
   const data = await api("/api/visual-image", { project: projectBrief(project), page, references });
   const imageData = String(data.imageData ?? "");
   if (!imageData) throw new Error("The image generator returned no usable image.");
-  return imageData;
+  return { imageData, artCheck: data.artCheck as ArtCheckResult | undefined };
+}
+
+type ArtCheckResult = { passed: boolean; skipped: boolean; problems: string[]; redrawn: boolean };
+
+/** A plain warning when the art check still saw a problem after the automatic redraw. */
+function artWarning(pageNumber: number, check: ArtCheckResult | undefined) {
+  if (!check || check.passed) return "";
+  const problems = check.problems.length ? `: ${check.problems.join("; ")}` : "";
+  return `Page ${pageNumber} art may still have a problem${problems}. Review it, or regenerate the page art.`;
 }
 
 function projectBrief(project: VisualBookProject): VisualBookBrief {

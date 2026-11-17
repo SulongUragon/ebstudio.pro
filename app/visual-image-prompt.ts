@@ -20,15 +20,17 @@ export type VisualImagePromptInput = {
   referenceNames?: string[];
 };
 
-// Fixed wording is about 420 characters; these keep the whole prompt under 2,000.
-const LIMITS = { scene: 360, camera: 90, style: 170, cast: 660, palette: 150, finish: 130 };
+// Fixed wording is about 540 characters; these keep the whole prompt near 1,700, leaving room
+// for the art checker's corrections on a redraw within the backup model's 2,000.
+const LIMITS = { scene: 300, camera: 70, style: 130, cast: 460, palette: 120, finish: 130 };
 
 export function buildVisualImagePrompt(input: VisualImagePromptInput) {
   // The reference instruction needs room, so the written cast lock gets less when it is present.
-  const cast = clip(input.characterBible, input.referenceNames?.length ? LIMITS.cast - 320 : LIMITS.cast);
+  const cast = clip(input.characterBible, input.referenceNames?.length ? LIMITS.cast - 240 : LIMITS.cast);
   const lines = [
     "One original book illustration, artwork only.",
-    "No text in the image: no words, letters, numbers, titles, captions, signs, labels, logos, or watermarks. Any sign or book is blank.",
+    "No text in the image: no words, letters, numbers, titles, captions, signs, labels, logos, or watermarks. Any book, page, paper, sign, or screen is blank.",
+    "Natural anatomy: each person's head, neck, shoulders, and body face the same way; two arms, two legs, five-fingered hands.",
     referenceInstruction(input.referenceNames ?? []),
     cast
       ? `Locked cast, draw each exactly as described, same kind of being, shape, colors, and size: ${cast}`

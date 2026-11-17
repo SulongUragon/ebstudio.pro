@@ -1,4 +1,5 @@
 import { characterSheetPrompt, decodeReferenceImages } from "../../character-refs";
+import { checkVisualArt, promptWithCorrections } from "../../art-check";
 import { buildVisualImagePrompt, premiumArtFinish } from "../../visual-image-prompt";
 import { COMICS_REMOVED_MESSAGE, isRetiredComicRequest } from "../../visual-book-types";
 import { NextResponse } from "next/server";
@@ -108,6 +109,32 @@ export async function POST(request: Request) {
           referenceNames: references.map((reference) => reference.name),
         });
     const [width, height] = size.split("x").map(Number);
+    const draw = (text: string) => drawImage(text, { width, height, size, references, characterSheet });
+    const first = await draw(prompt);
+    if (characterSheet || !first.ok) return first;
+    // Look at the page art before it is saved; redraw once with the problems named.
+    const firstData = (await first.json()) as DrawnImage;
+    const context = { scene: page?.imagePrompt ?? "", characterBible: project.characterBible ?? "" };
+    const firstCheck = await checkVisualArt(firstData.imageData, context);
+    if (firstCheck.passed) return NextResponse.json({ ...firstData, artCheck: { ...firstCheck, redrawn: false } });
+    const second = await draw(promptWithCorrections(prompt, firstCheck.problems));
+    if (!second.ok) return NextResponse.json({ ...firstData, artCheck: { ...firstCheck, redrawn: false } });
+    const secondData = (await second.json()) as DrawnImage;
+    const secondCheck = await checkVisualArt(secondData.imageData, context);
+    return NextResponse.json({ ...secondData, artCheck: { ...secondCheck, redrawn: true } });
+  } catch (error) {
+    console.error("EB Studio Pro visual image request failed", error instanceof Error ? error.message : error);
+    return NextResponse.json({ error: "This page image could not be generated. Your storyboard is safe." }, { status: 500 });
+  }
+}
+
+type DrawnImage = { imageData: string; imageProvider: string; referencesUsed: number };
+
+async function drawImage(
+  prompt: string,
+  options: { width: number; height: number; size: string; references: Exclude<ReturnType<typeof decodeReferenceImages>, { error: string }>; characterSheet: boolean },
+) {
+  const { width, height, size, references, characterSheet } = options;
     // Character references only work on the Cloudflare FLUX.2 model, and a
     // character's reference picture must come from the same model that will
     // copy it. Both go straight to Cloudflare when it is set up.
@@ -152,8 +179,4 @@ export async function POST(request: Request) {
       return NextResponse.json({ code, error }, { status: response.status >= 400 ? response.status : 502 });
     }
     return NextResponse.json({ imageData: `data:image/jpeg;base64,${data.data[0].b64_json}`, imageProvider: "openai", referencesUsed: 0 });
-  } catch (error) {
-    console.error("EB Studio Pro visual image request failed", error instanceof Error ? error.message : error);
-    return NextResponse.json({ error: "This page image could not be generated. Your storyboard is safe." }, { status: 500 });
-  }
 }

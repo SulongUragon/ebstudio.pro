@@ -343,54 +343,62 @@ async function drawBackCover(c: CanvasRenderingContext2D, project: VisualBookPro
 
 /* ---------- story pages ---------- */
 
+/** Art is drawn 2:3, so every plate is 2:3 and shows the whole picture uncropped. */
+const PLATE_RATIO = 1.5;
+
 async function drawImageTop(c: CanvasRenderingContext2D, t: Theme, page: VisualBookPage, ctx: SheetContext) {
   const copy = buildVisualPageSections(page.body, page.title);
   const words = wordCount(copy.body);
-  const imageH = words > 140 ? 620 : words > 110 ? 700 : 780;
-  await imageCover(c, page.imageData, 0, 0, W, imageH, t.placeholder);
+  const plateH = words > 140 ? 560 : words > 110 ? 610 : 660;
+  const plateW = Math.round(plateH / PLATE_RATIO);
+  await framedImage(c, t, page.imageData, (W - plateW) / 2, 140, plateW, plateH);
 
+  const below = 140 + plateH + 18;
   c.textAlign = "center";
   c.fillStyle = t.accent;
-  label(c, chapterLabel(ctx.chapter), W / 2, imageH + 96, 15, 7);
+  label(c, chapterLabel(ctx.chapter), W / 2, below + 86, 15, 7);
   c.fillStyle = t.ink;
   const title = text(c, page.title, {
-    x: W / 2, y: imageH + 178, maxWidth: 900, maxLines: 2,
-    fontSize: 70, minFontSize: 46, lineHeight: 76,
+    x: W / 2, y: below + 166, maxWidth: 900, maxLines: 2,
+    fontSize: 66, minFontSize: 44, lineHeight: 72,
     fontFamily: SERIF, fontWeight: "500", preserveAll: true, textRole: "headline",
   });
   ornamentRule(c, W / 2, title.endY - 14, t.accent);
   c.textAlign = "left";
 
-  bodyWithQuote(c, t, page, copy.body, { x: 170, y: title.endY + 66, maxWidth: 860, bottom: H - 150, dropCap: true });
+  bodyWithQuote(c, t, page, copy.body, { x: 150, y: title.endY + 62, maxWidth: 900, bottom: H - 150, dropCap: true });
   centerFolio(c, t, ctx.folio, W / 2);
 }
 
 async function drawSplit(c: CanvasRenderingContext2D, t: Theme, page: VisualBookPage, side: "left" | "right", ctx: SheetContext) {
   const copy = buildVisualPageSections(page.body, page.title);
-  const imageW = 540;
-  const imageX = side === "left" ? 0 : W - imageW;
-  await imageCover(c, page.imageData, imageX, 0, imageW, H, t.placeholder);
+  const plateW = 480;
+  const plateH = Math.round(plateW * PLATE_RATIO);
+  const plateY = 150;
+  const plateX = side === "left" ? 108 : W - 108 - plateW;
+  await framedImage(c, t, page.imageData, plateX, plateY, plateW, plateH);
 
-  const colX = side === "left" ? imageW + 90 : 90;
-  const colW = W - imageW - 180;
-  const titleLines = countLines(c, page.title, `500 66px ${SERIF}`, colW);
-  const bodyLines = countLines(c, copy.body, `500 33px ${SERIF}`, colW);
-  const blockH = 92 + titleLines * 72 + 86 + bodyLines * 49;
-  const top = Math.max(200, Math.min(420, Math.round((H - blockH) / 2)));
-
+  // Title and opening lines sit beside the plate; the copy then runs full width beneath it.
+  const colX = side === "left" ? plateX + plateW + 76 : 108;
+  const colW = W - 108 - plateW - 76 - 108;
+  const fullX = 108;
+  const fullW = W - 216;
   c.fillStyle = t.accent;
-  label(c, chapterLabel(ctx.chapter), colX, top, 15, 7);
+  label(c, chapterLabel(ctx.chapter), colX, plateY + 40, 15, 7);
   c.fillStyle = t.ink;
   const title = text(c, page.title, {
-    x: colX, y: top + 92, maxWidth: colW, maxLines: 4,
-    fontSize: 66, minFontSize: 44, lineHeight: 72,
+    x: colX, y: plateY + 128, maxWidth: colW, maxLines: 4,
+    fontSize: 60, minFontSize: 40, lineHeight: 66,
     fontFamily: SERIF, fontWeight: "500", preserveAll: true, textRole: "headline",
   });
   c.fillStyle = t.accent;
-  c.fillRect(colX, title.endY + 6, 64, 2);
+  c.fillRect(colX, title.endY + 4, 64, 2);
 
-  bodyWithQuote(c, t, page, copy.body, { x: colX, y: title.endY + 80, maxWidth: colW, bottom: H - 170, dropCap: true, narrow: true });
-  centerFolio(c, t, ctx.folio, colX + colW / 2);
+  bodyWithQuote(c, t, page, copy.body, {
+    x: fullX, y: title.endY + 76, maxWidth: fullW, bottom: H - 150, dropCap: true,
+    wrap: { x: colX, width: colW, until: plateY + plateH + 66 },
+  });
+  centerFolio(c, t, ctx.folio, W / 2);
 }
 
 async function drawFullBleed(c: CanvasRenderingContext2D, page: VisualBookPage, ctx: SheetContext) {
@@ -427,33 +435,37 @@ async function drawFullBleed(c: CanvasRenderingContext2D, page: VisualBookPage, 
 
 async function drawQuote(c: CanvasRenderingContext2D, t: Theme, page: VisualBookPage, ctx: SheetContext) {
   const copy = buildVisualPageSections(page.body, page.title);
-  await framedImage(c, t, page.imageData, 170, 170, 860, 560);
+  const plateH = wordCount(copy.body) > 120 ? 560 : 620;
+  const plateW = Math.round(plateH / PLATE_RATIO);
+  await framedImage(c, t, page.imageData, (W - plateW) / 2, 140, plateW, plateH);
   c.textAlign = "center";
   c.fillStyle = t.ink;
   const title = text(c, page.title, {
-    x: W / 2, y: 880, maxWidth: 860, maxLines: 3,
-    fontSize: 64, minFontSize: 42, lineHeight: 72,
+    x: W / 2, y: 140 + plateH + 130, maxWidth: 860, maxLines: 3,
+    fontSize: 62, minFontSize: 42, lineHeight: 70,
     fontFamily: SERIF, fontStyle: "italic", fontWeight: "500", preserveAll: true, textRole: "headline",
   });
   ornamentRule(c, W / 2, title.endY - 6, t.accent);
   c.textAlign = "left";
-  bodyWithQuote(c, t, page, copy.body, { x: 170, y: title.endY + 74, maxWidth: 860, bottom: H - 150, dropCap: true });
+  bodyWithQuote(c, t, page, copy.body, { x: 150, y: title.endY + 70, maxWidth: 900, bottom: H - 150, dropCap: true });
   centerFolio(c, t, ctx.folio, W / 2);
 }
 
 async function drawClosing(c: CanvasRenderingContext2D, t: Theme, project: VisualBookProject, page: VisualBookPage, ctx: SheetContext) {
   const copy = buildVisualPageSections(page.body, page.title);
-  await framedImage(c, t, page.imageData, 250, 190, 700, 640);
+  const plateH = 640;
+  const plateW = Math.round(plateH / PLATE_RATIO);
+  await framedImage(c, t, page.imageData, (W - plateW) / 2, 150, plateW, plateH);
   c.textAlign = "center";
   c.fillStyle = t.ink;
   const title = text(c, page.title, {
-    x: W / 2, y: 990, maxWidth: 860, maxLines: 2,
-    fontSize: 66, minFontSize: 44, lineHeight: 74,
+    x: W / 2, y: 150 + plateH + 140, maxWidth: 860, maxLines: 2,
+    fontSize: 64, minFontSize: 44, lineHeight: 72,
     fontFamily: SERIF, fontWeight: "500", preserveAll: true, textRole: "headline",
   });
   ornamentRule(c, W / 2, title.endY - 12, t.accent);
   c.textAlign = "left";
-  bodyWithQuote(c, t, page, copy.body, { x: W / 2, y: title.endY + 72, maxWidth: 800, bottom: H - 250, align: "center", noQuote: true });
+  bodyWithQuote(c, t, page, copy.body, { x: W / 2, y: title.endY + 70, maxWidth: 820, bottom: H - 250, align: "center", noQuote: true });
   c.textAlign = "center";
   c.fillStyle = t.accent;
   label(c, project.author.toUpperCase(), W / 2, H - 132, 15, 7);
@@ -466,11 +478,15 @@ async function drawClosing(c: CanvasRenderingContext2D, t: Theme, project: Visua
 
 type BodyBox = {
   x: number; y: number; maxWidth: number; bottom: number;
-  dropCap?: boolean; narrow?: boolean; align?: "center"; noQuote?: boolean;
+  dropCap?: boolean; align?: "center"; noQuote?: boolean;
+  /** A narrower column used beside an image plate, for lines that start above `until`. */
+  wrap?: { x: number; width: number; until: number };
 };
 
+type BodyLine = { words: string[]; x: number; width: number };
+
 type BodyPlan = {
-  size: number; lineHeight: number; lines: string[][]; dropCap: string; dropCapSize: number; indent: number; endY: number;
+  size: number; lineHeight: number; lines: BodyLine[]; dropCap: string; dropCapSize: number; dropCapX: number; endY: number;
 };
 
 /** Sets the page copy, and the page's pull quote underneath when there is room for it. */
@@ -515,29 +531,44 @@ export function pullQuoteFor(page: Pick<VisualBookPage, "pullQuote">, body: stri
 }
 
 function planBody(c: CanvasRenderingContext2D, body: string, box: BodyBox, minimum: number): BodyPlan | null {
-  const start = box.narrow ? 33 : 35;
+  const start = 37;
   const firstChar = body.charAt(0);
   const useDropCap = Boolean(box.dropCap && box.align !== "center" && /[A-Za-z]/.test(firstChar));
   for (let size = start; size >= minimum; size -= 1) {
     const lineHeight = Math.round(size * 1.5);
-    const capacity = Math.floor((box.bottom - box.y) / lineHeight);
+    const capacity = Math.floor((box.bottom - box.y) / lineHeight) + 1;
     if (capacity < 1) return null;
-    c.font = `500 ${size}px ${SERIF}`;
     const dropCapSize = Math.round((2 * lineHeight + size * 0.64) / 0.64);
-    let indent = 0;
     let words = body.split(/\s+/).filter(Boolean);
     let dropCap = "";
+    let dropW = 0;
     if (useDropCap) {
       dropCap = firstChar;
       c.font = `600 ${dropCapSize}px ${SERIF}`;
-      indent = Math.ceil(c.measureText(dropCap).width) + 16;
-      c.font = `500 ${size}px ${SERIF}`;
+      dropW = Math.ceil(c.measureText(dropCap).width) + 16;
       const rest = words[0].slice(1);
       words = rest ? [rest, ...words.slice(1)] : words.slice(1);
     }
-    const lines = wrapWords(c, words, box.maxWidth, useDropCap ? indent : 0, useDropCap ? 3 : 0);
+    c.font = `500 ${size}px ${SERIF}`;
+    const geometry = (index: number) => {
+      const top = box.y + index * lineHeight - size;
+      const column = box.wrap && top < box.wrap.until ? { x: box.wrap.x, width: box.wrap.width } : { x: box.x, width: box.maxWidth };
+      return useDropCap && index < 3 ? { x: column.x + dropW, width: column.width - dropW } : column;
+    };
+    const lines: BodyLine[] = [];
+    let current: string[] = [];
+    for (const word of words) {
+      const g = geometry(lines.length);
+      const candidate = [...current, word].join(" ");
+      if (current.length && c.measureText(candidate).width > g.width) {
+        lines.push({ words: current, ...g });
+        current = [word];
+      } else current.push(word);
+    }
+    if (current.length) lines.push({ words: current, ...geometry(lines.length) });
     if (lines.length <= capacity) {
-      return { size, lineHeight, lines, dropCap, dropCapSize, indent, endY: box.y + (lines.length - 1) * lineHeight + size * 0.35 };
+      const dropCapX = (box.wrap && box.y - size < box.wrap.until ? box.wrap.x : box.x) - 2;
+      return { size, lineHeight, lines, dropCap, dropCapSize, dropCapX, endY: box.y + (lines.length - 1) * lineHeight + size * 0.35 };
     }
   }
   return null;
@@ -553,13 +584,12 @@ function trimToFit(c: CanvasRenderingContext2D, body: string, box: BodyBox) {
   return sentences[0] ?? "";
 }
 
-function wrapWords(c: CanvasRenderingContext2D, words: string[], maxWidth: number, indent: number, indentLines: number) {
+function wrapWords(c: CanvasRenderingContext2D, words: string[], maxWidth: number) {
   const lines: string[][] = [];
   let line: string[] = [];
   for (const word of words) {
-    const width = maxWidth - (lines.length < indentLines ? indent : 0);
     const candidate = [...line, word].join(" ");
-    if (line.length && c.measureText(candidate).width > width) {
+    if (line.length && c.measureText(candidate).width > maxWidth) {
       lines.push(line);
       line = [word];
     } else line.push(word);
@@ -572,33 +602,30 @@ function drawBody(c: CanvasRenderingContext2D, t: Theme, plan: BodyPlan, box: Bo
   if (plan.dropCap) {
     c.fillStyle = t.accent;
     c.font = `600 ${plan.dropCapSize}px ${SERIF}`;
-    drawVerbatimVisualLine(c, plan.dropCap, box.x - 2, box.y + 2 * plan.lineHeight);
+    drawVerbatimVisualLine(c, plan.dropCap, plan.dropCapX, box.y + 2 * plan.lineHeight);
   }
   c.fillStyle = t.body;
   c.font = `500 ${plan.size}px ${SERIF}`;
   const space = c.measureText(" ").width;
-  plan.lines.forEach((words, index) => {
+  plan.lines.forEach((line, index) => {
     const y = box.y + index * plan.lineHeight;
     if (box.align === "center") {
       c.textAlign = "center";
-      drawVerbatimVisualLine(c, words.join(" "), box.x, y);
+      drawVerbatimVisualLine(c, line.words.join(" "), box.x, y);
       c.textAlign = "left";
       return;
     }
-    const indent = plan.dropCap && index < 3 ? plan.indent : 0;
-    const x = box.x + indent;
-    const width = box.maxWidth - indent;
     const isLast = index === plan.lines.length - 1;
-    const natural = c.measureText(words.join(" ")).width;
-    const gaps = words.length - 1;
-    const extra = gaps > 0 ? (width - natural) / gaps : 0;
-    // Wide columns are justified; narrow columns stay ragged right so word gaps never open up.
-    if (box.narrow || isLast || gaps === 0 || extra > space * 1.6) {
-      drawVerbatimVisualLine(c, words.join(" "), x, y);
+    const natural = c.measureText(line.words.join(" ")).width;
+    const gaps = line.words.length - 1;
+    const extra = gaps > 0 ? (line.width - natural) / gaps : 0;
+    // Full lines are justified; the last line, and any line that would open wide gaps, stay ragged.
+    if (isLast || gaps === 0 || extra > space * 1.6) {
+      drawVerbatimVisualLine(c, line.words.join(" "), line.x, y);
       return;
     }
-    let cursor = x;
-    for (const word of words) {
+    let cursor = line.x;
+    for (const word of line.words) {
       drawVerbatimVisualLine(c, word, cursor, y);
       cursor += c.measureText(word).width + space + extra;
     }
@@ -609,7 +636,7 @@ function drawBody(c: CanvasRenderingContext2D, t: Theme, plan: BodyPlan, box: Bo
 
 function countLines(c: CanvasRenderingContext2D, source: string, font: string, maxWidth: number) {
   c.font = font;
-  return wrapWords(c, source.split(/\s+/).filter(Boolean), maxWidth, 0, 0).length;
+  return wrapWords(c, source.split(/\s+/).filter(Boolean), maxWidth).length;
 }
 
 function centerFolio(c: CanvasRenderingContext2D, t: Theme, folio: number, x: number) {

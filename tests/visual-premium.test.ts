@@ -80,3 +80,28 @@ test("pdf helpers read canvas colors and chapter numerals", () => {
   assert.deepEqual(parseColor("rgba(243, 234, 217, 0.7)"), { r: 243, g: 234, b: 217, a: 0.7 });
   assert.deepEqual([1, 4, 9, 14, 40].map(roman), ["I", "IV", "IX", "XIV", "XL"]);
 });
+
+test("the art check reads the checker's verdict and puts corrections where the image model reads first", async () => {
+  const { parseArtCheck, promptWithCorrections, checkVisualArt } = await import("../app/art-check");
+  assert.deepEqual(parseArtCheck('{"passed": true, "problems": []}'), { passed: true, skipped: false, problems: [] });
+  assert.deepEqual(parseArtCheck('Here: {"passed": false, "problems": ["garbled text on a page", "head turned backward"]}'), {
+    passed: false, skipped: false, problems: ["garbled text on a page", "head turned backward"],
+  });
+  assert.equal(parseArtCheck("no json"), null);
+  const fixed = promptWithCorrections("One original book illustration.\nNo text.", ["garbled text on a page"]);
+  assert.equal(fixed.split("\n")[1], "The last attempt was rejected. Avoid: garbled text on a page.");
+  const saved = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  assert.deepEqual(await checkVisualArt("data:image/jpeg;base64,AAAA", { scene: "", characterBible: "" }), { passed: true, skipped: true, problems: [] });
+  process.env.ANTHROPIC_API_KEY = "test";
+  const reply = new Response(JSON.stringify({ content: [{ type: "text", text: '{"passed": false, "problems": ["extra fingers"]}' }] }), { status: 200 });
+  const verdict = await checkVisualArt("data:image/jpeg;base64,AAAA", { scene: "a kitchen", characterBible: "" }, (async () => reply) as typeof fetch);
+  assert.deepEqual(verdict, { passed: false, skipped: false, problems: ["extra fingers"] });
+  if (saved === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved;
+});
+
+test("image prompts ask for natural anatomy and blank pages", () => {
+  const prompt = buildVisualImagePrompt({ scene: "A woman kneels by a closet.", camera: "", style: "", characterBible: "", palette: "" });
+  assert.match(prompt, /Natural anatomy/);
+  assert.match(prompt, /Any book, page, paper, sign, or screen is blank/);
+});
