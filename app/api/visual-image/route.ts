@@ -1,5 +1,6 @@
 import { characterSheetPrompt, decodeReferenceImages } from "../../character-refs";
 import { checkVisualArt, promptWithCorrections } from "../../art-check";
+import { falImageConfigured, generateFalImage } from "../../fal-image";
 import { artLookFinish, buildVisualImagePrompt } from "../../visual-image-prompt";
 import { COMICS_REMOVED_MESSAGE, isRetiredComicRequest, resolveArtLook } from "../../visual-book-types";
 import { NextResponse } from "next/server";
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
   const denied = await denyWithoutApiAccess(request);
   if (denied) return denied;
   try {
-    if (!process.env.OPENAI_API_KEY && !cloudflareImageConfigured()) return NextResponse.json({ error: "No image provider is configured." }, { status: 503 });
+    if (!process.env.OPENAI_API_KEY && !cloudflareImageConfigured() && !falImageConfigured()) return NextResponse.json({ error: "No image provider is configured." }, { status: 503 });
     const { project, page, character, references: rawReferences } = (await request.json()) as VisualImageRequest;
     const characterSheet = Boolean(character);
     if (!project?.title || (!page && !characterSheet)) return NextResponse.json({ error: "Complete the visual project and storyboard first." }, { status: 400 });
@@ -138,6 +139,20 @@ async function drawImage(
   options: { width: number; height: number; size: string; references: Exclude<ReturnType<typeof decodeReferenceImages>, { error: string }>; characterSheet: boolean },
 ) {
   const { width, height, size, references, characterSheet } = options;
+  // fal.ai goes first when its key is set: better FLUX, references supported, and no daily cap.
+  // Any fal failure falls through to the existing Cloudflare and OpenAI chain below.
+  if (falImageConfigured()) {
+    try {
+      const drawn = await generateFalImage(prompt, width, height, references);
+      return NextResponse.json({ imageData: drawn.imageData, imageProvider: "fal", referencesUsed: references.length });
+    } catch (falError) {
+      console.warn("Visual image: fal.ai failed, trying the next provider", falError instanceof Error ? falError.message : falError);
+      if (!cloudflareImageConfigured() && !process.env.OPENAI_API_KEY) {
+        const detail = falError instanceof Error ? falError.message : "fal.ai could not generate the image.";
+        return NextResponse.json({ code: "fal_failed", error: `${detail} Your storyboard is safe.` }, { status: 502 });
+      }
+    }
+  }
     // Character references only work on the Cloudflare FLUX.2 model, and a
     // character's reference picture must come from the same model that will
     // copy it. Both go straight to Cloudflare when it is set up.

@@ -133,3 +133,28 @@ test("unnamed cast references match the scene by their last word", async () => {
   assert.equal(sceneNamesRef("Pip hides", "Pip"), true);
   assert.equal(sceneNamesRef("A red hat on a hook", "The big hat"), false);
 });
+
+test("fal.ai requests use Kontext max, the right aspect ratio, and references as data URIs", async () => {
+  const { falRequestBody, generateFalImage, FAL_REFERENCE_MODEL, FAL_TEXT_MODEL } = await import("../app/fal-image");
+  const page = falRequestBody("One cinematic photograph.", 1024, 1536);
+  assert.equal(page.aspect_ratio, "2:3");
+  assert.equal("image_urls" in page, false);
+  const sheet = falRequestBody("Ref.", 1024, 1024, [{ bytes: new Uint8Array([1, 2, 3]), mime: "image/png" }]);
+  assert.equal(sheet.aspect_ratio, "1:1");
+  assert.deepEqual(sheet.image_urls, ["data:image/png;base64,AQID"]);
+  const saved = process.env.FAL_KEY;
+  process.env.FAL_KEY = "k";
+  const calls: string[] = [];
+  const fetcher = (async (url: string, init?: { headers?: Record<string, string> }) => {
+    calls.push(`${url} ${init?.headers?.Authorization}`);
+    return new Response(JSON.stringify({ images: [{ url: "data:image/jpeg;base64,AAAA" }], has_nsfw_concepts: [false] }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const text = await generateFalImage("p", 1024, 1536, [], fetcher);
+  const refs = await generateFalImage("p", 1024, 1536, [{ bytes: new Uint8Array([1]), mime: "image/png" }], fetcher);
+  assert.equal(text.imageData, "data:image/jpeg;base64,AAAA");
+  assert.deepEqual(calls, [`https://fal.run/${FAL_TEXT_MODEL} Key k`, `https://fal.run/${FAL_REFERENCE_MODEL} Key k`]);
+  assert.equal(refs.model, FAL_REFERENCE_MODEL);
+  const broke = (async () => new Response(JSON.stringify({ detail: "Exhausted balance" }), { status: 403 })) as unknown as typeof fetch;
+  await assert.rejects(generateFalImage("p", 1024, 1536, [], broke), /credits are used up/);
+  if (saved === undefined) delete process.env.FAL_KEY; else process.env.FAL_KEY = saved;
+});
