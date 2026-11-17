@@ -69,9 +69,14 @@ function escapeRegExp(value: string) {
 }
 
 /** Prompt for the one drawing that defines a character. */
-export function characterSheetPrompt(input: { name: string; description: string; style: string; palette: string }) {
+export function characterSheetPrompt(input: { name: string; description: string; style: string; palette: string; look?: "photographic" | "painting" | "illustrated" }) {
+  const opening = input.look === "photographic"
+    ? "Character reference photograph of one real person, full body, centered, facing slightly toward the viewer, neutral pose, studio portrait. Not a drawing or cartoon."
+    : input.look === "painting"
+      ? "Character reference painting, fine-art oil and watercolor. One character, full body, centered, facing slightly toward the viewer, neutral pose. Not a cartoon."
+      : "Character design reference, artwork only. One character, full body, centered, facing slightly toward the viewer, neutral friendly pose.";
   return [
-    "Character design reference, artwork only. One character, full body, centered, facing slightly toward the viewer, neutral friendly pose.",
+    opening,
     "No text in the image: no words, letters, numbers, labels, or watermarks.",
     `The character: ${clean(input.description, DESCRIPTION_LIMIT)}`,
     "Plain soft light background with nothing else in it. No other characters, no props, no scenery, no frame.",

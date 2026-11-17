@@ -1,7 +1,7 @@
 import { characterSheetPrompt, decodeReferenceImages } from "../../character-refs";
 import { checkVisualArt, promptWithCorrections } from "../../art-check";
-import { buildVisualImagePrompt, premiumArtFinish } from "../../visual-image-prompt";
-import { COMICS_REMOVED_MESSAGE, isRetiredComicRequest } from "../../visual-book-types";
+import { artLookFinish, buildVisualImagePrompt } from "../../visual-image-prompt";
+import { COMICS_REMOVED_MESSAGE, isRetiredComicRequest, resolveArtLook } from "../../visual-book-types";
 import { NextResponse } from "next/server";
 import { denyWithoutApiAccess } from "../../api-access";
 import { buildVisualArtworkDirection } from "../../creative-direction";
@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       },
       project.visualStyle,
     );
+    const look = resolveArtLook(project);
     const size = characterSheet ? "1024x1024" : "1024x1536";
     const prompt = characterSheet
       ? characterSheetPrompt({
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
           description: String(character?.description ?? ""),
           style,
           palette: project.palette ?? "",
+          look,
         })
       : buildVisualImagePrompt({
           scene: page?.imagePrompt ?? "",
@@ -105,7 +107,8 @@ export async function POST(request: Request) {
           style,
           characterBible: project.characterBible ?? "",
           palette: project.palette ?? "",
-          finish: premiumArtFinish(String(project.visualStyle ?? "")),
+          finish: artLookFinish(look),
+          look,
           referenceNames: references.map((reference) => reference.name),
         });
     const [width, height] = size.split("x").map(Number);
@@ -114,7 +117,7 @@ export async function POST(request: Request) {
     if (characterSheet || !first.ok) return first;
     // Look at the page art before it is saved; redraw once with the problems named.
     const firstData = (await first.json()) as DrawnImage;
-    const context = { scene: page?.imagePrompt ?? "", characterBible: project.characterBible ?? "" };
+    const context = { scene: page?.imagePrompt ?? "", characterBible: project.characterBible ?? "", look };
     const firstCheck = await checkVisualArt(firstData.imageData, context);
     if (firstCheck.passed) return NextResponse.json({ ...firstData, artCheck: { ...firstCheck, redrawn: false } });
     const second = await draw(promptWithCorrections(prompt, firstCheck.problems));

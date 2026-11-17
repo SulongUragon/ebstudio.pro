@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isCompleteSentence, splitIntoCompleteSentences } from "../app/visual-book-exporters";
 import { normalizeVisualPages } from "../app/visual-book-utils";
-import { buildVisualImagePrompt, premiumArtFinish } from "../app/visual-image-prompt";
+import { artLookFinish, artLookOpening, buildVisualImagePrompt } from "../app/visual-image-prompt";
 import { isPremiumProject, parseColor, premiumSequence, pullQuoteFor, roman } from "../app/visual-premium";
 import { blankVisualBookBrief, type VisualBookPage, type VisualBookProject } from "../app/visual-book-types";
 
@@ -58,21 +58,25 @@ test("the storyboard keeps each page's pull quote", () => {
   assert.equal(page.pullQuote, "The line to underline.");
 });
 
-test("premium art finish matches the style and the prompt still fits the backup model", () => {
-  assert.match(premiumArtFinish("cinematic-editorial"), /film grain/);
-  assert.match(premiumArtFinish("warm-storybook"), /illustration/);
-  assert.equal(premiumArtFinish("notebook-reflection"), "");
+test("the art look opens the prompt and the prompt still fits the backup model", () => {
+  assert.match(artLookFinish("photographic"), /film grain/);
+  assert.match(artLookFinish("illustrated"), /illustration/);
+  assert.match(artLookOpening("photographic"), /^One cinematic photograph.*Not a drawing, cartoon/);
+  assert.equal(artLookOpening("illustrated"), "One original book illustration, artwork only.");
+  const photo = buildVisualImagePrompt({ scene: "A woman packs a closet.", camera: "", style: "", characterBible: "", palette: "", look: "photographic" });
+  assert.ok(photo.startsWith("One cinematic photograph"));
   const long = buildVisualImagePrompt({
     scene: "s ".repeat(900),
     camera: "c ".repeat(300),
     style: "t ".repeat(600),
     characterBible: "Mara has a red scarf. ".repeat(120),
     palette: "p ".repeat(500),
-    finish: premiumArtFinish("dark-luxury"),
+    finish: artLookFinish("photographic"),
+    look: "photographic",
     referenceNames: ["Mara", "Pip"],
   });
-  assert.ok(long.length <= 2000, `prompt was ${long.length} characters`);
-  assert.ok(long.includes("Finish: fine art editorial photography"));
+  assert.ok(long.length <= 1760, `prompt was ${long.length} characters, leaving too little room for redraw corrections`);
+  assert.ok(long.includes("Finish: editorial photography"));
 });
 
 test("pdf helpers read canvas colors and chapter numerals", () => {
@@ -104,4 +108,18 @@ test("image prompts ask for natural anatomy and blank pages", () => {
   const prompt = buildVisualImagePrompt({ scene: "A woman kneels by a closet.", camera: "", style: "", characterBible: "", palette: "" });
   assert.match(prompt, /Natural anatomy/);
   assert.match(prompt, /Any book, page, paper, sign, or screen is blank/);
+});
+
+test("older projects get the art look that suits their style", async () => {
+  const { resolveArtLook } = await import("../app/visual-book-types");
+  assert.equal(resolveArtLook({ visualStyle: "cinematic-editorial", kind: "illustrated-story" }), "photographic");
+  assert.equal(resolveArtLook({ visualStyle: "cinematic-editorial", kind: "children-story" }), "illustrated");
+  assert.equal(resolveArtLook({ visualStyle: "warm-storybook", kind: "illustrated-story" }), "illustrated");
+  assert.equal(resolveArtLook({ visualStyle: "warm-storybook", kind: "illustrated-story", artLook: "painting" }), "painting");
+});
+
+test("the photographic art check fails cartoons", async () => {
+  const { artCheckInstructions } = await import("../app/art-check");
+  assert.match(artCheckInstructions({ scene: "", characterBible: "", look: "photographic" }), /realistic photograph.*cartoon/);
+  assert.doesNotMatch(artCheckInstructions({ scene: "", characterBible: "", look: "illustrated" }), /Required look/);
 });

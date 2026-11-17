@@ -19,7 +19,7 @@ export function artCheckConfigured() {
 
 export async function checkVisualArt(
   imageData: string,
-  context: { scene: string; characterBible: string },
+  context: ArtCheckContext,
   fetcher: typeof fetch = fetch,
 ): Promise<ArtCheck> {
   const skipped: ArtCheck = { passed: true, skipped: true, problems: [] };
@@ -58,8 +58,16 @@ export async function checkVisualArt(
   }
 }
 
-export function artCheckInstructions(context: { scene: string; characterBible: string }) {
-  return `You check one illustration for a premium picture book before the author sees it.
+type ArtCheckContext = { scene: string; characterBible: string; look?: "photographic" | "painting" | "illustrated" };
+
+const LOOK_RULES = {
+  photographic: "4. Required look: a realistic photograph. Fail it if it looks like a drawing, cartoon, comic, anime, flat illustration, or 3D render.",
+  painting: "4. Required look: a fine-art painting. Fail it if it looks like a cartoon, comic, anime, flat vector art, or 3D render.",
+  illustrated: "",
+};
+
+export function artCheckInstructions(context: ArtCheckContext) {
+  return `You check one picture for a premium illustrated book before the author sees it.
 Intended scene: ${clip(context.scene, 500) || "not given"}
 Cast description: ${clip(context.characterBible, 500) || "not given"}
 
@@ -67,6 +75,7 @@ Fail the image only for problems a reader would notice:
 1. Any visible writing: letters, words, numbers, captions, signatures, or text-like scribbles anywhere, including on books, papers, signs, or screens.
 2. Broken anatomy: a head turned in a way a body cannot turn, a body facing one way with the face another, extra or missing limbs, fused or extra fingers, melted or doubled faces.
 3. The main subject of the intended scene is missing, or a large part of the image is blank or a flat box.
+${LOOK_RULES[context.look ?? "illustrated"]}
 Style, color, and composition choices are not problems.
 
 Reply with JSON only: {"passed": true or false, "problems": ["short plain description of each problem"]}`;

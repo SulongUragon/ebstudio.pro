@@ -7,7 +7,8 @@ export type VisualBookKind = "illustrated-story" | "children-story" | "visual-gu
 export type VisualPageCount = number;
 export type VisualStyle = "cinematic-editorial" | "warm-storybook" | "dark-luxury" | "clean-modern" | "bold-color" | "ink-noir" | "notebook-reflection" | "warm-practical-guide";
 export type VisualBookPage = { id: string; pageNumber: number; role: "cover" | "content" | "cta"; title: string; body: string; imagePrompt: string; imageData?: string; pullQuote?: string; layout: "full-bleed" | "image-top" | "image-left" | "image-right" | "quote" };
-export type VisualBookBrief = { mode: VisualProjectMode; title: string; subtitle: string; author: string; kind: VisualBookKind; premise: string; audience: string; pageCount: VisualPageCount; visualStyle: VisualStyle; characterBible: string; palette: string };
+export type ArtLook = "photographic" | "painting" | "illustrated";
+export type VisualBookBrief = { mode: VisualProjectMode; title: string; subtitle: string; author: string; kind: VisualBookKind; premise: string; audience: string; pageCount: VisualPageCount; visualStyle: VisualStyle; characterBible: string; palette: string; artLook?: ArtLook };
 export type VisualBookProject = VisualBookBrief & { id: string; createdAt: string; updatedAt: string; pages: VisualBookPage[]; providersUsed?: ActiveAIProvider[]; characterRefs?: CharacterRef[] };
 
 export const VISUAL_BOOK_KINDS: Array<{ id: VisualBookKind; label: string; note: string }> = [
@@ -27,6 +28,17 @@ export const VISUAL_STYLES: Array<{ id: VisualStyle; label: string }> = [
   { id: "notebook-reflection", label: "Notebook Reflection" },
   { id: "warm-practical-guide", label: "Warm Practical Guide" },
 ];
+export const ART_LOOKS: Array<{ id: ArtLook; label: string; note: string }> = [
+  { id: "photographic", label: "Photographic", note: "Cinematic photographs of real people and places." },
+  { id: "painting", label: "Fine-art painting", note: "Gallery oil and watercolor, never cartoon." },
+  { id: "illustrated", label: "Illustrated", note: "Hand-drawn book illustration." },
+];
+/** Projects saved before the Art look setting get the look that suits their style. */
+export function resolveArtLook(brief: Pick<VisualBookBrief, "artLook" | "visualStyle" | "kind">): ArtLook {
+  if (brief.artLook === "photographic" || brief.artLook === "painting" || brief.artLook === "illustrated") return brief.artLook;
+  if (brief.kind === "children-story") return "illustrated";
+  return ["cinematic-editorial", "dark-luxury", "clean-modern"].includes(brief.visualStyle) ? "photographic" : "illustrated";
+}
 export const blankVisualBookBrief = (mode: VisualProjectMode = "visual"): VisualBookBrief => ({ mode, title: "", subtitle: "", author: "Sulong", kind: "illustrated-story", premise: "", audience: "", pageCount: 7, visualStyle: "cinematic-editorial", characterBible: "", palette: "" });
 
 /** Comics and graphic stories were removed from the app; requests for them are refused before any AI is called. */

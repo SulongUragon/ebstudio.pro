@@ -1,4 +1,5 @@
 import { referenceInstruction } from "./character-refs";
+import type { ArtLook } from "./visual-book-types";
 
 /**
  * Prompt for one visual-book illustration.
@@ -16,19 +17,21 @@ export type VisualImagePromptInput = {
   palette: string;
   /** Premium finish for the book's visual style; see premiumArtFinish. */
   finish?: string;
+  /** The medium the whole book is drawn in; it opens the prompt so it is never cut off. */
+  look?: ArtLook;
   /** Names of the characters whose reference drawings are sent with this request, in order. */
   referenceNames?: string[];
 };
 
 // Fixed wording is about 540 characters; these keep the whole prompt near 1,700, leaving room
 // for the art checker's corrections on a redraw within the backup model's 2,000.
-const LIMITS = { scene: 300, camera: 70, style: 130, cast: 460, palette: 120, finish: 130 };
+const LIMITS = { scene: 290, camera: 60, style: 70, cast: 450, palette: 110, finish: 130 };
 
 export function buildVisualImagePrompt(input: VisualImagePromptInput) {
   // The reference instruction needs room, so the written cast lock gets less when it is present.
-  const cast = clip(input.characterBible, input.referenceNames?.length ? LIMITS.cast - 240 : LIMITS.cast);
+  const cast = clip(input.characterBible, input.referenceNames?.length ? LIMITS.cast - 280 : LIMITS.cast);
   const lines = [
-    "One original book illustration, artwork only.",
+    artLookOpening(input.look ?? "illustrated"),
     "No text in the image: no words, letters, numbers, titles, captions, signs, labels, logos, or watermarks. Any book, page, paper, sign, or screen is blank.",
     "Natural anatomy: each person's head, neck, shoulders, and body face the same way; two arms, two legs, five-fingered hands.",
     referenceInstruction(input.referenceNames ?? []),
@@ -45,14 +48,18 @@ export function buildVisualImagePrompt(input: VisualImagePromptInput) {
   return lines.filter(Boolean).join("\n");
 }
 
-const PHOTOGRAPHIC_STYLES = new Set(["cinematic-editorial", "dark-luxury", "clean-modern"]);
-const ILLUSTRATED_STYLES = new Set(["warm-storybook", "bold-color", "ink-noir"]);
+/** First line of every page prompt: the medium, stated so plainly the model cannot drift into another one. */
+export function artLookOpening(look: ArtLook) {
+  if (look === "photographic") return "One cinematic photograph of real people and real places, natural light, full-frame camera. Not a drawing, cartoon, anime, or 3D render.";
+  if (look === "painting") return "One fine-art painting, oil and watercolor on textured paper, gallery quality. Not a cartoon, anime, vector art, or 3D render.";
+  return "One original book illustration, artwork only.";
+}
 
-/** Gallery-grade finishing note that matches the premium page design. */
-export function premiumArtFinish(visualStyle: string) {
-  if (PHOTOGRAPHIC_STYLES.has(visualStyle)) return "fine art editorial photography, natural film grain, subtle filmic color grade, quiet restraint, gallery print quality";
-  if (ILLUSTRATED_STYLES.has(visualStyle)) return "premium hand-crafted illustration, visible artisan texture, refined restraint, gallery print quality";
-  return "";
+/** Finishing note for the chosen medium. */
+export function artLookFinish(look: ArtLook) {
+  if (look === "photographic") return "editorial photography, natural film grain, subtle filmic color grade, quiet restraint, gallery print quality";
+  if (look === "painting") return "visible brushwork and paper texture, museum-quality fine art, refined restraint";
+  return "premium hand-crafted illustration, visible artisan texture, refined restraint, gallery print quality";
 }
 
 /**

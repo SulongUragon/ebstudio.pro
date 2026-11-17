@@ -23,8 +23,10 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ActiveAIProvider, AIProvider } from "./book-types";
 import {
+  ART_LOOKS,
   VISUAL_BOOK_KINDS,
   VISUAL_STYLES,
+  resolveArtLook,
   blankVisualBookBrief,
   isRetiredComicRequest,
   type VisualBookBrief,
@@ -415,6 +417,14 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
             </select>
           </fieldset>
 
+          <fieldset className="visual-inline-options" disabled={locked}>
+            <legend>Art look</legend>
+            <select value={resolveArtLook(brief)} onChange={event => project ? updateProjectBrief("artLook", event.target.value as VisualBookBrief["artLook"]) : updateBrief("artLook", event.target.value as VisualBookBrief["artLook"])}>
+              {ART_LOOKS.map(look => <option key={look.id} value={look.id}>{look.label}</option>)}
+            </select>
+            <small>{ART_LOOKS.find(look => look.id === resolveArtLook(brief))?.note} Changing it applies to art you generate next.</small>
+          </fieldset>
+
           <div className="character-lock-block">
             <div>
               <span><Save size={15} /> Character & world lock</span>
@@ -662,6 +672,7 @@ function projectBrief(project: VisualBookProject): VisualBookBrief {
     visualStyle: project.visualStyle,
     characterBible: project.characterBible,
     palette: project.palette,
+    artLook: project.artLook,
   };
 }
 
