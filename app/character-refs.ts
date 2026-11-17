@@ -59,9 +59,22 @@ export function referencesForScene(refs: CharacterRef[] | undefined, sceneText: 
   const text = String(sceneText ?? "");
   return (refs ?? [])
     .filter((ref) => ref.imageData && ref.name.trim())
-    .filter((ref) => new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(ref.name.trim())}([^A-Za-z0-9]|$)`, "i").test(text))
+    .filter((ref) => sceneNamesRef(text, ref.name))
     .slice(0, MAX_CHARACTER_REFS)
     .map((ref) => ({ name: ref.name.trim(), imageData: ref.imageData as string }));
+}
+
+/**
+ * A scene names a reference by its full name ("Pip"), or, for an unnamed
+ * character or object such as "The grieving woman", by its last word ("a woman kneels").
+ */
+export function sceneNamesRef(sceneText: string, name: string) {
+  const words = (term: string) => new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(term)}([^A-Za-z0-9]|$)`, "i").test(sceneText);
+  const full = name.trim();
+  if (words(full)) return true;
+  const parts = full.split(/\s+/);
+  const last = parts.at(-1)?.replace(/[^A-Za-z-]/g, "") ?? "";
+  return parts.length > 1 && last.length >= 4 && words(last);
 }
 
 function escapeRegExp(value: string) {

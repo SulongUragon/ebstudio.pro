@@ -123,3 +123,13 @@ test("the photographic art check fails cartoons", async () => {
   assert.match(artCheckInstructions({ scene: "", characterBible: "", look: "photographic" }), /realistic photograph.*cartoon/);
   assert.doesNotMatch(artCheckInstructions({ scene: "", characterBible: "", look: "illustrated" }), /Required look/);
 });
+
+test("unnamed cast references match the scene by their last word", async () => {
+  const { sceneNamesRef } = await import("../app/character-refs");
+  assert.equal(sceneNamesRef("Interior shot of a woman kneeling beside an open closet", "The grieving woman"), true);
+  assert.equal(sceneNamesRef("A woman's hands set a photo down", "The grieving woman"), true);
+  assert.equal(sceneNamesRef("An armchair draped with an amber cardigan", "The wooden armchair with amber cardigan"), true);
+  assert.equal(sceneNamesRef("Luma glows beside the shed", "Pip"), false);
+  assert.equal(sceneNamesRef("Pip hides", "Pip"), true);
+  assert.equal(sceneNamesRef("A red hat on a hook", "The big hat"), false);
+});
