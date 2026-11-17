@@ -621,7 +621,7 @@ Create exactly ${pageCount} total pages, including the cover. Page 1 is the cove
 This is an image-rich mini ebook, not a chapter book. Keep the cover body to a focused 12 to 28 word hook. Every non-cover page must contain 90 to 150 words across 4 to 7 complete sentences. Build one developed main idea plus at least two specific supporting details, insights, consequences, examples, or reflective observations that can become designed takeaway sections. For fiction and memoir, use concrete scene detail, interiority, and consequence. For guides, workbooks, lead magnets, and self-help, use explanation, practical application, and a meaningful reflection or takeaway. Use the available page space fully, but never repeat an idea merely to increase length. Rotate layouts so consecutive pages do not all look identical. Every image_prompt must describe only visible artwork and must explicitly exclude words, letters, captions, typography, logos, and watermarks. For every non-cover page, pull_quote must copy, word for word, the single most striking complete sentence from that page's body (8 to 22 words), the line a reader would underline; it is set large on the page as a pull quote. For the cover, pull_quote is an empty string.
 
 Maintain a single narrative or instructional progression with no repeated page purpose. The title supplied by the author is authoritative and must not be changed. If the subtitle is blank, create one in refined_subtitle. If the author supplied one, return it exactly. Strengthen the character bible and palette only when their fields are blank. Return exactly ${pageCount} page objects numbered 1 through ${pageCount}.`,
-    maxOutputTokens: Math.min(30000, Math.max(8000, pageCount * 700)),
+    maxOutputTokens: visualStoryboardBudget(pageCount),
   }, body.provider ?? "auto", body.preferredProvider);
   const pages = Array.isArray(generated.output.pages) ? generated.output.pages : [];
   if (pages.length !== pageCount) throw new ProviderRequestError(generated.provider, 502, "invalid_response", `The visual storyboard did not contain exactly ${pageCount} pages.`);
@@ -1176,6 +1176,14 @@ export function outlineTokenBudget(chapterCount: number) {
   // and a budget that runs out cuts the JSON off mid-object.
   const chapters = Math.max(1, Number(chapterCount) || 8);
   return Math.min(24000, Math.max(5000, 3000 + chapters * 520));
+}
+
+/**
+ * Output budget for a whole visual storyboard. Each page carries 90 to 150 words of copy,
+ * an image prompt, a pull quote, and JSON overhead; 700 per page cut off 15-page recipe books.
+ */
+export function visualStoryboardBudget(pageCount: number) {
+  return Math.min(32000, Math.max(8000, Math.round(pageCount) * 1400));
 }
 
 /** Highest output budget a truncation retry may ask each provider for. */

@@ -158,3 +158,12 @@ test("fal.ai requests use Kontext max, the right aspect ratio, and references as
   await assert.rejects(generateFalImage("p", 1024, 1536, [], broke), /credits are used up/);
   if (saved === undefined) delete process.env.FAL_KEY; else process.env.FAL_KEY = saved;
 });
+
+test("the storyboard budget leaves room for every page", async () => {
+  const { visualStoryboardBudget, truncationRetryBudget } = await import("../app/api/generate/route");
+  assert.equal(visualStoryboardBudget(5), 8000);
+  assert.equal(visualStoryboardBudget(15), 21000);
+  assert.ok(visualStoryboardBudget(15) > 16800, "15 pages once failed at 16,800 tokens");
+  assert.equal(visualStoryboardBudget(50), 32000);
+  assert.equal(truncationRetryBudget("anthropic", visualStoryboardBudget(15)), 32000);
+});
