@@ -208,3 +208,10 @@ test("fade layouts are accepted from the storyboard and ask for wide art", async
   assert.equal(page.layout, "fade-bottom");
   assert.equal(falAspectRatio(1536, 1024), "3:2");
 });
+
+test("the last page keeps its closing design unless a layout is chosen", async () => {
+  const { effectivePageLayout } = await import("../app/visual-book-types");
+  assert.equal(effectivePageLayout({ role: "cta", layout: "quote" }), undefined);
+  assert.equal(effectivePageLayout({ role: "cta", layout: "quote", closingLayout: "fade-bottom" }), "fade-bottom");
+  assert.equal(effectivePageLayout({ role: "content", layout: "fade-top", closingLayout: "image-left" }), "fade-top");
+});

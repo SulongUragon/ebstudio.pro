@@ -157,10 +157,23 @@ async function drawSheet(c: CanvasRenderingContext2D, t: Theme, project: VisualB
   if (sheet.kind === "colophon") return drawColophon(c, t, project);
   if (sheet.kind === "back") return drawBackCover(c, project);
   const page = sheet.page;
-  const ctx = { folio: sheet.folio, chapter: sheet.chapter };
-  if (page.role === "cta") return drawClosing(c, t, project, page, ctx);
+  const ctx: SheetContext = { folio: sheet.folio, chapter: sheet.chapter, reserve: 0 };
+  if (page.role === "cta") {
+    if (!page.closingLayout) return drawClosing(c, t, project, page, ctx);
+    // A chosen layout on the last page keeps room at the foot for the closing signature.
+    const closing: SheetContext = { ...ctx, reserve: SIGNATURE_RESERVE };
+    const asContent = { ...page, layout: page.closingLayout };
+    await drawStoryLayout(c, t, project, asContent, closing);
+    const fadeBottom = page.closingLayout === "fade-bottom";
+    drawSignature(c, t, project, fadeBottom ? H - FADE_BOTTOM_BAND_H - 40 : H - 162, page.closingLayout === "full-bleed" || (t.dark && !fadeBottom));
+    return;
+  }
   const ingredients = page.ingredientsPage ? parseIngredients(project.ingredients) : [];
   if (ingredients.length) return drawIngredientsPage(c, t, page, ingredients, ctx);
+  return drawStoryLayout(c, t, project, page, ctx);
+}
+
+async function drawStoryLayout(c: CanvasRenderingContext2D, t: Theme, project: VisualBookProject, page: VisualBookPage, ctx: SheetContext) {
   if (page.layout === "fade-top" || page.layout === "fade-bottom") return drawFade(c, t, page, page.layout === "fade-top" ? "top" : "bottom", ctx);
   const layout = resolveEditorialLayout(page);
   if (layout === "full-bleed") return drawFullBleed(c, page, ctx);
@@ -170,7 +183,24 @@ async function drawSheet(c: CanvasRenderingContext2D, t: Theme, project: VisualB
   return drawImageTop(c, t, page, ctx);
 }
 
-type SheetContext = { folio: number; chapter: number };
+type SheetContext = { folio: number; chapter: number; reserve: number };
+
+/** Space kept at the foot of a last page for the author's name and imprint. */
+const SIGNATURE_RESERVE = 120;
+const FADE_BOTTOM_BAND_H = 880;
+
+/** Author name with the imprint (for example ROBANO | STUDIO) set beneath it. */
+function drawSignature(c: CanvasRenderingContext2D, t: Theme, project: VisualBookProject, y: number, onDark: boolean) {
+  c.textAlign = "center";
+  c.fillStyle = onDark ? "#d4a843" : t.accent;
+  label(c, project.author.toUpperCase(), W / 2, y, 15, 7);
+  const imprint = (project.imprint ?? "").trim();
+  if (imprint) {
+    c.fillStyle = onDark ? "#cfc4b0" : t.muted;
+    label(c, imprint.toUpperCase(), W / 2, y + 30, 13, 6);
+  }
+  c.textAlign = "left";
+}
 
 /* ---------- cover and book pages ---------- */
 
@@ -294,6 +324,7 @@ function drawColophon(c: CanvasRenderingContext2D, t: Theme, project: VisualBook
   const lines = [
     `Copyright © ${year} ${project.author}. All rights reserved.`,
     "No part of this book may be reproduced without written permission from the author.",
+    ...((project.imprint ?? "").trim() ? [`Published by ${(project.imprint ?? "").trim()}.`] : []),
     "Set in Cormorant Garamond and Montserrat.",
     "Designed with EB Studio Pro.",
   ];
@@ -339,9 +370,14 @@ async function drawBackCover(c: CanvasRenderingContext2D, project: VisualBookPro
     });
   }
   c.fillStyle = "#d4a843";
-  label(c, project.author.toUpperCase(), W / 2, H - 200, 16, 8);
+  label(c, project.author.toUpperCase(), W / 2, H - 220, 16, 8);
+  const imprint = (project.imprint ?? "").trim();
+  if (imprint) {
+    c.fillStyle = "#cfc4b0";
+    label(c, imprint.toUpperCase(), W / 2, H - 188, 13, 6);
+  }
   c.fillStyle = "#9c8f7a";
-  label(c, "A VISUAL EDITION", W / 2, H - 150, 13, 7);
+  label(c, "A VISUAL EDITION", W / 2, H - 140, 13, 7);
   c.textAlign = "left";
 }
 
@@ -370,7 +406,7 @@ async function drawImageTop(c: CanvasRenderingContext2D, t: Theme, page: VisualB
   ornamentRule(c, W / 2, title.endY - 14, t.accent);
   c.textAlign = "left";
 
-  bodyWithQuote(c, t, page, copy.body, { x: 150, y: title.endY + 62, maxWidth: 900, bottom: H - 150, dropCap: true });
+  bodyWithQuote(c, t, page, copy.body, { x: 150, y: title.endY + 62, maxWidth: 900, bottom: H - 150 - ctx.reserve, dropCap: true });
   centerFolio(c, t, ctx.folio, W / 2);
 }
 
@@ -399,7 +435,7 @@ async function drawSplit(c: CanvasRenderingContext2D, t: Theme, page: VisualBook
   c.fillRect(colX, title.endY + 4, 64, 2);
 
   bodyWithQuote(c, t, page, copy.body, {
-    x: fullX, y: title.endY + 76, maxWidth: fullW, bottom: H - 150, dropCap: true,
+    x: fullX, y: title.endY + 76, maxWidth: fullW, bottom: H - 150 - ctx.reserve, dropCap: true,
     wrap: { x: colX, width: colW, until: plateY + plateH + 66 },
   });
   centerFolio(c, t, ctx.folio, W / 2);
@@ -429,7 +465,7 @@ async function drawFullBleed(c: CanvasRenderingContext2D, page: VisualBookPage, 
   });
   ornamentRule(c, W / 2, title.endY - 14, "#d4a843");
   c.textAlign = "left";
-  bodyWithQuote(c, onImage, page, copy.body, { x: 170, y: title.endY + 64, maxWidth: 860, bottom: H - 150, dropCap: true, noQuote: true });
+  bodyWithQuote(c, onImage, page, copy.body, { x: 170, y: title.endY + 64, maxWidth: 860, bottom: H - 150 - ctx.reserve, dropCap: true, noQuote: true });
   c.textAlign = "center";
   // No running title on top: it would sit on the brightest part of the art.
   c.fillStyle = "#cfc4b0";
@@ -451,7 +487,7 @@ async function drawQuote(c: CanvasRenderingContext2D, t: Theme, page: VisualBook
   });
   ornamentRule(c, W / 2, title.endY - 6, t.accent);
   c.textAlign = "left";
-  bodyWithQuote(c, t, page, copy.body, { x: 150, y: title.endY + 70, maxWidth: 900, bottom: H - 150, dropCap: true });
+  bodyWithQuote(c, t, page, copy.body, { x: 150, y: title.endY + 70, maxWidth: 900, bottom: H - 150 - ctx.reserve, dropCap: true });
   centerFolio(c, t, ctx.folio, W / 2);
 }
 
@@ -469,12 +505,11 @@ async function drawClosing(c: CanvasRenderingContext2D, t: Theme, project: Visua
   });
   ornamentRule(c, W / 2, title.endY - 12, t.accent);
   c.textAlign = "left";
-  bodyWithQuote(c, t, page, copy.body, { x: W / 2, y: title.endY + 70, maxWidth: 820, bottom: H - 250, align: "center", noQuote: true });
+  bodyWithQuote(c, t, page, copy.body, { x: W / 2, y: title.endY + 70, maxWidth: 820, bottom: H - 270, align: "center", noQuote: true });
+  drawSignature(c, t, project, H - 162, false);
   c.textAlign = "center";
-  c.fillStyle = t.accent;
-  label(c, project.author.toUpperCase(), W / 2, H - 132, 15, 7);
   c.fillStyle = t.muted;
-  label(c, String(ctx.folio).padStart(2, "0"), W / 2, H - 82, 15, 4);
+  label(c, String(ctx.folio).padStart(2, "0"), W / 2, H - 76, 15, 4);
   c.textAlign = "left";
 }
 
@@ -490,7 +525,7 @@ const FADE_ART_H = 1000;
 async function drawFade(c: CanvasRenderingContext2D, t: Theme, page: VisualBookPage, side: "top" | "bottom", ctx: SheetContext) {
   const copy = buildVisualPageSections(page.body, page.title);
   // At the bottom the band is shorter, so the copy above it keeps clear paper.
-  const bandH = side === "top" ? FADE_ART_H : 880;
+  const bandH = side === "top" ? FADE_ART_H : FADE_BOTTOM_BAND_H;
   const artY = side === "top" ? 0 : H - bandH;
   if (page.imageData) {
     const band = document.createElement("canvas");
@@ -516,7 +551,7 @@ async function drawFade(c: CanvasRenderingContext2D, t: Theme, page: VisualBookP
 
   // The copy only ever sits on clear paper, never on the visible picture.
   const textTop = side === "top" ? FADE_ART_H - 40 : 170;
-  const textBottom = side === "top" ? H - 150 : artY + 40;
+  const textBottom = side === "top" ? H - 150 - ctx.reserve : artY + 40 - ctx.reserve;
   c.textAlign = "center";
   c.fillStyle = t.accent;
   label(c, chapterLabel(ctx.chapter), W / 2, textTop, 15, 7);

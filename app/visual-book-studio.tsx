@@ -24,6 +24,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ActiveAIProvider, AIProvider } from "./book-types";
 import {
   ART_LOOKS,
+  effectivePageLayout,
   isFadeLayout,
   VISUAL_BOOK_KINDS,
   VISUAL_STYLES,
@@ -58,7 +59,7 @@ import VisualCreativeAssistant from "./visual-creative-assistant";
 type Busy = "" | "storyboard" | "page" | "image" | "all-images" | "pdf" | "zip";
 
 export default function VisualBookStudio({ provider }: { provider: AIProvider }) {
-  const [brief, setBrief] = useState<VisualBookBrief>(() => blankVisualBookBrief("visual"));
+  const [brief, setBrief] = useState<VisualBookBrief>(() => ({ ...blankVisualBookBrief("visual"), imprint: readImprint() }));
   const [project, setProject] = useState<VisualBookProject | null>(null);
   const [projects, setProjects] = useState<VisualBookProject[]>([]);
   const [activePage, setActivePage] = useState(0);
@@ -140,7 +141,7 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
 
   function reset() {
     setProject(null);
-    setBrief(blankVisualBookBrief());
+    setBrief({ ...blankVisualBookBrief(), imprint: readImprint() });
     setActivePage(0);
     setError("");
     setNotice("");
@@ -369,6 +370,17 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
           <Field label="Title" value={brief.title} set={value => updateBrief("title", value)} placeholder="Your visual book title" disabled={locked || Boolean(project)} />
           <Field label="Subtitle (optional)" value={brief.subtitle} set={value => project ? updateProjectBrief("subtitle", value) : updateBrief("subtitle", value)} placeholder="AI can create one" disabled={locked} />
           <Field label="Author" value={brief.author} set={value => project ? updateProjectBrief("author", value) : updateBrief("author", value)} placeholder="Author name" disabled={locked} />
+          <Field
+            label="Imprint (under your name, optional)"
+            value={brief.imprint ?? ""}
+            set={value => {
+              saveImprint(value);
+              if (project) updateProjectBrief("imprint", value);
+              else updateBrief("imprint", value);
+            }}
+            placeholder="e.g. ROBANO | STUDIO"
+            disabled={locked}
+          />
 
           <fieldset className="visual-choice-field" disabled={locked || Boolean(project)}>
             <legend>Mini book type</legend>
@@ -534,6 +546,20 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
                       </select>
                       <WideArtHint page={page} />
                     </label>
+                  ) : page.role === "cta" ? (
+                    <label className="field visual-field">
+                      <span>Page layout</span>
+                      <select
+                        value={page.closingLayout ?? ""}
+                        onChange={event => updatePage({ closingLayout: (event.target.value || undefined) as VisualBookPage["closingLayout"] })}
+                        disabled={locked}
+                      >
+                        <option value="">Closing page: framed picture and signature</option>
+                        {PAGE_LAYOUTS.filter(option => option.id !== "quote").map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                      </select>
+                      <small>Your name and imprint stay at the foot of the last page in every layout.</small>
+                      <WideArtHint page={page} />
+                    </label>
                   ) : null}
                   {page.role !== "cover" ? (
                     <Field label="Pull quote (one sentence from the page copy)" value={page.pullQuote ?? ""} set={value => updatePage({ pullQuote: value })} placeholder="Leave blank and EB picks one" disabled={locked} />
@@ -593,6 +619,26 @@ export default function VisualBookStudio({ provider }: { provider: AIProvider })
   );
 }
 
+const IMPRINT_KEY = "eb-studio-pro-imprint";
+
+/** The imprint is remembered on this device, so every new book starts with it. */
+function readImprint() {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(IMPRINT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveImprint(value: string) {
+  try {
+    window.localStorage.setItem(IMPRINT_KEY, value);
+  } catch {
+    // Storage can be unavailable in private windows; the imprint still applies to this book.
+  }
+}
+
 const PAGE_LAYOUTS: Array<{ id: VisualBookPage["layout"]; label: string }> = [
   { id: "image-top", label: "Picture above the text" },
   { id: "image-left", label: "Picture on the left" },
@@ -606,7 +652,7 @@ const PAGE_LAYOUTS: Array<{ id: VisualBookPage["layout"]; label: string }> = [
 /** Fade layouts need wide art; tall art made for another layout gets its top and bottom cut. */
 function WideArtHint({ page }: { page: VisualBookPage }) {
   const [measured, setMeasured] = useState<{ src: string; tall: boolean } | null>(null);
-  const fade = isFadeLayout(page.layout);
+  const fade = isFadeLayout(effectivePageLayout(page));
   useEffect(() => {
     if (!fade || !page.imageData) return;
     const src = page.imageData;
@@ -723,6 +769,7 @@ function projectBrief(project: VisualBookProject): VisualBookBrief {
     palette: project.palette,
     artLook: project.artLook,
     ingredients: project.ingredients,
+    imprint: project.imprint,
   };
 }
 
