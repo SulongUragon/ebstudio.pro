@@ -142,3 +142,19 @@ test("flat questions and added ellipses are never suggested", () => {
   ]);
   assert.deepEqual(issues.map((issue) => issue.replacement), ["It was over."]);
 });
+
+test("runInPool checks every chapter with at most three running at once", async () => {
+  const { runInPool } = await import("../app/proofread.ts");
+  let running = 0;
+  let peak = 0;
+  const done: number[] = [];
+  await runInPool([0, 1, 2, 3, 4, 5, 6], 3, async (index) => {
+    running += 1;
+    peak = Math.max(peak, running);
+    await new Promise((resolve) => setTimeout(resolve, 5 + (index % 3) * 4));
+    done.push(index);
+    running -= 1;
+  });
+  assert.equal(peak, 3);
+  assert.deepEqual([...done].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6]);
+});

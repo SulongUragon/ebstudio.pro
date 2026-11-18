@@ -253,3 +253,16 @@ export function issuePreview(content: string, issue: ProofIssue, around = 32) {
     after: after.trimEnd() + (at + issue.match.length + around < content.length ? "…" : ""),
   };
 }
+
+/** Runs a task for every item with at most `limit` running at once, in order of start. */
+export async function runInPool<T>(items: T[], limit: number, task: (item: T) => Promise<void>) {
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length) {
+      const item = items[next];
+      next += 1;
+      await task(item);
+    }
+  });
+  await Promise.all(workers);
+}

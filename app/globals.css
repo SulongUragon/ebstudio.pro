@@ -4421,3 +4421,13 @@ body:has(.fab-book-images) .account-chip {
 }
 
 .visual-page-rendered{background:#f4efe6}.visual-page-rendered .visual-preview-image{height:100%}.visual-page-render{display:block;width:100%;height:100%;object-fit:cover}
+
+.book-proofread-button{display:flex;align-items:center;gap:6px;width:100%;margin:4px 0 10px;padding:8px 10px;border-radius:8px;border:1px solid rgba(160,82,45,.35);background:rgba(160,82,45,.06);color:inherit;font:inherit;font-size:13px;cursor:pointer}
+.book-proofread-button:disabled{opacity:.6;cursor:default}
+.book-proof-panel{margin:18px 0}
+.book-proof-panel progress{width:100%;height:6px;margin:8px 0 4px}
+.book-proof-actions{display:flex;gap:8px;flex-wrap:wrap}
+.book-proof-chapter{margin-top:16px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08)}
+.book-proof-chapter-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.book-proof-chapter-head span{font-size:12px;opacity:.7}
+.book-proof-open{background:none;border:0;padding:0;font:inherit;font-weight:600;text-align:left;cursor:pointer;text-decoration:underline;text-underline-offset:3px;color:inherit}

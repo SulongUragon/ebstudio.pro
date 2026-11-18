@@ -70,6 +70,7 @@ import {
   findLocalIssues,
   issuePreview,
   mergeIssues,
+  runInPool,
   shiftIssues,
   type ProofIssue,
 } from "./proofread";
@@ -256,6 +257,7 @@ export default function EbookStudio() {
   const [customChapters, setCustomChapters] = useState("");
   const [status, setStatus] = useState<GenerationStatus>("idle");
   const [manuscript, setManuscript] = useState<Manuscript | null>(null);
+  const [bookProof, setBookProof] = useState<BookProof | null>(null);
   const [activeSection, setActiveSection] = useState(0);
   const [library, setLibrary] = useState<Manuscript[]>([]);
   const [error, setError] = useState("");
@@ -1457,10 +1459,18 @@ export default function EbookStudio() {
 
   /** Checks one chapter for spacing, spelling, abbreviation, and wrong-word problems. Changes nothing. */
   async function proofreadSection(index: number): Promise<ProofIssue[] | null> {
-    const current = manuscript?.sections[index];
-    if (!manuscript || !current?.content?.trim()) return null;
-    const content = current.content;
+    if (!manuscript?.sections[index]?.content?.trim()) return null;
     setError("");
+    const result = await checkSectionText(index);
+    if (result.error) setError(`${result.error} Spacing problems are still listed.`);
+    return result.issues;
+  }
+
+  /** The proofread check itself, without touching the page's error banner, so many can run at once. */
+  async function checkSectionText(index: number): Promise<{ issues: ProofIssue[]; error?: string }> {
+    const current = manuscript?.sections[index];
+    if (!manuscript || !current?.content?.trim()) return { issues: [] };
+    const content = current.content;
     const local = findLocalIssues(content);
     try {
       const preferredProvider =
@@ -1479,13 +1489,102 @@ export default function EbookStudio() {
       });
       const data = await readResponse(response);
       const ai = Array.isArray(data.issues) ? (data.issues as ProofIssue[]) : [];
-      return mergeIssues(local, ai);
+      return { issues: mergeIssues(local, ai) };
     } catch (proofError) {
-      setError(
-        `${proofError instanceof Error ? proofError.message : "EB could not finish the spelling check."} Spacing problems are still listed.`,
-      );
-      return local;
+      return { issues: local, error: proofError instanceof Error ? proofError.message : "EB could not finish the spelling check." };
     }
+  }
+
+  /** Proofreads every finished chapter, three at a time, into one report. Changes nothing until you fix. */
+  async function proofreadBook() {
+    if (!manuscript || bookProof?.running) return;
+    const indexes = manuscript.sections
+      .map((section, index) => (section?.content?.trim() ? index : -1))
+      .filter(index => index >= 0);
+    const bookId = manuscript.id;
+    setError("");
+    setBookProof({ bookId, running: true, total: indexes.length, checked: 0, chapters: [], started: [] });
+    await runInPool(indexes, 3, async index => {
+      const result = await checkSectionText(index);
+      setBookProof(current =>
+        current && current.bookId === bookId
+          ? {
+              ...current,
+              checked: current.checked + 1,
+              chapters: [...current.chapters, { index, issues: result.issues, error: result.error, fixed: 0 }].sort((a, b) => a.index - b.index),
+            }
+          : current,
+      );
+    });
+    setBookProof(current => (current && current.bookId === bookId ? { ...current, running: false } : current));
+  }
+
+  function bookProofFix(index: number, issue: ProofIssue) {
+    if (!manuscript || !bookProof) return;
+    const result = applyIssue(manuscript.sections[index]?.content ?? "", issue);
+    const firstFix = !bookProof.started.includes(index);
+    setBookProof(current =>
+      current && {
+        ...current,
+        started: result && firstFix ? [...current.started, index] : current.started,
+        chapters: current.chapters.map(chapter => {
+          if (chapter.index !== index) return chapter;
+          const remaining = chapter.issues.filter(item => item.id !== issue.id);
+          return result
+            ? { ...chapter, fixed: chapter.fixed + 1, issues: shiftIssues(remaining, result.at, result.delta) }
+            : { ...chapter, issues: remaining };
+        }),
+      },
+    );
+    if (result) saveProofFix(index, result.content, firstFix);
+  }
+
+  /** Applies every listed fix in the given chapters in one save, keeping Undo per chapter. */
+  function bookProofFixChapters(indexes: number[]) {
+    if (!manuscript || !bookProof) return;
+    let updated = manuscript;
+    const started = [...bookProof.started];
+    const fixedBy = new Map<number, number>();
+    for (const chapter of bookProof.chapters) {
+      if (!indexes.includes(chapter.index) || !chapter.issues.length) continue;
+      const current = updated.sections[chapter.index];
+      if (!current) continue;
+      const result = applyAllIssues(current.content, chapter.issues);
+      if (!result.applied) continue;
+      if (!started.includes(chapter.index)) {
+        updated = applySectionRevision(updated, chapter.index, { content: result.content, summary: current.summary });
+        started.push(chapter.index);
+      } else {
+        const sections = [...updated.sections];
+        sections[chapter.index] = { ...current, content: result.content };
+        updated = { ...updated, sections };
+      }
+      fixedBy.set(chapter.index, result.applied);
+    }
+    if (updated !== manuscript) {
+      setManuscript(updated);
+      saveBook(updated);
+    }
+    setBookProof(current =>
+      current && {
+        ...current,
+        started,
+        chapters: current.chapters.map(chapter =>
+          indexes.includes(chapter.index) ? { ...chapter, issues: [], fixed: chapter.fixed + (fixedBy.get(chapter.index) ?? 0) } : chapter,
+        ),
+      },
+    );
+  }
+
+  function bookProofIgnore(index: number, issue: ProofIssue) {
+    setBookProof(current =>
+      current && {
+        ...current,
+        chapters: current.chapters.map(chapter =>
+          chapter.index === index ? { ...chapter, issues: chapter.issues.filter(item => item.id !== issue.id) } : chapter,
+        ),
+      },
+    );
   }
 
   /** Saves proofread fixes. The first fix keeps the pre-proofread text so Undo restores it. */
@@ -2078,6 +2177,24 @@ export default function EbookStudio() {
             onUndoSection={undoSection}
             onProofreadSection={proofreadSection}
             onProofFix={saveProofFix}
+            onProofreadBook={proofreadBook}
+            bookProofRunning={Boolean(bookProof?.running && bookProof.bookId === manuscript?.id)}
+            bookProofPanel={
+              manuscript && bookProof && bookProof.bookId === manuscript.id ? (
+                <BookProofPanel
+                  report={bookProof}
+                  manuscript={manuscript}
+                  onFix={bookProofFix}
+                  onFixChapters={bookProofFixChapters}
+                  onIgnore={bookProofIgnore}
+                  onOpen={index => {
+                    setActiveSection(index);
+                    document.querySelector(".book-page")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  onClose={() => setBookProof(null)}
+                />
+              ) : null
+            }
             isCreatingCompanion={isCreatingCompanion}
             onCreateCompanion={createCompanionBook}
             resumeFrom={singleResume ? singleResume.nextIndex : null}
@@ -2275,6 +2392,9 @@ function BookPreview({
   onUndoSection,
   onProofreadSection,
   onProofFix,
+  onProofreadBook,
+  bookProofRunning = false,
+  bookProofPanel,
   isCreatingCompanion,
   onCreateCompanion,
   resumeFrom,
@@ -2306,6 +2426,9 @@ function BookPreview({
   onUndoSection?: (index: number) => void;
   onProofreadSection?: (index: number) => Promise<ProofIssue[] | null>;
   onProofFix?: (index: number, content: string, firstFix: boolean) => void;
+  onProofreadBook?: () => void;
+  bookProofRunning?: boolean;
+  bookProofPanel?: ReactNode;
   isCreatingCompanion: boolean;
   onCreateCompanion: (source: Manuscript) => void;
   resumeFrom?: number | null;
@@ -2561,6 +2684,8 @@ function BookPreview({
         />
       ) : null}
 
+      {bookProofPanel}
+
       <div className="manuscript-workspace">
         <nav className="contents-rail" aria-label="Book contents">
           <div className="mini-cover">
@@ -2569,6 +2694,12 @@ function BookPreview({
             <small>{manuscript.author}</small>
           </div>
           <p>Contents</p>
+          {isComplete && onProofreadBook ? (
+            <button className="book-proofread-button" onClick={onProofreadBook} disabled={bookProofRunning || repairingSection !== null}>
+              {bookProofRunning ? <LoaderCircle className="spin" size={14} /> : <SpellCheck size={14} />}
+              {bookProofRunning ? "Proofreading book" : "Proofread whole book"}
+            </button>
+          ) : null}
           {manuscript.plan.map((section, index) => {
             const finished = isSectionFinished(manuscript.sections[index]);
             const repairable = isComplete && !finished;
@@ -2890,6 +3021,124 @@ function sectionLabel(section: SectionContent) {
     : section.kind === "introduction"
       ? "Introduction"
       : "Conclusion";
+}
+
+type BookProofChapter = { index: number; issues: ProofIssue[]; error?: string; fixed: number };
+type BookProof = { bookId: string; running: boolean; total: number; checked: number; chapters: BookProofChapter[]; started: number[] };
+
+/** One report for the whole book, grouped by chapter, with fixes that save straight into each chapter. */
+function BookProofPanel({
+  report,
+  manuscript,
+  onFix,
+  onFixChapters,
+  onIgnore,
+  onOpen,
+  onClose,
+}: {
+  report: BookProof;
+  manuscript: Manuscript;
+  onFix: (index: number, issue: ProofIssue) => void;
+  onFixChapters: (indexes: number[]) => void;
+  onIgnore: (index: number, issue: ProofIssue) => void;
+  onOpen: (index: number) => void;
+  onClose: () => void;
+}) {
+  const withIssues = report.chapters.filter(chapter => chapter.issues.length);
+  const clean = report.chapters.filter(chapter => !chapter.issues.length && !chapter.error);
+  const failed = report.chapters.filter(chapter => chapter.error);
+  const open = withIssues.reduce((sum, chapter) => sum + chapter.issues.length, 0);
+  const fixed = report.chapters.reduce((sum, chapter) => sum + chapter.fixed, 0);
+  const name = (index: number) => {
+    const label = railSectionLabel(manuscript.plan, index);
+    const title = manuscript.plan[index]?.title ?? manuscript.sections[index]?.title ?? "";
+    return label ? `${label}: ${title}` : title;
+  };
+  return (
+    <section className="book-proof-panel proofread-panel" aria-label="Whole book proofread">
+      <div className="proofread-head">
+        <strong>
+          {report.running
+            ? `Proofreading ${report.checked} of ${report.total} chapters`
+            : open
+              ? `${open} ${open === 1 ? "thing" : "things"} to check in ${withIssues.length} ${withIssues.length === 1 ? "chapter" : "chapters"}`
+              : fixed
+                ? `All done. ${fixed} ${fixed === 1 ? "fix" : "fixes"} applied.`
+                : "No spelling, abbreviation, or spacing problems found in this book."}
+        </strong>
+        <div className="book-proof-actions">
+          {!report.running && withIssues.length > 1 ? (
+            <button onClick={() => onFixChapters(withIssues.map(chapter => chapter.index))}>
+              <Check size={14} /> Fix all in book
+            </button>
+          ) : null}
+          {!report.running ? (
+            <button className="proofread-ignore" onClick={onClose}>
+              Close report
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {report.running ? (
+        <progress max={report.total} value={report.checked} aria-label="Chapters checked" />
+      ) : null}
+      {fixed && open ? <p className="proofread-note">{fixed} fixed so far. Undo last change in a chapter restores it from before proofreading.</p> : null}
+      {withIssues.map(chapter => {
+        const content = manuscript.sections[chapter.index]?.content ?? "";
+        return (
+          <div className="book-proof-chapter" key={chapter.index}>
+            <div className="book-proof-chapter-head">
+              <button className="book-proof-open" onClick={() => onOpen(chapter.index)}>
+                {name(chapter.index)}
+              </button>
+              <span>
+                {chapter.issues.length} to check
+                {chapter.fixed ? `, ${chapter.fixed} fixed` : ""}
+              </span>
+              {chapter.issues.length > 1 ? (
+                <button onClick={() => onFixChapters([chapter.index])}>
+                  <Check size={13} /> Fix all in chapter
+                </button>
+              ) : null}
+            </div>
+            <ol>
+              {chapter.issues.map(issue => {
+                const preview = issuePreview(content, issue);
+                return (
+                  <li key={issue.id}>
+                    <span className="proofread-kind">{PROOF_KIND_LABELS[issue.kind]}</span>
+                    <p className="proofread-context">
+                      {preview.before}
+                      <del>{preview.match}</del>
+                      <ins>{preview.replacement}</ins>
+                      {preview.after}
+                    </p>
+                    <p className="proofread-reason">{issue.reason}</p>
+                    <div className="proofread-actions">
+                      <button onClick={() => onFix(chapter.index, issue)}>
+                        <Check size={13} /> Fix
+                      </button>
+                      <button className="proofread-ignore" onClick={() => onIgnore(chapter.index, issue)}>
+                        Ignore
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        );
+      })}
+      {failed.length ? (
+        <p className="proofread-note">
+          Could not finish the spelling check for {failed.map(chapter => name(chapter.index)).join(", ")}. Spacing problems there are still listed; run Proofread in that chapter to try again.
+        </p>
+      ) : null}
+      {!report.running && clean.length ? (
+        <p className="proofread-note">No problems: {clean.map(chapter => name(chapter.index)).join(", ")}.</p>
+      ) : null}
+    </section>
+  );
 }
 
 function railSectionLabel(plan: SectionPlan[], index: number) {
