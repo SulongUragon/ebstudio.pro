@@ -1212,6 +1212,36 @@ export function truncationRetryBudget(provider: ActiveAIProvider, maxOutputToken
   return Math.min(TRUNCATION_RETRY_CAP[provider], Math.round(maxOutputTokens * 1.6));
 }
 
+/**
+ * Logs what a cut-off answer looked like so a runaway field can be found in the runtime logs.
+ * Only the model's own output is logged: never keys, prompts, or user identity.
+ */
+export function describeTruncatedOutput(text: string) {
+  const raw = String(text ?? "");
+  const keys = [...raw.matchAll(/"([a-z_]+)"\s*:/g)].map((match) => match[1]);
+  const pageNumbers = [...raw.matchAll(/"page_number"\s*:\s*(\d+)/g)].map((match) => Number(match[1]));
+  return {
+    length: raw.length,
+    lastField: keys.at(-1) ?? "none",
+    lastPage: pageNumbers.at(-1) ?? 0,
+    tail: raw.slice(-800),
+  };
+}
+
+function logTruncatedOutput(provider: ActiveAIProvider, name: string, maxOutputTokens: number, text: string | undefined) {
+  const info = describeTruncatedOutput(text ?? "");
+  console.warn(
+    "AI output truncated detail",
+    provider,
+    name,
+    maxOutputTokens,
+    `chars=${info.length}`,
+    `lastField=${info.lastField}`,
+    `lastPage=${info.lastPage}`,
+    `tail=${JSON.stringify(info.tail)}`,
+  );
+}
+
 function truncatedError(provider: ActiveAIProvider, maxOutputTokens: number) {
   return new ProviderRequestError(
     provider,
@@ -1974,6 +2004,7 @@ async function openAIJson({
     output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
   };
   if (data.status === "incomplete" && data.incomplete_details?.reason === "max_output_tokens") {
+    logTruncatedOutput("openai", name, maxOutputTokens, data.output_text ?? data.output?.flatMap((item) => item.content ?? []).map((part) => part.text ?? "").join(""));
     throw truncatedError("openai", maxOutputTokens);
   }
   const outputText =
@@ -1993,6 +2024,7 @@ async function openAIJson({
 }
 
 async function anthropicJson({
+  name,
   schema,
   instructions,
   input,
@@ -2061,7 +2093,10 @@ async function anthropicJson({
     stop_reason?: string;
     content?: Array<{ type?: string; text?: string }>;
   };
-  if (data.stop_reason === "max_tokens") throw truncatedError("anthropic", maxOutputTokens);
+  if (data.stop_reason === "max_tokens") {
+    logTruncatedOutput("anthropic", name, maxOutputTokens, data.content?.find((item) => item.type === "text")?.text);
+    throw truncatedError("anthropic", maxOutputTokens);
+  }
   const outputText = data.content?.find((item) => item.type === "text")?.text;
   if (!outputText) {
     throw new ProviderRequestError(
@@ -2145,7 +2180,10 @@ async function kimiJson({
   const data = (await response.json()) as {
     choices?: Array<{ finish_reason?: string; message?: { content?: string } }>;
   };
-  if (data.choices?.[0]?.finish_reason === "length") throw truncatedError("kimi", maxOutputTokens);
+  if (data.choices?.[0]?.finish_reason === "length") {
+    logTruncatedOutput("kimi", name, maxOutputTokens, data.choices?.[0]?.message?.content);
+    throw truncatedError("kimi", maxOutputTokens);
+  }
   const outputText = data.choices?.[0]?.message?.content;
   if (!outputText) {
     throw new ProviderRequestError(
